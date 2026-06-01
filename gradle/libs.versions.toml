@@ -1,0 +1,35 @@
+[versions]
+kotlin = "2.3.21"
+ktor = "3.5.0"
+kotlinx-serialization = "1.11.0"
+kotlinx-coroutines = "1.11.0"
+slf4j = "2.0.9"
+
+
+[libraries]
+# Ktor
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# Kotlinx
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+
+# Logging
+slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+application = { id = "application" }
+
+[bundles]
+ktor = [
+    "ktor-client-core",
+    "ktor-client-cio",
+    "ktor-client-content-negotiation",
+    "ktor-serialization-kotlinx-json"
+]
