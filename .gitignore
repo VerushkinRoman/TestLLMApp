@@ -15,3 +15,5 @@
 local.properties
 openrouter.properties
 /openrouter.properties
+/export_project.ps1
+/.idea/
