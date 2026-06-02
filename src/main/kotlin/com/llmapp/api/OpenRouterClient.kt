@@ -14,6 +14,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class OpenRouterClient(private val apiKey: String) {
     private val json = Json {
@@ -29,9 +31,9 @@ class OpenRouterClient(private val apiKey: String) {
             }
 
             install(HttpTimeout) {
-                socketTimeoutMillis = 30_000
-                connectTimeoutMillis = 30_000
-                requestTimeoutMillis = 120_000
+                socketTimeoutMillis = 30.seconds.inWholeMilliseconds
+                connectTimeoutMillis = 30.seconds.inWholeMilliseconds
+                requestTimeoutMillis = 2.minutes.inWholeMilliseconds
             }
         }
 

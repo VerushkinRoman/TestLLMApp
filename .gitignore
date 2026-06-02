@@ -15,5 +15,9 @@
 local.properties
 openrouter.properties
 /openrouter.properties
+.kotlin
+.idea
 /export_project.ps1
 /.idea/
+/all_kotlin_files.txt
+/export project.sh
