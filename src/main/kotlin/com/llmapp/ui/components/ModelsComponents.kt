@@ -1,14 +1,21 @@
 package com.llmapp.ui.components
 
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Card
@@ -29,10 +36,12 @@ fun ModelsPanel(
     currentModel: String,
     onModelSelected: (String) -> Unit
 ) {
+    val listState = rememberLazyListState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -42,16 +51,37 @@ fun ModelsPanel(
             color = MaterialTheme.colorScheme.primary
         )
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(models) { model ->
-                ModelCard(
-                    model = model,
-                    isSelected = model.id == currentModel,
-                    onSelect = { onModelSelected(model.id) }
-                )
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(models) { model ->
+                        ModelCard(
+                            model = model,
+                            isSelected = model.id == currentModel,
+                            onSelect = { onModelSelected(model.id) }
+                        )
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            VerticalScrollbar(
+                modifier = Modifier.width(12.dp),
+                adapter = rememberScrollbarAdapter(listState),
+                style = ScrollbarStyle(
+                    minimalHeight = 30.dp,
+                    thickness = 12.dp,
+                    shape = MaterialTheme.shapes.small,
+                    hoverDurationMillis = 300,
+                    unhoverColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    hoverColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                )
+            )
         }
     }
 }

@@ -61,7 +61,9 @@ fun MainScreen(viewModel: ChatViewModel) {
     Row(modifier = Modifier.fillMaxSize()) {
         AppNavigationRail(
             currentScreen = currentScreen,
-            onScreenSelected = { currentScreen = it },
+            onScreenSelected = {
+                currentScreen = it
+            },
             onClearHistory = { viewModel.clearHistory() }
         )
 
@@ -71,7 +73,17 @@ fun MainScreen(viewModel: ChatViewModel) {
                 isTyping = isTyping,
                 currentModel = currentModel,
                 controlEnabled = controlEnabled,
-                onSendMessage = { viewModel.sendMessage(it) },
+                inputText = viewModel.draftMessage.value,
+                cursorPosition = viewModel.cursorPosition.value,
+                onInputTextChange = { text, cursorPos ->
+                    viewModel.updateDraft(text, cursorPos)
+                },
+                onSendMessage = {
+                    if (it.isNotBlank()) {
+                        viewModel.sendMessage(it)
+                        viewModel.updateDraft("", 0)
+                    }
+                },
             )
 
             Screen.Models -> ModelsPanel(

@@ -5,6 +5,14 @@ import com.llmapp.model.OpenRouterRequest
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.Usage
 
+data class ChatResponse(
+    val content: String,
+    val promptTokens: Int?,
+    val completionTokens: Int?,
+    val totalTokens: Int?,
+    val finishReason: String?
+)
+
 class ChatSession(
     apiKey: String,
     private var currentModel: String = "openrouter/owl-alpha",
@@ -27,7 +35,7 @@ class ChatSession(
 
     fun getResponseControl(): ResponseControl = responseControl
 
-    suspend fun ask(userPrompt: String): String {
+    suspend fun ask(userPrompt: String): ChatResponse {
         val enhancedPrompt =
             if (responseControl.enabled && responseControl.formatDescription != null) {
                 "$userPrompt\n\n${responseControl.formatDescription}"
@@ -61,7 +69,13 @@ class ChatSession(
 
         history.addAssistantMessage(answer)
 
-        return answer
+        return ChatResponse(
+            content = answer,
+            promptTokens = usage?.promptTokens,
+            completionTokens = usage?.completionTokens,
+            totalTokens = usage?.totalTokens,
+            finishReason = finishReason
+        )
     }
 
     private fun printMetadata(finishReason: String?, usage: Usage?) {

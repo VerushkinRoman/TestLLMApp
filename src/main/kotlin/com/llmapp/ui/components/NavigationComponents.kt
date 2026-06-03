@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -35,12 +35,10 @@ fun AppNavigationRail(
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
         ) {
-            Spacer(modifier = Modifier.height(1.dp))
-
             NavigationRailItem(
                 selected = currentScreen == Screen.Chat,
                 onClick = { onScreenSelected(Screen.Chat) },
@@ -70,8 +68,6 @@ fun AppNavigationRail(
                 icon = { Icon(Icons.Default.Delete, "Clear") },
                 label = { Text("Clear", fontSize = 10.sp) }
             )
-
-            Spacer(modifier = Modifier.height(1.dp))
         }
     }
 }

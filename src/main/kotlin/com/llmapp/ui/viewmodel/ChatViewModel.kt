@@ -22,6 +22,14 @@ class ChatViewModel : ViewModel() {
     val controlEnabled = mutableStateOf(responseControl.value.enabled)
     val availableModels = mutableStateOf(freeModels)
 
+    val draftMessage = mutableStateOf("")
+    val cursorPosition = mutableStateOf(0)
+
+    fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
+        draftMessage.value = message
+        cursorPosition.value = cursorPos
+    }
+
     fun sendMessage(userMessage: String) {
         viewModelScope.launch {
             isTyping.value = true
@@ -29,26 +37,29 @@ class ChatViewModel : ViewModel() {
             messages.add(ChatMessageUI(role = "user", content = userMessage))
 
             try {
-                val answer = chatSession.ask(userMessage)
+                val response = chatSession.ask(userMessage)
 
                 val metadata = buildString {
                     val size = chatSession.getHistorySize()
-                    append("Messages in history: $size")
+                    append("Сообщений в истории: $size")
                 }
 
                 messages.add(
                     ChatMessageUI(
                         role = "assistant",
-                        content = answer,
-                        metadata = metadata
+                        content = response.content,
+                        metadata = metadata,
+                        promptTokens = response.promptTokens,
+                        completionTokens = response.completionTokens,
+                        totalTokens = response.totalTokens
                     )
                 )
             } catch (e: Exception) {
                 messages.add(
                     ChatMessageUI(
                         role = "assistant",
-                        content = "Error: ${e.message}",
-                        metadata = "Error occurred"
+                        content = "Ошибка: ${e.message}",
+                        metadata = "Произошла ошибка"
                     )
                 )
             } finally {

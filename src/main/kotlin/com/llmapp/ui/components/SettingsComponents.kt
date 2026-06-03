@@ -1,6 +1,10 @@
 package com.llmapp.ui.components
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -18,11 +24,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.llmapp.model.ResponseControl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsPanel(
@@ -35,12 +45,12 @@ fun SettingsPanel(
     onPresetLoaded: (Int) -> Unit
 ) {
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(scrollState),
+            .padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -50,43 +60,95 @@ fun SettingsPanel(
             color = MaterialTheme.colorScheme.primary
         )
 
-        ResponseControlCard(
-            control = control,
-            onEnableChanged = onEnableChanged,
-            onFormatChanged = onFormatChanged,
-            onMaxTokensChanged = onMaxTokensChanged,
-            onStopSequencesChanged = onStopSequencesChanged,
-            onTemperatureChanged = onTemperatureChanged,
-            onPresetLoaded = onPresetLoaded
-        )
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ResponseControlCard(
+                        control = control,
+                        onEnableChanged = onEnableChanged,
+                        onFormatChanged = onFormatChanged,
+                        onMaxTokensChanged = onMaxTokensChanged,
+                        onStopSequencesChanged = onStopSequencesChanged,
+                        onTemperatureChanged = onTemperatureChanged,
+                        onPresetLoaded = onPresetLoaded
+                    )
 
-        InfoCard(
-            title = "Model Comparison",
-            content = "Use /compare command in chat to see response comparison with different settings"
-        )
+                    InfoCard(
+                        title = "Model Comparison",
+                        content = "Use /compare command in chat to see response comparison with different settings"
+                    )
 
-        InfoCard(
-            title = "Tips",
-            content = """
-                • Temperature: Lower values (0.1-0.3) for consistent responses
-                • Temperature: Higher values (0.7-0.9) for creative responses
-                • Max Tokens: Limits response length
-                • Stop Sequences: Words that will stop response generation
-                • Format Description: Instructions for response formatting
-            """.trimIndent()
-        )
+                    InfoCard(
+                        title = "Tips",
+                        content = """
+                            • Temperature: Lower values (0.1-0.3) for consistent responses
+                            • Temperature: Higher values (0.7-0.9) for creative responses
+                            • Max Tokens: Limits response length
+                            • Stop Sequences: Words that will stop response generation
+                            • Format Description: Instructions for response formatting
+                        """.trimIndent()
+                    )
 
-        InfoCard(
-            title = "Presets Guide",
-            content = """
-                Strict: Short, format-controlled responses
-                Creative: Longer, creative responses with examples
-                Technical: Precise, code-friendly responses
-                Casual: Friendly, emoji-rich responses
-            """.trimIndent()
-        )
+                    InfoCard(
+                        title = "Presets Guide",
+                        content = """
+                            Strict: Short, format-controlled responses
+                            Creative: Longer, creative responses with examples
+                            Technical: Precise, code-friendly responses
+                            Casual: Friendly, emoji-rich responses
+                        """.trimIndent()
+                    )
 
-        Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            VerticalScrollbar(
+                modifier = Modifier.width(12.dp),
+                adapter = rememberScrollbarAdapter(scrollState, coroutineScope),
+                style = ScrollbarStyle(
+                    minimalHeight = 60.dp,
+                    thickness = 12.dp,
+                    shape = MaterialTheme.shapes.small,
+                    hoverDurationMillis = 300,
+                    unhoverColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    hoverColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun rememberScrollbarAdapter(
+    scrollState: ScrollState,
+    coroutineScope: CoroutineScope
+): ScrollbarAdapter {
+    return remember(scrollState, coroutineScope) {
+        object : ScrollbarAdapter {
+            override val scrollOffset: Double
+                get() = scrollState.value.toDouble()
+
+            override val contentSize: Double
+                get() = scrollState.maxValue.toDouble() + scrollState.viewportSize.toDouble()
+
+            override val viewportSize: Double
+                get() = scrollState.viewportSize.toDouble()
+
+            override suspend fun scrollTo(scrollOffset: Double) {
+                val coercedOffset = scrollOffset.coerceIn(0.0, contentSize - viewportSize)
+                coroutineScope.launch {
+                    scrollState.scrollTo(coercedOffset.toInt())
+                }
+            }
+        }
     }
 }
 
