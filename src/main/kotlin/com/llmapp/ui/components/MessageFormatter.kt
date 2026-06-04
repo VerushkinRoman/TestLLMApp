@@ -489,16 +489,16 @@ private fun flushListIfNeeded(
 fun parseInlineMarkdown(text: String): String {
     var result = text
 
-    // Bold
+    result = result.replace(
+        Regex("(?i)<br\\s*/?>"),
+        "\n"
+    )
+
     result = result.replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
         .replace(Regex("__(.+?)__"), "$1")
-
-    // Italic
-    result = result.replace(Regex("\\*(.+?)\\*"), "$1")
+        .replace(Regex("\\*(.+?)\\*"), "$1")
         .replace(Regex("_(.+?)_"), "$1")
-
-    // Inline code
-    result = result.replace(Regex("`(.+?)`"), "$1")
+        .replace(Regex("`(.+?)`"), "$1")
 
     return result
 }

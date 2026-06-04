@@ -15,12 +15,12 @@ data class ModelInfo(
 )
 
 val freeModels = listOf(
-    ModelInfo("openrouter/owl-alpha", "Owl Alpha", "Отличная модель для общих задач"),
     ModelInfo(
         "nvidia/nemotron-3-super-120b-a12b:free",
         "NVIDIA Nemotron 3",
         "Мощная модель от NVIDIA, 120B параметров"
     ),
+    ModelInfo("openrouter/owl-alpha", "Owl Alpha", "Отличная модель для общих задач"),
     ModelInfo(
         "poolside/laguna-m.1:free",
         "Poolside Laguna M.1",

@@ -8,11 +8,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,12 +29,16 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -54,6 +60,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.ClipEntry
@@ -103,11 +110,23 @@ fun ChatTopBar(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun MessageBubble(message: ChatMessageUI) {
+fun MessageBubble(
+    message: ChatMessageUI,
+    onRegenerate: (() -> Unit)? = null,
+    onEdit: ((String) -> Unit)? = null,
+    isRegenerating: Boolean = false
+) {
     val isUser = message.role == "user"
     val clipboard = LocalClipboard.current
     var showCopiedTooltip by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(message.content) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isEditing) {
+        if (isEditing) focusRequester.requestFocus()
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -144,8 +163,67 @@ fun MessageBubble(message: ChatMessageUI) {
                             MaterialTheme.colorScheme.secondary,
                         fontWeight = FontWeight.Bold
                     )
+                }
 
-                    IconButton(
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (isEditing && isUser) {
+                    Column {
+                        OutlinedTextField(
+                            value = editText,
+                            onValueChange = { editText = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                            minLines = 2,
+                            maxLines = 10
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    isEditing = false
+                                    editText = message.content
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    onEdit?.invoke(editText)
+                                    isEditing = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Save")
+                            }
+                        }
+                    }
+                } else {
+                    if (isUser) {
+                        SelectionContainer {
+                            Text(
+                                text = message.content,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    } else {
+                        FormattedMessage(message.content)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
                         onClick = {
                             scope.launch {
                                 val transferable = StringSelection(message.content)
@@ -156,37 +234,92 @@ fun MessageBubble(message: ChatMessageUI) {
                                 showCopiedTooltip = false
                             }
                         },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     ) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = "Copy",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "Copy",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copy")
+                            if (showCopiedTooltip) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "✓",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                if (isUser) {
-                    SelectionContainer {
-                        Text(
-                            text = message.content,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    if (isUser && onEdit != null && !isEditing) {
+                        Button(
+                            onClick = { isEditing = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit")
+                            }
+                        }
                     }
-                } else {
-                    FormattedMessage(message.content)
-                }
 
-                if (showCopiedTooltip) {
-                    Text(
-                        text = "Copied!",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    if (!isUser && onRegenerate != null && !isEditing) {
+                        Button(
+                            onClick = onRegenerate,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isRegenerating,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                if (isRegenerating) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Regenerating...")
+                                } else {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "Regenerate",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Regenerate")
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (!isUser && message.totalTokens != null) {
@@ -296,6 +429,8 @@ fun MessageInput(
     cursorPosition: Int,
     onInputChange: (String, Int) -> Unit,
     onSendMessage: () -> Unit,
+    onStopGeneration: (() -> Unit)? = null,
+    isGenerating: Boolean = false,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null
 ) {
@@ -332,8 +467,10 @@ fun MessageInput(
             OutlinedTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
-                    textFieldValue = newValue
-                    onInputChange(newValue.text, newValue.selection.start)
+                    if (!isGenerating) {
+                        textFieldValue = newValue
+                        onInputChange(newValue.text, newValue.selection.start)
+                    }
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -342,36 +479,119 @@ fun MessageInput(
                         else Modifier
                     )
                     .onKeyEvent { keyEvent ->
-                        if (keyEvent.key == Key.Enter) {
-                            onSendMessage()
-                            true
-                        } else {
-                            false
+                        when (keyEvent.key) {
+                            Key.Enter if !keyEvent.isCtrlPressed && !isGenerating -> {
+                                onSendMessage()
+                                true
+                            }
+
+                            Key.Enter if keyEvent.isCtrlPressed -> {
+                                if (!isGenerating) {
+                                    val newValue = textFieldValue.copy(
+                                        text = textFieldValue.text + "\n",
+                                        selection = TextRange(textFieldValue.text.length + 1)
+                                    )
+                                    textFieldValue = newValue
+                                    onInputChange(newValue.text, newValue.selection.start)
+                                }
+                                true
+                            }
+
+                            else -> {
+                                false
+                            }
                         }
                     },
                 placeholder = { Text("Type your message...") },
                 textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    focusedBorderColor = if (!isGenerating)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    unfocusedBorderColor = if (!isGenerating)
+                        MaterialTheme.colorScheme.outline
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    focusedTextColor = if (!isGenerating)
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    unfocusedTextColor = if (!isGenerating)
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 ),
                 shape = RoundedCornerShape(24.dp),
                 keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Send
+                    imeAction = if (isGenerating) ImeAction.None else ImeAction.Send
                 ),
                 keyboardActions = KeyboardActions(
-                    onSend = { onSendMessage() }
+                    onSend = {
+                        if (!isGenerating) {
+                            onSendMessage()
+                        }
+                    }
                 ),
                 singleLine = false,
-                maxLines = 5
+                maxLines = 5,
+                readOnly = isGenerating
             )
 
-            FloatingActionButton(
-                onClick = onSendMessage,
-                containerColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, "Send")
+            if (isGenerating && onStopGeneration != null) {
+                Surface(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable(onClick = onStopGeneration),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.error,
+                    shadowElevation = 6.dp
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable(enabled = !isGenerating) {
+                            if (!isGenerating) {
+                                onSendMessage()
+                            }
+                        },
+                    shape = CircleShape,
+                    color = if (!isGenerating)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    shadowElevation = if (!isGenerating) 6.dp else 0.dp
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            "Send",
+                            modifier = Modifier.size(24.dp),
+                            tint = if (!isGenerating)
+                                MaterialTheme.colorScheme.onPrimary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
             }
         }
     }

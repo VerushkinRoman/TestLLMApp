@@ -1,6 +1,11 @@
 package com.llmapp.ui.models
 
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+@OptIn(ExperimentalUuidApi::class)
 data class ChatMessageUI(
+    val id: String = Uuid.random().toString(),
     val role: String,
     val content: String,
     val metadata: String? = null,

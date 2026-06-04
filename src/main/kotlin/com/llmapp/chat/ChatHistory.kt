@@ -30,6 +30,12 @@ class ChatHistory(
         messages.add(systemMessage)
     }
 
+    fun removeLastMessage() {
+        if (messages.size > 1) {
+            messages.removeAt(messages.size - 1)
+        }
+    }
+
     fun size(): Int = messages.size - 1
 
     private fun trim() {

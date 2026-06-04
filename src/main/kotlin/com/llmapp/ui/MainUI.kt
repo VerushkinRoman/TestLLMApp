@@ -78,12 +78,22 @@ fun MainScreen(viewModel: ChatViewModel) {
                 onInputTextChange = { text, cursorPos ->
                     viewModel.updateDraft(text, cursorPos)
                 },
-                onSendMessage = {
-                    if (it.isNotBlank()) {
-                        viewModel.sendMessage(it)
+                onSendMessage = { message ->
+                    if (message.isNotBlank() && !viewModel.isGenerating.value) {
+                        viewModel.sendMessage(message)
                         viewModel.updateDraft("", 0)
                     }
                 },
+                onRegenerateMessage = { assistantMessageId ->
+                    viewModel.regenerateMessage(assistantMessageId)
+                },
+                onEditMessage = { messageId, newContent ->
+                    viewModel.editUserMessage(messageId, newContent)
+                },
+                onStopGeneration = {
+                    viewModel.stopGeneration()
+                },
+                isGenerating = viewModel.isGenerating.value
             )
 
             Screen.Models -> ModelsPanel(

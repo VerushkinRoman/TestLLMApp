@@ -15,7 +15,7 @@ data class ChatResponse(
 
 class ChatSession(
     apiKey: String,
-    private var currentModel: String = "openrouter/owl-alpha",
+    private var currentModel: String = "nvidia/nemotron-3-super-120b-a12b:free",
     systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
         Форматирование ответов:
         - Используй **жирный** текст для важной информации
@@ -50,15 +50,19 @@ class ChatSession(
 
     fun getResponseControl(): ResponseControl = responseControl
 
-    suspend fun ask(userPrompt: String): ChatResponse {
+    suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
         val enhancedPrompt =
             if (responseControl.enabled && responseControl.formatDescription != null) {
-                "$userPrompt\n\n${responseControl.formatDescription}"
+                "userPrompt\n\n{responseControl.formatDescription}"
             } else {
                 userPrompt
             }
 
-        history.addUserMessage(enhancedPrompt)
+        if (isRegeneration) {
+            replaceLastUserMessage(enhancedPrompt)
+        } else {
+            history.addUserMessage(enhancedPrompt)
+        }
 
         val request = OpenRouterRequest(
             model = currentModel,
@@ -91,6 +95,34 @@ class ChatSession(
             totalTokens = usage?.totalTokens,
             finishReason = finishReason
         )
+    }
+
+    private fun replaceLastUserMessage(newContent: String) {
+        val messages = history.getMessages().toMutableList()
+        var lastUserIndex = -1
+        for (i in messages.indices.reversed()) {
+            if (messages[i].role == "user") {
+                lastUserIndex = i
+                break
+            }
+        }
+
+        if (lastUserIndex != -1) {
+            while (history.getMessages().size > lastUserIndex) {
+                history.removeLastMessage()
+            }
+            history.addUserMessage(newContent)
+        }
+    }
+
+    fun rebuildHistoryFromUiMessages(uiMessages: List<Pair<String, String>>) {
+        clearHistory()
+        for ((role, content) in uiMessages) {
+            when (role) {
+                "user" -> history.addUserMessage(content)
+                "assistant" -> history.addAssistantMessage(content)
+            }
+        }
     }
 
     private fun printMetadata(finishReason: String?, usage: Usage?) {

@@ -25,19 +25,32 @@ class ChatViewModel : ViewModel() {
     val draftMessage = mutableStateOf("")
     val cursorPosition = mutableStateOf(0)
 
+    val isGenerating = mutableStateOf(false)
+    private var currentGenerationJob: kotlinx.coroutines.Job? = null
+
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
         draftMessage.value = message
         cursorPosition.value = cursorPos
     }
 
-    fun sendMessage(userMessage: String) {
-        viewModelScope.launch {
+    fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
+        if (isGenerating.value) return
+
+        if (addToHistory) {
+            messages.add(
+                ChatMessageUI(
+                    role = "user",
+                    content = userMessage
+                )
+            )
+        }
+
+        currentGenerationJob = viewModelScope.launch {
+            isGenerating.value = true
             isTyping.value = true
 
-            messages.add(ChatMessageUI(role = "user", content = userMessage))
-
             try {
-                val response = chatSession.ask(userMessage)
+                val response = chatSession.ask(userMessage, isRegeneration = !addToHistory)
 
                 val metadata = buildString {
                     val size = chatSession.getHistorySize()
@@ -64,8 +77,61 @@ class ChatViewModel : ViewModel() {
                 )
             } finally {
                 isTyping.value = false
+                isGenerating.value = false
             }
         }
+    }
+
+    fun regenerateMessage(assistantMessageId: String) {
+        if (isGenerating.value) return
+
+        val assistantIndex = messages.indexOfFirst { it.id == assistantMessageId }
+        if (assistantIndex == -1) return
+
+        var userMessage: ChatMessageUI? = null
+        for (i in assistantIndex - 1 downTo 0) {
+            if (messages[i].role == "user") {
+                userMessage = messages[i]
+                break
+            }
+        }
+
+        if (userMessage == null) return
+
+        val userIndex = messages.indexOf(userMessage)
+        while (messages.size > userIndex + 1) {
+            messages.removeAt(messages.size - 1)
+        }
+
+        syncHistoryWithMessages()
+
+        sendMessage(userMessage.content, addToHistory = false)
+    }
+
+    private fun syncHistoryWithMessages() {
+        val uiMessages = messages.map { it.role to it.content }
+        chatSession.rebuildHistoryFromUiMessages(uiMessages)
+    }
+
+    fun editUserMessage(messageId: String, newContent: String) {
+        val messageIndex = messages.indexOfFirst { it.id == messageId }
+        if (messageIndex == -1 || messages[messageIndex].role != "user") return
+
+        while (messages.size > messageIndex + 1) {
+            messages.removeAt(messages.size - 1)
+        }
+
+        messages[messageIndex] = messages[messageIndex].copy(content = newContent)
+
+        syncHistoryWithMessages()
+
+        sendMessage(newContent, addToHistory = false)
+    }
+
+    fun stopGeneration() {
+        currentGenerationJob?.cancel()
+        isTyping.value = false
+        isGenerating.value = false
     }
 
     fun clearHistory() {

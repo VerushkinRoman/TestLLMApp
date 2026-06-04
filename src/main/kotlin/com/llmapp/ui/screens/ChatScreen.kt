@@ -41,6 +41,10 @@ fun ChatScreen(
     cursorPosition: Int,
     onInputTextChange: (String, Int) -> Unit,
     onSendMessage: (String) -> Unit,
+    onRegenerateMessage: ((String) -> Unit)? = null,
+    onEditMessage: ((String, String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    isGenerating: Boolean = false
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -69,12 +73,24 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize().padding(end = 8.dp)
                 ) {
-                    items(messages) { message ->
-                        MessageBubble(message)
+                    items(
+                        items = messages,
+                        key = { it.id }
+                    ) { message ->
+                        MessageBubble(
+                            message = message,
+                            onRegenerate = if (message.role == "assistant" && onRegenerateMessage != null) {
+                                { onRegenerateMessage(message.id) }
+                            } else null,
+                            onEdit = if (message.role == "user" && onEditMessage != null) {
+                                { newText -> onEditMessage(message.id, newText) }
+                            } else null,
+                            isRegenerating = false
+                        )
                     }
 
                     if (isTyping) {
-                        item {
+                        item(key = "typing_indicator") {
                             TypingIndicator()
                         }
                     }
@@ -102,11 +118,13 @@ fun ChatScreen(
             cursorPosition = cursorPosition,
             onInputChange = onInputTextChange,
             onSendMessage = {
-                if (inputText.isNotBlank()) {
+                if (inputText.isNotBlank() && !isGenerating) {
                     onSendMessage(inputText)
                     focusRequester.requestFocus()
                 }
             },
+            onStopGeneration = onStopGeneration,
+            isGenerating = isGenerating,
             modifier = Modifier.imePadding(),
             focusRequester = focusRequester
         )
