@@ -125,7 +125,7 @@ fun MessageBubble(message: ChatMessageUI) {
             else
                 MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 1.dp,
-            modifier = Modifier.widthIn(max = 480.dp)
+            modifier = Modifier.widthIn(max = 680.dp)
         ) {
             Column(
                 modifier = Modifier.padding(12.dp)
@@ -169,12 +169,16 @@ fun MessageBubble(message: ChatMessageUI) {
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                SelectionContainer {
-                    Text(
-                        text = message.content,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                if (isUser) {
+                    SelectionContainer {
+                        Text(
+                            text = message.content,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                } else {
+                    FormattedMessage(message.content)
                 }
 
                 if (showCopiedTooltip) {

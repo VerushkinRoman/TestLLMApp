@@ -16,7 +16,22 @@ data class ChatResponse(
 class ChatSession(
     apiKey: String,
     private var currentModel: String = "openrouter/owl-alpha",
-    systemPrompt: String = "Ты полезный ассистент. Отвечай кратко и по делу на русском языке.",
+    systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
+        Форматирование ответов:
+        - Используй **жирный** текст для важной информации
+        - Используй *курсив* для выделения
+        - Для кода используй тройные обратные кавычки с указанием языка:
+        ```kotlin
+        fun example() {
+            println("Hello")
+        }
+        Для списков используй - или * в начале строки
+        
+        Для заголовков используй #, ##, ###
+        
+        Для цитат используй > в начале строки
+        
+        Ссылки оформляй как текст""",
     maxHistorySize: Int = 20
 ) {
     private val history = ChatHistory(systemPrompt, maxHistorySize)
