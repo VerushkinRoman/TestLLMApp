@@ -64,7 +64,8 @@ class ChatViewModel : ViewModel() {
                         metadata = metadata,
                         promptTokens = response.promptTokens,
                         completionTokens = response.completionTokens,
-                        totalTokens = response.totalTokens
+                        totalTokens = response.totalTokens,
+                        responseTimeMs = response.responseTimeMs
                     )
                 )
             } catch (e: Exception) {

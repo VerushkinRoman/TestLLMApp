@@ -525,31 +525,35 @@ private fun flushListIfNeeded(
 fun parseInlineMarkdown(text: String): String {
     var result = text
 
-    // HTML line break
-    result = result.replace(
-        Regex("(?i)<br\\s*/?>"),
-        "\n"
-    )
+    result = result.replace(Regex("(?i)<br\\s*/?>"), "\n")
 
-    // HTML bold
     result = result.replace(Regex("(?i)<b>(.+?)</b>"), "**$1**")
         .replace(Regex("(?i)<strong>(.+?)</strong>"), "**$1**")
 
-    // HTML italic
     result = result.replace(Regex("(?i)<i>(.+?)</i>"), "*$1*")
         .replace(Regex("(?i)<em>(.+?)</em>"), "*$1*")
 
-    // HTML code
     result = result.replace(Regex("(?i)<code>(.+?)</code>"), "`$1`")
 
-    // Markdown formatting
-    result = result.replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
+    val codeBlocks = mutableListOf<String>()
+    var temp = result
+    val codeRegex = Regex("`([^`]+)`")
+
+    temp = codeRegex.replace(temp) { match ->
+        codeBlocks.add(match.groupValues[1])
+        "```CODE${codeBlocks.size - 1}CODE```"
+    }
+
+    temp = temp.replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
         .replace(Regex("__(.+?)__"), "$1")
         .replace(Regex("\\*(.+?)\\*"), "$1")
         .replace(Regex("_(.+?)_"), "$1")
-        .replace(Regex("`(.+?)`"), "$1")
 
-    return result
+    codeBlocks.forEachIndexed { index, code ->
+        temp = temp.replace("```CODE${index}CODE```", "`$code`")
+    }
+
+    return temp
 }
 
 @Composable
@@ -563,74 +567,83 @@ fun parseInlineMarkdownToAnnotatedString(text: String): AnnotatedString {
         .replace(Regex("(?i)<code>(.+?)</code>"), "`$1`")
 
     return buildAnnotatedString {
-        val boldPattern = Regex("\\*\\*(.+?)\\*\\*")
-        val italicPattern = Regex("\\*(.+?)\\*")
-        val codePattern = Regex("`(.+?)`")
+        var lastIndex = 0
 
-        val matches = mutableListOf<Pair<IntRange, Triple<String, String, Int>>>()
+        val codeRegex = Regex("`([^`]+)`")
 
-        boldPattern.findAll(processedText).forEach { match ->
-            matches.add(match.range to Triple("bold", match.groupValues[1], 1))
-        }
-        italicPattern.findAll(processedText).forEach { match ->
-            matches.add(match.range to Triple("italic", match.groupValues[1], 2))
-        }
-        codePattern.findAll(processedText).forEach { match ->
-            matches.add(match.range to Triple("code", match.groupValues[1], 3))
-        }
-
-        matches.sortWith(compareBy({ it.first.first }, { it.second.third }))
-
-        var position = 0
-        val usedRanges = mutableSetOf<IntRange>()
-
-        for ((range, triple) in matches) {
-            if (range.first < position) continue
-
-            var overlaps = false
-            for (used in usedRanges) {
-                if (range.intersect(used).isNotEmpty()) {
-                    overlaps = true
-                    break
-                }
-            }
-            if (overlaps) continue
-
-            if (position < range.first) {
-                append(processedText.substring(position, range.first))
+        codeRegex.findAll(processedText).forEach { match ->
+            if (match.range.first > lastIndex) {
+                val textBefore = processedText.substring(lastIndex, match.range.first)
+                appendFormattedText(textBefore)
             }
 
-            when (triple.first) {
-                "bold" -> {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                        append(triple.second)
-                    }
-                }
-
-                "italic" -> {
-                    withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
-                        append(triple.second)
-                    }
-                }
-
-                "code" -> {
-                    withStyle(
-                        SpanStyle(
-                            fontFamily = FontFamily.Monospace,
-                            background = Color(0xFFEEEEEE)
-                        )
-                    ) {
-                        append(triple.second)
-                    }
-                }
+            withStyle(
+                SpanStyle(
+                    fontFamily = FontFamily.Monospace,
+                    background = Color(0xFF2D2D2D),
+                    color = Color(0xFFD4D4D4),
+                    fontSize = 12.sp
+                )
+            ) {
+                append(match.groupValues[1])
             }
 
-            position = range.last + 1
-            usedRanges.add(range)
+            lastIndex = match.range.last + 1
         }
 
-        if (position < processedText.length) {
-            append(processedText.substring(position))
+        if (lastIndex < processedText.length) {
+            val remainingText = processedText.substring(lastIndex)
+            appendFormattedText(remainingText)
         }
+    }
+}
+
+@Composable
+private fun AnnotatedString.Builder.appendFormattedText(text: String) {
+    val remaining = text
+
+    val boldRegex = Regex("\\*\\*(.+?)\\*\\*")
+    var lastIndex = 0
+
+    boldRegex.findAll(remaining).forEach { match ->
+        if (match.range.first > lastIndex) {
+            val normalText = remaining.substring(lastIndex, match.range.first)
+            appendFormattedTextWithItalic(normalText)
+        }
+
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+            append(match.groupValues[1])
+        }
+
+        lastIndex = match.range.last + 1
+    }
+
+    if (lastIndex < remaining.length) {
+        val remainingNormal = remaining.substring(lastIndex)
+        appendFormattedTextWithItalic(remainingNormal)
+    }
+}
+
+@Composable
+private fun AnnotatedString.Builder.appendFormattedTextWithItalic(text: String) {
+    val remaining = text
+    var lastIndex = 0
+
+    val italicRegex = Regex("\\*(.+?)\\*")
+
+    italicRegex.findAll(remaining).forEach { match ->
+        if (match.range.first > lastIndex) {
+            append(remaining.substring(lastIndex, match.range.first))
+        }
+
+        withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
+            append(match.groupValues[1])
+        }
+
+        lastIndex = match.range.last + 1
+    }
+
+    if (lastIndex < remaining.length) {
+        append(remaining.substring(lastIndex))
     }
 }

@@ -322,27 +322,40 @@ fun MessageBubble(
                     }
                 }
 
-                if (!isUser && message.totalTokens != null) {
+                if (!isUser) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = buildString {
-                            append("🔢 Tokens: all ${message.totalTokens}")
-                            if (message.promptTokens != null && message.completionTokens != null) {
-                                append(" (send: ${message.promptTokens}, received: ${message.completionTokens})")
-                            }
-                        },
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
 
-                if (message.metadata != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = message.metadata,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val infoItems = mutableListOf<String>()
+
+                    message.metadata?.let { infoItems.add(it) }
+
+                    if (message.totalTokens != null) {
+                        val tokensText =
+                            if (message.promptTokens != null && message.completionTokens != null) {
+                                "🔢 ${message.totalTokens} (↑${message.promptTokens}/↓${message.completionTokens})"
+                            } else {
+                                "🔢 ${message.totalTokens}"
+                            }
+                        infoItems.add(tokensText)
+                    }
+
+                    message.getFormattedResponseTime()?.let { time ->
+                        val speedIcon = when {
+                            message.responseTimeMs!! < 10.seconds.inWholeMilliseconds -> "🚀"
+                            message.responseTimeMs < 20.seconds.inWholeMilliseconds -> "⚡"
+                            else -> "🐢"
+                        }
+                        infoItems.add("$speedIcon $time")
+                    }
+
+                    if (infoItems.isNotEmpty()) {
+                        Text(
+                            text = infoItems.joinToString(" • "),
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }

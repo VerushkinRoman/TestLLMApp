@@ -10,7 +10,8 @@ data class ChatResponse(
     val promptTokens: Int?,
     val completionTokens: Int?,
     val totalTokens: Int?,
-    val finishReason: String?
+    val finishReason: String?,
+    val responseTimeMs: Long
 )
 
 class ChatSession(
@@ -53,7 +54,7 @@ class ChatSession(
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
         val enhancedPrompt =
             if (responseControl.enabled && responseControl.formatDescription != null) {
-                "userPrompt\n\n{responseControl.formatDescription}"
+                "$userPrompt\n\n${responseControl.formatDescription}"
             } else {
                 userPrompt
             }
@@ -72,7 +73,10 @@ class ChatSession(
             temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
+        val startTime = System.currentTimeMillis()
         val response = apiClient.sendRequest(request)
+        val endTime = System.currentTimeMillis()
+        val actualResponseTime = endTime - startTime
 
         response.error?.let {
             throw Exception("API Error: ${it.message}")
@@ -84,7 +88,7 @@ class ChatSession(
         val finishReason = response.choices.firstOrNull()?.finishReason
         val usage = response.usage
 
-        printMetadata(finishReason, usage)
+        printMetadata(finishReason, usage, actualResponseTime)
 
         history.addAssistantMessage(answer)
 
@@ -93,7 +97,8 @@ class ChatSession(
             promptTokens = usage?.promptTokens,
             completionTokens = usage?.completionTokens,
             totalTokens = usage?.totalTokens,
-            finishReason = finishReason
+            finishReason = finishReason,
+            responseTimeMs = actualResponseTime
         )
     }
 
@@ -125,7 +130,7 @@ class ChatSession(
         }
     }
 
-    private fun printMetadata(finishReason: String?, usage: Usage?) {
+    private fun printMetadata(finishReason: String?, usage: Usage?, responseTimeMs: Long) {
         val metadata = buildString {
             if (finishReason != null) {
                 append("🏁 Завершено: $finishReason")
@@ -133,6 +138,15 @@ class ChatSession(
             if (usage != null) {
                 if (isNotEmpty()) append(" | ")
                 append("📊 Токены: ${usage.totalTokens ?: "?"} (запрос: ${usage.promptTokens ?: "?"}, ответ: ${usage.completionTokens ?: "?"})")
+            }
+            if (responseTimeMs > 0) {
+                if (isNotEmpty()) append(" | ")
+                val timeStr = when {
+                    responseTimeMs < 1000 -> "${responseTimeMs}мс"
+                    responseTimeMs < 60000 -> "${responseTimeMs / 1000}.${(responseTimeMs % 1000) / 100}с"
+                    else -> "${responseTimeMs / 60000}м ${(responseTimeMs % 60000) / 1000}с"
+                }
+                append("⏱️ Время: $timeStr")
             }
         }
 
