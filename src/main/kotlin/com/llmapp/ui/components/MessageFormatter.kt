@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,21 +50,28 @@ import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun FormattedMessage(content: String) {
-    val parsedElements = remember(content) { parseMarkdownAndHtml(content) }
+    val contentWithLineBreaks = content.replace(Regex("(?i)<br\\s*/?>"), "\n")
+    val parsedElements = remember(contentWithLineBreaks) {
+        parseMarkdownAndHtml(contentWithLineBreaks)
+    }
 
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             parsedElements.forEach { element ->
                 when (element) {
                     is ParsedElement.Text -> {
-                        Text(
-                            text = buildAnnotatedString {
-                                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) {
-                                    append(element.content)
-                                }
-                            },
-                            fontSize = 14.sp
-                        )
+                        val lines = element.content.split("\n")
+                        lines.forEachIndexed { index, line ->
+                            if (index > 0) Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = buildAnnotatedString {
+                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) {
+                                        append(line)
+                                    }
+                                },
+                                fontSize = 14.sp
+                            )
+                        }
                     }
 
                     is ParsedElement.Heading -> {
@@ -176,54 +185,81 @@ fun TableBlock(table: ParsedElement.Table) {
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                    )
-                    .padding(8.dp)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
             ) {
-                table.headers.forEach { header ->
-                    Text(
-                        text = parseInlineMarkdownToAnnotatedString(header),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    table.headers.forEachIndexed { index, header ->
+                        Text(
+                            text = parseInlineMarkdownToAnnotatedString(header),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (index < table.headers.size - 1)
+                                        Modifier.padding(end = 8.dp)
+                                    else Modifier
+                                )
+                        )
+                    }
                 }
             }
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outline,
-                thickness = 2.dp
+                thickness = 1.dp
             )
 
             table.rows.forEachIndexed { index, row ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (index % 2 == 0) MaterialTheme.colorScheme.surface
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        )
-                        .padding(8.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (index % 2 == 0)
+                        MaterialTheme.colorScheme.surface
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
                 ) {
-                    row.forEach { cell ->
-                        Text(
-                            text = parseInlineMarkdownToAnnotatedString(cell),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        row.forEachIndexed { cellIndex, cell ->
+                            val cellWithLineBreaks = cell.replace(Regex("(?i)<br\\s*/?>"), "\n")
+                            Text(
+                                text = parseInlineMarkdownToAnnotatedString(cellWithLineBreaks),
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .then(
+                                        if (cellIndex < row.size - 1)
+                                            Modifier.padding(end = 8.dp)
+                                        else Modifier
+                                    )
+                            )
+                        }
                     }
+                }
+
+                if (index < table.rows.size - 1) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        thickness = 0.5.dp
+                    )
                 }
             }
         }
@@ -489,11 +525,24 @@ private fun flushListIfNeeded(
 fun parseInlineMarkdown(text: String): String {
     var result = text
 
+    // HTML line break
     result = result.replace(
         Regex("(?i)<br\\s*/?>"),
         "\n"
     )
 
+    // HTML bold
+    result = result.replace(Regex("(?i)<b>(.+?)</b>"), "**$1**")
+        .replace(Regex("(?i)<strong>(.+?)</strong>"), "**$1**")
+
+    // HTML italic
+    result = result.replace(Regex("(?i)<i>(.+?)</i>"), "*$1*")
+        .replace(Regex("(?i)<em>(.+?)</em>"), "*$1*")
+
+    // HTML code
+    result = result.replace(Regex("(?i)<code>(.+?)</code>"), "`$1`")
+
+    // Markdown formatting
     result = result.replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
         .replace(Regex("__(.+?)__"), "$1")
         .replace(Regex("\\*(.+?)\\*"), "$1")
@@ -505,6 +554,14 @@ fun parseInlineMarkdown(text: String): String {
 
 @Composable
 fun parseInlineMarkdownToAnnotatedString(text: String): AnnotatedString {
+    val processedText = text
+        .replace(Regex("(?i)<br\\s*/?>"), "\n")
+        .replace(Regex("(?i)<b>(.+?)</b>"), "**$1**")
+        .replace(Regex("(?i)<strong>(.+?)</strong>"), "**$1**")
+        .replace(Regex("(?i)<i>(.+?)</i>"), "*$1*")
+        .replace(Regex("(?i)<em>(.+?)</em>"), "*$1*")
+        .replace(Regex("(?i)<code>(.+?)</code>"), "`$1`")
+
     return buildAnnotatedString {
         val boldPattern = Regex("\\*\\*(.+?)\\*\\*")
         val italicPattern = Regex("\\*(.+?)\\*")
@@ -512,13 +569,13 @@ fun parseInlineMarkdownToAnnotatedString(text: String): AnnotatedString {
 
         val matches = mutableListOf<Pair<IntRange, Triple<String, String, Int>>>()
 
-        boldPattern.findAll(text).forEach { match ->
+        boldPattern.findAll(processedText).forEach { match ->
             matches.add(match.range to Triple("bold", match.groupValues[1], 1))
         }
-        italicPattern.findAll(text).forEach { match ->
+        italicPattern.findAll(processedText).forEach { match ->
             matches.add(match.range to Triple("italic", match.groupValues[1], 2))
         }
-        codePattern.findAll(text).forEach { match ->
+        codePattern.findAll(processedText).forEach { match ->
             matches.add(match.range to Triple("code", match.groupValues[1], 3))
         }
 
@@ -540,7 +597,7 @@ fun parseInlineMarkdownToAnnotatedString(text: String): AnnotatedString {
             if (overlaps) continue
 
             if (position < range.first) {
-                append(text.substring(position, range.first))
+                append(processedText.substring(position, range.first))
             }
 
             when (triple.first) {
@@ -572,8 +629,8 @@ fun parseInlineMarkdownToAnnotatedString(text: String): AnnotatedString {
             usedRanges.add(range)
         }
 
-        if (position < text.length) {
-            append(text.substring(position))
+        if (position < processedText.length) {
+            append(processedText.substring(position))
         }
     }
 }

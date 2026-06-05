@@ -32,6 +32,32 @@ object PresetManager {
             enabled = true
         )
 
+        5 -> ResponseControl(
+            formatDescription = """Ты опытный разработчик на Kotlin и Compose Multiplatform. 
+                Пиши максимально оптимально, кратко и по делу. 
+                Пиши примеры кода и как можно его использовать. 
+                После кода дай пояснения что делают твои функции и классы, 
+                а также что изменено по сравнению с предыдущим кодом если ты вносил изменения.
+                
+                Требования к ответам:
+                - Используй ```kotlin для блоков кода
+                - Давай практические примеры использования
+                - Объясняй ключевые моменты
+                - Указывай на потенциальные проблемы
+                - Предлагай альтернативные решения""",
+            maxTokens = 800,
+            temperature = 0.1,
+            enabled = true
+        )
+
         else -> null
     }
+
+    fun getDefaultControl(): ResponseControl = ResponseControl(
+        formatDescription = null,
+        maxTokens = null,
+        stopSequences = null,
+        temperature = null,
+        enabled = false
+    )
 }

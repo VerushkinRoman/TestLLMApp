@@ -199,4 +199,11 @@ class ChatViewModel : ViewModel() {
             controlEnabled.value = preset.enabled
         }
     }
+
+    fun resetToDefault() {
+        val defaultControl = PresetManager.getDefaultControl()
+        chatSession.setResponseControl(defaultControl)
+        responseControl.value = defaultControl
+        controlEnabled.value = defaultControl.enabled
+    }
 }

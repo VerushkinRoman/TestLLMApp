@@ -12,12 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,7 +47,8 @@ fun SettingsPanel(
     onMaxTokensChanged: (Int?) -> Unit,
     onStopSequencesChanged: (List<String>?) -> Unit,
     onTemperatureChanged: (Double?) -> Unit,
-    onPresetLoaded: (Int) -> Unit
+    onPresetLoaded: (Int) -> Unit,
+    onResetToDefault: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -75,7 +81,8 @@ fun SettingsPanel(
                         onMaxTokensChanged = onMaxTokensChanged,
                         onStopSequencesChanged = onStopSequencesChanged,
                         onTemperatureChanged = onTemperatureChanged,
-                        onPresetLoaded = onPresetLoaded
+                        onPresetLoaded = onPresetLoaded,
+                        onResetToDefault = onResetToDefault
                     )
 
                     InfoCard(
@@ -101,6 +108,7 @@ fun SettingsPanel(
                             Creative: Longer, creative responses with examples
                             Technical: Precise, code-friendly responses
                             Casual: Friendly, emoji-rich responses
+                            Kotlin Dev: Professional Kotlin/Compose development assistant
                         """.trimIndent()
                     )
 
@@ -160,7 +168,8 @@ fun ResponseControlCard(
     onMaxTokensChanged: (Int?) -> Unit,
     onStopSequencesChanged: (List<String>?) -> Unit,
     onTemperatureChanged: (Double?) -> Unit,
-    onPresetLoaded: (Int) -> Unit
+    onPresetLoaded: (Int) -> Unit,
+    onResetToDefault: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -206,6 +215,27 @@ fun ResponseControlCard(
                 )
 
                 PresetButtons(onPresetLoaded = onPresetLoaded)
+
+                OutlinedButton(
+                    onClick = onResetToDefault,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Restore,
+                            contentDescription = "Reset",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reset to Default")
+                    }
+                }
             }
         }
     }
@@ -270,12 +300,12 @@ fun TemperatureField(
             val temp = text.toDoubleOrNull()
             val clampedTemp = when {
                 temp != null && temp < 0.0 -> 0.0
-                temp != null && temp > 1.0 -> 1.0
+                temp != null && temp > 2.0 -> 2.0
                 else -> temp
             }
             onValueChange(clampedTemp)
         },
-        label = { Text("Temperature (0.0-1.0)") },
+        label = { Text("Temperature (0.0-2.0)") },
         placeholder = { Text("Default") },
         modifier = Modifier.fillMaxWidth(),
         supportingText = {
@@ -314,6 +344,29 @@ fun PresetButtons(onPresetLoaded: (Int) -> Unit) {
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(name)
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { onPresetLoaded(5) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.Code,
+                        contentDescription = "Kotlin Dev",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Kotlin Dev")
                 }
             }
         }

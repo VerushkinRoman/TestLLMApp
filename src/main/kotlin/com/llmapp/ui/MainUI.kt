@@ -109,7 +109,8 @@ fun MainScreen(viewModel: ChatViewModel) {
                 onMaxTokensChanged = { viewModel.setMaxTokens(it) },
                 onStopSequencesChanged = { viewModel.setStopSequences(it) },
                 onTemperatureChanged = { viewModel.setTemperature(it) },
-                onPresetLoaded = { viewModel.loadPreset(it) }
+                onPresetLoaded = { viewModel.loadPreset(it) },
+                onResetToDefault = { viewModel.resetToDefault() }
             )
         }
     }
