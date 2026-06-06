@@ -33,7 +33,7 @@ class OpenRouterClient(private val apiKey: String) {
             install(HttpTimeout) {
                 socketTimeoutMillis = 30.seconds.inWholeMilliseconds
                 connectTimeoutMillis = 30.seconds.inWholeMilliseconds
-                requestTimeoutMillis = 5.minutes.inWholeMilliseconds
+                requestTimeoutMillis = 10.minutes.inWholeMilliseconds
             }
         }
 

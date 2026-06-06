@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
@@ -36,6 +37,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -112,6 +114,7 @@ fun ChatTopBar(
 @Composable
 fun MessageBubble(
     message: ChatMessageUI,
+    currentModel: String,
     onRegenerate: (() -> Unit)? = null,
     onEdit: ((String) -> Unit)? = null,
     isRegenerating: Boolean = false
@@ -326,11 +329,13 @@ fun MessageBubble(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val infoItems = mutableListOf<String>()
+                    var tokensText: String?
+                    var timeText: String?
 
                     message.metadata?.let { infoItems.add(it) }
 
                     if (message.totalTokens != null) {
-                        val tokensText =
+                        tokensText =
                             if (message.promptTokens != null && message.completionTokens != null) {
                                 "🔢 ${message.totalTokens} (↑${message.promptTokens}/↓${message.completionTokens})"
                             } else {
@@ -345,16 +350,31 @@ fun MessageBubble(
                             message.responseTimeMs < 20.seconds.inWholeMilliseconds -> "⚡"
                             else -> "🐢"
                         }
-                        infoItems.add("$speedIcon $time")
+                        timeText = "$speedIcon $time"
+                        infoItems.add(timeText)
                     }
 
                     if (infoItems.isNotEmpty()) {
-                        Text(
-                            text = infoItems.joinToString(" • "),
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = infoItems.joinToString(" • "),
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            CopyMetricsButton(
+                                modelName = currentModel,
+                                responseTimeMs = message.responseTimeMs,
+                                promptTokens = message.promptTokens,
+                                completionTokens = message.completionTokens,
+                                totalTokens = message.totalTokens
+                            )
+                        }
                     }
                 }
             }
@@ -607,5 +627,56 @@ fun MessageInput(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun CopyMetricsButton(
+    modelName: String,
+    responseTimeMs: Long?,
+    promptTokens: Int?,
+    completionTokens: Int?,
+    totalTokens: Int?
+) {
+    val clipboard = LocalClipboard.current
+    var showCopied by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val copyText = buildString {
+        append("Модель: $modelName")
+
+        responseTimeMs?.let { ms ->
+            val timeSec = ms / 1000.0
+            append(" | Время: ${String.format("%.2f", timeSec)}с")
+        }
+
+        promptTokens?.let { append(" | Prompt: $it") }
+        completionTokens?.let { append(" | Completion: $it") }
+        totalTokens?.let { append(" | Total: $it") }
+    }
+
+    IconButton(
+        onClick = {
+            scope.launch {
+                val transferable = StringSelection(copyText)
+                val clipEntry = ClipEntry(transferable)
+                clipboard.setClipEntry(clipEntry)
+                showCopied = true
+                delay(1.seconds)
+                showCopied = false
+            }
+        },
+        modifier = Modifier.size(20.dp)
+    ) {
+        Icon(
+            if (showCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+            contentDescription = if (showCopied) "Copied!" else "Copy metrics",
+            modifier = Modifier.size(14.dp),
+            tint = if (showCopied)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
     }
 }

@@ -79,6 +79,7 @@ fun ChatScreen(
                     ) { message ->
                         MessageBubble(
                             message = message,
+                            currentModel = currentModel,
                             onRegenerate = if (message.role == "assistant" && onRegenerateMessage != null) {
                                 { onRegenerateMessage(message.id) }
                             } else null,
