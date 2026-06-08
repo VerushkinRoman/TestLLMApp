@@ -1,9 +1,8 @@
 package com.llmapp.chat
 
-import com.llmapp.api.OpenRouterClient
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.agent.LLMAgent
+import com.llmapp.agent.LLMResponse
 import com.llmapp.model.ResponseControl
-import com.llmapp.model.Usage
 
 data class ChatResponse(
     val content: String,
@@ -33,112 +32,81 @@ class ChatSession(
         Для цитат используй > в начале строки
         
         Ссылки оформляй как текст""",
-    maxHistorySize: Int = 20
+    maxHistorySize: Int = 50
 ) {
-    private val history = ChatHistory(systemPrompt, maxHistorySize)
-    private val apiClient = OpenRouterClient(apiKey)
+    private val llmAgent = LLMAgent(
+        apiKey = apiKey,
+        model = currentModel,
+        systemPrompt = systemPrompt,
+        responseControl = ResponseControl(),
+        maxHistorySize = maxHistorySize
+    )
+
     private var responseControl = ResponseControl()
 
     fun changeModel(newModel: String) {
         currentModel = newModel
+        llmAgent.changeModel(newModel)
     }
 
     fun getCurrentModel(): String = currentModel
 
     fun setResponseControl(control: ResponseControl) {
         responseControl = control
+        llmAgent.updateResponseControl(control)
     }
 
     fun getResponseControl(): ResponseControl = responseControl
 
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
-        val enhancedPrompt =
-            if (responseControl.enabled && responseControl.formatDescription != null) {
-                "$userPrompt\n\n${responseControl.formatDescription}"
+        try {
+            val response: LLMResponse = if (isRegeneration) {
+                llmAgent.regenerateLastResponse(userPrompt)
             } else {
-                userPrompt
+                llmAgent.processRequest(userPrompt)
             }
 
-        if (isRegeneration) {
-            replaceLastUserMessage(enhancedPrompt)
-        } else {
-            history.addUserMessage(enhancedPrompt)
-        }
+            printMetadata(
+                finishReason = response.finishReason,
+                promptTokens = response.promptTokens,
+                completionTokens = response.completionTokens,
+                totalTokens = response.totalTokens,
+                responseTimeMs = response.responseTimeMs
+            )
 
-        val request = OpenRouterRequest(
-            model = currentModel,
-            messages = history.getMessages(),
-            maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
-            stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null
-        )
-
-        val startTime = System.currentTimeMillis()
-        val response = apiClient.sendRequest(request)
-        val endTime = System.currentTimeMillis()
-        val actualResponseTime = endTime - startTime
-
-        response.error?.let {
-            throw Exception("API Error: ${it.message}")
-        }
-
-        val answer = response.choices?.firstOrNull()?.message?.content
-            ?: throw Exception("Empty API response")
-
-        val finishReason = response.choices.firstOrNull()?.finishReason
-        val usage = response.usage
-
-        printMetadata(finishReason, usage, actualResponseTime)
-
-        history.addAssistantMessage(answer)
-
-        return ChatResponse(
-            content = answer,
-            promptTokens = usage?.promptTokens,
-            completionTokens = usage?.completionTokens,
-            totalTokens = usage?.totalTokens,
-            finishReason = finishReason,
-            responseTimeMs = actualResponseTime
-        )
-    }
-
-    private fun replaceLastUserMessage(newContent: String) {
-        val messages = history.getMessages().toMutableList()
-        var lastUserIndex = -1
-        for (i in messages.indices.reversed()) {
-            if (messages[i].role == "user") {
-                lastUserIndex = i
-                break
-            }
-        }
-
-        if (lastUserIndex != -1) {
-            while (history.getMessages().size > lastUserIndex) {
-                history.removeLastMessage()
-            }
-            history.addUserMessage(newContent)
+            return ChatResponse(
+                content = response.content,
+                promptTokens = response.promptTokens,
+                completionTokens = response.completionTokens,
+                totalTokens = response.totalTokens,
+                finishReason = response.finishReason,
+                responseTimeMs = response.responseTimeMs
+            )
+        } catch (e: Exception) {
+            throw Exception("Ошибка при обращении к LLM: ${e.message}", e)
         }
     }
 
     fun rebuildHistoryFromUiMessages(uiMessages: List<Pair<String, String>>) {
-        clearHistory()
-        for ((role, content) in uiMessages) {
-            when (role) {
-                "user" -> history.addUserMessage(content)
-                "assistant" -> history.addAssistantMessage(content)
-            }
-        }
+        llmAgent.rebuildHistory(uiMessages)
     }
 
-    private fun printMetadata(finishReason: String?, usage: Usage?, responseTimeMs: Long) {
+    private fun printMetadata(
+        finishReason: String?,
+        promptTokens: Int?,
+        completionTokens: Int?,
+        totalTokens: Int?,
+        responseTimeMs: Long
+    ) {
         val metadata = buildString {
             if (finishReason != null) {
                 append("🏁 Завершено: $finishReason")
             }
-            if (usage != null) {
+            if (promptTokens != null || completionTokens != null || totalTokens != null) {
                 if (isNotEmpty()) append(" | ")
-                append("📊 Токены: ${usage.totalTokens ?: "?"} (запрос: ${usage.promptTokens ?: "?"}, ответ: ${usage.completionTokens ?: "?"})")
+                append("📊 Токены: ${totalTokens ?: "?"} (запрос: ${promptTokens ?: "?"} ответ:${completionTokens ?: "?"})")
             }
+
             if (responseTimeMs > 0) {
                 if (isNotEmpty()) append(" | ")
                 val timeStr = when {
@@ -156,8 +124,8 @@ class ChatSession(
     }
 
     fun clearHistory() {
-        history.clear()
+        llmAgent.clearHistory()
     }
 
-    fun getHistorySize(): Int = history.size()
+    fun getHistorySize(): Int = llmAgent.getHistorySize()
 }

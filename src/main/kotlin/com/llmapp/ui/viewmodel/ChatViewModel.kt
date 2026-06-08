@@ -10,6 +10,7 @@ import com.llmapp.controller.PresetManager
 import com.llmapp.model.freeModels
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class ChatViewModel : ViewModel() {
     private val apiKey = ApiConfig.getApiKey()
@@ -39,6 +40,7 @@ class ChatViewModel : ViewModel() {
         if (addToHistory) {
             messages.add(
                 ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
                     role = "user",
                     content = userMessage
                 )
@@ -59,6 +61,7 @@ class ChatViewModel : ViewModel() {
 
                 messages.add(
                     ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
                         role = "assistant",
                         content = response.content,
                         metadata = metadata,
@@ -71,6 +74,7 @@ class ChatViewModel : ViewModel() {
             } catch (e: Exception) {
                 messages.add(
                     ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
                         role = "assistant",
                         content = "Ошибка: ${e.message}",
                         metadata = "Произошла ошибка"
@@ -207,4 +211,6 @@ class ChatViewModel : ViewModel() {
         responseControl.value = defaultControl
         controlEnabled.value = defaultControl.enabled
     }
+
+    fun getChatSession(): ChatSession = chatSession
 }

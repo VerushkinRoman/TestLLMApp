@@ -4,7 +4,7 @@ import com.llmapp.model.ChatMessage
 
 class ChatHistory(
     systemPrompt: String,
-    private val maxHistorySize: Int = 20
+    private val maxHistorySize: Int = 50
 ) {
     private val messages = mutableListOf<ChatMessage>()
 

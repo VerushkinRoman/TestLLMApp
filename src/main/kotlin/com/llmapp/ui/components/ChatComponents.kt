@@ -84,6 +84,8 @@ import kotlin.time.Duration.Companion.seconds
 fun ChatTopBar(
     controlEnabled: Boolean,
     currentModel: String,
+    currentAgentName: String? = null,
+    currentAgentIcon: String? = null
 ) {
     TopAppBar(
         title = {
@@ -95,6 +97,32 @@ fun ChatTopBar(
                     color = if (controlEnabled) Color(0xFF4CAF50) else Color(0xFFF44336),
                     modifier = Modifier.size(8.dp)
                 ) {}
+
+                if (currentAgentName != null) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = currentAgentIcon ?: "🤖",
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = currentAgentName,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(

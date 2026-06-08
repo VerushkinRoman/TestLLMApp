@@ -37,6 +37,8 @@ fun ChatScreen(
     isTyping: Boolean,
     currentModel: String,
     controlEnabled: Boolean,
+    currentAgentName: String? = null,
+    currentAgentIcon: String? = null,
     inputText: String,
     cursorPosition: Int,
     onInputTextChange: (String, Int) -> Unit,
@@ -63,6 +65,8 @@ fun ChatScreen(
         ChatTopBar(
             controlEnabled = controlEnabled,
             currentModel = currentModel,
+            currentAgentName = currentAgentName,
+            currentAgentIcon = currentAgentIcon
         )
 
         Row(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {

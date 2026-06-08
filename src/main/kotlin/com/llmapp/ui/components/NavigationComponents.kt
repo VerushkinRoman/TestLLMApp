@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ModelTraining
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -44,6 +45,13 @@ fun AppNavigationRail(
                 onClick = { onScreenSelected(Screen.Chat) },
                 icon = { Icon(Icons.AutoMirrored.Filled.Chat, "Chat") },
                 label = { Text("Chat", fontSize = 10.sp) }
+            )
+
+            NavigationRailItem(
+                selected = currentScreen == Screen.Agents,
+                onClick = { onScreenSelected(Screen.Agents) },
+                icon = { Icon(Icons.Default.Folder, "Chats") },
+                label = { Text("Chats", fontSize = 10.sp) }
             )
 
             NavigationRailItem(

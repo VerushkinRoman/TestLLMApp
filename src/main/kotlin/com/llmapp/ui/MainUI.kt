@@ -6,6 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -14,8 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import com.llmapp.agent.ChatMemoryAgent
+import com.llmapp.controller.ChatStorageManager
 import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ModelsPanel
+import com.llmapp.ui.components.SavedChatsPanel
 import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
@@ -23,6 +28,15 @@ import com.llmapp.ui.viewmodel.ChatViewModel
 
 fun main() = application {
     val viewModel = remember { ChatViewModel() }
+    val storageManager = remember { ChatStorageManager() }
+
+    val chatMemoryService = remember {
+        ChatMemoryAgent(viewModel.getChatSession(), storageManager)
+    }
+
+    LaunchedEffect(Unit) {
+        chatMemoryService.loadChats()
+    }
 
     Window(
         title = "LLM Chat - OpenRouter Client",
@@ -41,15 +55,22 @@ fun main() = application {
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
-                MainScreen(viewModel)
+                MainScreen(
+                    viewModel = viewModel,
+                    chatMemoryService = chatMemoryService
+                )
             }
         }
     }
 }
 
 @Composable
-fun MainScreen(viewModel: ChatViewModel) {
+fun MainScreen(
+    viewModel: ChatViewModel,
+    chatMemoryService: ChatMemoryAgent
+) {
     var currentScreen by remember { mutableStateOf(Screen.Chat) }
+    var selectedChatId by remember { mutableStateOf<String?>(null) }
 
     val messages = viewModel.messages
     val isTyping by viewModel.isTyping
@@ -58,13 +79,30 @@ fun MainScreen(viewModel: ChatViewModel) {
     val responseControl by viewModel.responseControl
     val availableModels by viewModel.availableModels
 
+    val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
+
+    LaunchedEffect(messages.size, isTyping) {
+        if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping) {
+            chatMemoryService.saveCurrentChatDebounced(messages.toList(), currentModel)
+        }
+    }
+
     Row(modifier = Modifier.fillMaxSize()) {
         AppNavigationRail(
             currentScreen = currentScreen,
-            onScreenSelected = {
-                currentScreen = it
+            onScreenSelected = { screen ->
+                currentScreen = screen
+                if (screen == Screen.Agents) {
+                    chatMemoryService.loadChats()
+                }
             },
-            onClearHistory = { viewModel.clearHistory() }
+            onClearHistory = {
+                viewModel.clearHistory()
+                if (messages.isNotEmpty()) {
+                    chatMemoryService.saveCurrentChat(emptyList(), currentModel)
+                }
+                selectedChatId = null
+            }
         )
 
         when (currentScreen) {
@@ -73,6 +111,8 @@ fun MainScreen(viewModel: ChatViewModel) {
                 isTyping = isTyping,
                 currentModel = currentModel,
                 controlEnabled = controlEnabled,
+                currentAgentName = "LLM Agent",
+                currentAgentIcon = "🤖",
                 inputText = viewModel.draftMessage.value,
                 cursorPosition = viewModel.cursorPosition.value,
                 onInputTextChange = { text, cursorPos ->
@@ -94,6 +134,36 @@ fun MainScreen(viewModel: ChatViewModel) {
                     viewModel.stopGeneration()
                 },
                 isGenerating = viewModel.isGenerating.value
+            )
+
+            Screen.Agents -> SavedChatsPanel(
+                savedChats = savedChats,
+                selectedChatId = selectedChatId,
+                onChatSelected = { chat ->
+                    selectedChatId = chat.id
+                    val loadedMessages = chatMemoryService.loadChat(chat.id)
+                    viewModel.messages.clear()
+                    viewModel.messages.addAll(loadedMessages)
+                    currentScreen = Screen.Chat
+                },
+                onDeleteChat = { chatId ->
+                    chatMemoryService.deleteChat(chatId)
+                    if (selectedChatId == chatId) {
+                        selectedChatId = null
+                        if (viewModel.messages.isEmpty()) {
+                            viewModel.clearHistory()
+                        }
+                    }
+                },
+                onRenameChat = { chatId, newTitle ->
+                    chatMemoryService.renameChat(chatId, newTitle)
+                },
+                onNewChat = {
+                    chatMemoryService.createNewChat()
+                    viewModel.clearHistory()
+                    selectedChatId = null
+                    currentScreen = Screen.Chat
+                }
             )
 
             Screen.Models -> ModelsPanel(
