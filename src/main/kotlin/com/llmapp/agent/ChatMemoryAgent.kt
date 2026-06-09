@@ -133,4 +133,14 @@ class ChatMemoryAgent(
         storageManager.renameChat(chatId, newTitle)
         loadChats()
     }
+
+    fun loadLastChat(): Pair<String?, List<ChatMessageUI>> {
+        val lastChat = storageManager.getLastActiveChat("chat_memory")
+        return if (lastChat != null) {
+            val messages = loadChat(lastChat.id)
+            Pair(lastChat.id, messages)
+        } else {
+            Pair(null, emptyList())
+        }
+    }
 }

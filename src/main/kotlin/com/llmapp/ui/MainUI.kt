@@ -36,6 +36,15 @@ fun main() = application {
 
     LaunchedEffect(Unit) {
         chatMemoryService.loadChats()
+
+        val (lastChatId, lastMessages) = chatMemoryService.loadLastChat()
+        if (lastChatId != null && lastMessages.isNotEmpty()) {
+            viewModel.messages.clear()
+            viewModel.messages.addAll(lastMessages)
+
+            val uiMessages = lastMessages.map { it.role to it.content }
+            viewModel.getChatSession().rebuildHistoryFromUiMessages(uiMessages)
+        }
     }
 
     Window(

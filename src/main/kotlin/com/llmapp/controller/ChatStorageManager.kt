@@ -118,4 +118,10 @@ class ChatStorageManager {
             saveData(data)
         }
     }
+
+    fun getLastActiveChat(agentId: String): SavedChat? {
+        return loadData().chats
+            .filter { it.agentId == agentId }
+            .maxByOrNull { it.lastModified }
+    }
 }
