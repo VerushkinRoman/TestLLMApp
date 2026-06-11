@@ -4,6 +4,7 @@ import com.llmapp.api.OpenRouterClient
 import com.llmapp.chat.ChatHistory
 import com.llmapp.model.OpenRouterRequest
 import com.llmapp.model.ResponseControl
+import com.llmapp.model.TokenUsage
 
 data class LLMResponse(
     val content: String,
@@ -23,33 +24,56 @@ class LLMAgent(
 ) {
     private val apiClient = OpenRouterClient(apiKey)
     private val history = ChatHistory(systemPrompt, maxHistorySize)
+    private val tokenTracker = TokenTracker()
+    private var requestCounter = 0
+
+    init {
+        tokenTracker.updateModel(model)
+    }
 
     suspend fun processRequest(userInput: String): LLMResponse {
-        val enhancedPrompt = enhancePrompt(userInput)
+        try {
+            val enhancedPrompt = enhancePrompt(userInput)
+            history.addUserMessage(enhancedPrompt)
 
-        history.addUserMessage(enhancedPrompt)
+            val (response, responseTime) = sendToLLM()
 
-        val (response, responseTime) = sendToLLM()
+            if (response.error != null) {
+                val errorMsg = response.error.message
+                println("❌ API вернул ошибку: $errorMsg")
+                throw Exception("API Error: $errorMsg")
+            }
 
-        response.error?.let {
-            throw Exception("API Error: ${it.message}")
+            val answer = response.choices?.firstOrNull()?.message?.content
+            if (answer.isNullOrBlank()) {
+                println("❌ API вернул пустой ответ")
+                throw Exception("Empty API response")
+            }
+
+            history.addAssistantMessage(answer)
+            requestCounter++
+
+            response.usage?.let { usage ->
+                val tokenUsage = TokenUsage(
+                    promptTokens = usage.promptTokens ?: 0,
+                    completionTokens = usage.completionTokens ?: 0,
+                    totalTokens = usage.totalTokens ?: 0
+                )
+                tokenTracker.trackRequest(tokenUsage, requestCounter)
+            }
+
+            return LLMResponse(
+                content = answer,
+                promptTokens = response.usage?.promptTokens,
+                completionTokens = response.usage?.completionTokens,
+                totalTokens = response.usage?.totalTokens,
+                finishReason = response.choices.firstOrNull()?.finishReason,
+                responseTimeMs = responseTime
+            )
+        } catch (e: Exception) {
+            println("❌ Ошибка в LLMAgent: ${e.message}")
+            throw e
         }
-
-        val answer = response.choices?.firstOrNull()?.message?.content
-            ?: throw Exception("Empty API response")
-
-        history.addAssistantMessage(answer)
-
-        val usage = response.usage
-
-        return LLMResponse(
-            content = answer,
-            promptTokens = usage?.promptTokens,
-            completionTokens = usage?.completionTokens,
-            totalTokens = usage?.totalTokens,
-            finishReason = response.choices.firstOrNull()?.finishReason,
-            responseTimeMs = responseTime
-        )
     }
 
     suspend fun regenerateLastResponse(originalUserMessage: String? = null): LLMResponse {
@@ -71,6 +95,16 @@ class LLMAgent(
             ?: throw Exception("Empty API response")
 
         history.addAssistantMessage(answer)
+        requestCounter++
+
+        response.usage?.let { usage ->
+            val tokenUsage = TokenUsage(
+                promptTokens = usage.promptTokens ?: 0,
+                completionTokens = usage.completionTokens ?: 0,
+                totalTokens = usage.totalTokens ?: 0
+            )
+            tokenTracker.trackRequest(tokenUsage, requestCounter)
+        }
 
         val usage = response.usage
 
@@ -98,7 +132,8 @@ class LLMAgent(
             messages = history.getMessages(),
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null
+            temperature = if (responseControl.enabled) responseControl.temperature else null,
+            skipContextOptimization = true
         )
 
         val startTime = System.currentTimeMillis()
@@ -110,6 +145,7 @@ class LLMAgent(
 
     fun changeModel(newModel: String) {
         model = newModel
+        tokenTracker.updateModel(newModel)
     }
 
     fun updateResponseControl(control: ResponseControl) {
@@ -118,6 +154,8 @@ class LLMAgent(
 
     fun clearHistory() {
         history.clear()
+        tokenTracker.reset()
+        requestCounter = 0
     }
 
     fun getHistorySize(): Int = history.size()
@@ -130,5 +168,15 @@ class LLMAgent(
                 "assistant" -> history.addAssistantMessage(content)
             }
         }
+    }
+
+    fun getTokenStats() = tokenTracker.stats.value
+    fun getTokenHistory() = tokenTracker.historySnapshots.value
+    fun getContextStatus() = tokenTracker.checkContextLimit()
+    fun getContextWarning() = tokenTracker.getWarningMessage()
+
+    fun clearTokenStats() {
+        tokenTracker.reset()
+        requestCounter = 0
     }
 }

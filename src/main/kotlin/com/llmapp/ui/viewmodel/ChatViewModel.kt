@@ -29,6 +29,10 @@ class ChatViewModel : ViewModel() {
     val isGenerating = mutableStateOf(false)
     private var currentGenerationJob: kotlinx.coroutines.Job? = null
 
+    val tokenStats = mutableStateOf(chatSession.getTokenStats())
+    val tokenHistory = mutableStateOf(chatSession.getTokenHistory())
+    val contextWarning = mutableStateOf(chatSession.getContextWarning())
+
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
         draftMessage.value = message
         cursorPosition.value = cursorPos
@@ -71,6 +75,9 @@ class ChatViewModel : ViewModel() {
                         responseTimeMs = response.responseTimeMs
                     )
                 )
+
+                updateTokenStats()
+
             } catch (e: Exception) {
                 messages.add(
                     ChatMessageUI(
@@ -142,11 +149,18 @@ class ChatViewModel : ViewModel() {
     fun clearHistory() {
         chatSession.clearHistory()
         messages.clear()
+        updateTokenStats()
+    }
+
+    fun clearTokenStats() {
+        chatSession.clearTokenStats()
+        updateTokenStats()
     }
 
     fun changeModel(modelId: String) {
         chatSession.changeModel(modelId)
         currentModel.value = modelId
+        updateTokenStats()
     }
 
     fun setControlEnabled(enabled: Boolean) {
@@ -213,4 +227,14 @@ class ChatViewModel : ViewModel() {
     }
 
     fun getChatSession(): ChatSession = chatSession
+
+    private fun updateTokenStats() {
+        tokenStats.value = chatSession.getTokenStats()
+        tokenHistory.value = chatSession.getTokenHistory()
+        contextWarning.value = chatSession.getContextWarning()
+    }
+
+    fun refreshTokenStats() {
+        updateTokenStats()
+    }
 }

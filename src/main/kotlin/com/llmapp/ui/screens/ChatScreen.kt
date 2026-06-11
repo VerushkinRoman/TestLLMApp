@@ -24,9 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
+import com.llmapp.agent.TokenSnapshot
+import com.llmapp.model.TokenStats
 import com.llmapp.ui.components.ChatTopBar
 import com.llmapp.ui.components.MessageBubble
 import com.llmapp.ui.components.MessageInput
+import com.llmapp.ui.components.TokenStatsPanel
 import com.llmapp.ui.components.TypingIndicator
 import com.llmapp.ui.models.ChatMessageUI
 
@@ -46,7 +49,11 @@ fun ChatScreen(
     onRegenerateMessage: ((String) -> Unit)? = null,
     onEditMessage: ((String, String) -> Unit)? = null,
     onStopGeneration: (() -> Unit)? = null,
-    isGenerating: Boolean = false
+    isGenerating: Boolean = false,
+    tokenStats: TokenStats,
+    tokenHistory: List<TokenSnapshot>,
+    contextWarning: String,
+    onClearTokenStats: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -67,6 +74,13 @@ fun ChatScreen(
             currentModel = currentModel,
             currentAgentName = currentAgentName,
             currentAgentIcon = currentAgentIcon
+        )
+
+        TokenStatsPanel(
+            stats = tokenStats,
+            history = tokenHistory,
+            contextWarning = contextWarning,
+            onClearHistory = onClearTokenStats
         )
 
         Row(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {

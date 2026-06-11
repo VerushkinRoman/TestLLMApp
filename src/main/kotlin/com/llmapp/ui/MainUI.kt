@@ -88,6 +88,10 @@ fun MainScreen(
     val responseControl by viewModel.responseControl
     val availableModels by viewModel.availableModels
 
+    val tokenStats by viewModel.tokenStats
+    val tokenHistory by viewModel.tokenHistory
+    val contextWarning by viewModel.contextWarning
+
     val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
 
     LaunchedEffect(messages.size, isTyping) {
@@ -142,7 +146,11 @@ fun MainScreen(
                 onStopGeneration = {
                     viewModel.stopGeneration()
                 },
-                isGenerating = viewModel.isGenerating.value
+                isGenerating = viewModel.isGenerating.value,
+                tokenStats = tokenStats,
+                tokenHistory = tokenHistory,
+                contextWarning = contextWarning,
+                onClearTokenStats = { viewModel.clearTokenStats() }
             )
 
             Screen.Agents -> SavedChatsPanel(
@@ -153,6 +161,7 @@ fun MainScreen(
                     val loadedMessages = chatMemoryService.loadChat(chat.id)
                     viewModel.messages.clear()
                     viewModel.messages.addAll(loadedMessages)
+                    viewModel.refreshTokenStats()
                     currentScreen = Screen.Chat
                 },
                 onDeleteChat = { chatId ->
@@ -178,7 +187,10 @@ fun MainScreen(
             Screen.Models -> ModelsPanel(
                 models = availableModels,
                 currentModel = currentModel,
-                onModelSelected = { viewModel.changeModel(it) }
+                onModelSelected = {
+                    viewModel.changeModel(it)
+                    viewModel.refreshTokenStats()
+                }
             )
 
             Screen.Settings -> SettingsPanel(

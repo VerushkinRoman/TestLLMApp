@@ -11,6 +11,7 @@ data class OpenRouterRequest(
     @SerialName("max_tokens") val maxTokens: Int? = null,
     val stop: List<String>? = null,
     val temperature: Double? = null,
+    @SerialName("skip_context_optimization") val skipContextOptimization: Boolean = true
 )
 
 @Serializable

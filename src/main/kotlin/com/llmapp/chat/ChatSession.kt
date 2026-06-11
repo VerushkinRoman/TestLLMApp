@@ -2,7 +2,9 @@ package com.llmapp.chat
 
 import com.llmapp.agent.LLMAgent
 import com.llmapp.agent.LLMResponse
+import com.llmapp.agent.TokenSnapshot
 import com.llmapp.model.ResponseControl
+import com.llmapp.model.TokenStats
 
 data class ChatResponse(
     val content: String,
@@ -128,4 +130,11 @@ class ChatSession(
     }
 
     fun getHistorySize(): Int = llmAgent.getHistorySize()
+
+    fun getTokenStats(): TokenStats = llmAgent.getTokenStats()
+    fun getTokenHistory(): List<TokenSnapshot> = llmAgent.getTokenHistory()
+    fun getContextWarning(): String = llmAgent.getContextWarning()
+    fun clearTokenStats() {
+        llmAgent.clearTokenStats()
+    }
 }
