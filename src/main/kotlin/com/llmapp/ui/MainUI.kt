@@ -201,7 +201,24 @@ fun MainScreen(
                 onStopSequencesChanged = { viewModel.setStopSequences(it) },
                 onTemperatureChanged = { viewModel.setTemperature(it) },
                 onPresetLoaded = { viewModel.loadPreset(it) },
-                onResetToDefault = { viewModel.resetToDefault() }
+                onResetToDefault = { viewModel.resetToDefault() },
+                compressionEnabled = viewModel.compressionEnabled.value,
+                keepLastMessages = viewModel.keepLastMessages.value,
+                summarizeEvery = viewModel.summarizeEvery.value,
+                compressionStats = viewModel.compressionStats.value,
+                onCompressionToggle = { viewModel.toggleCompression(it) },
+                onKeepLastMessagesChange = {
+                    viewModel.updateCompressionParams(
+                        it,
+                        viewModel.summarizeEvery.value
+                    )
+                },
+                onSummarizeEveryChange = {
+                    viewModel.updateCompressionParams(
+                        viewModel.keepLastMessages.value,
+                        it
+                    )
+                }
             )
         }
     }

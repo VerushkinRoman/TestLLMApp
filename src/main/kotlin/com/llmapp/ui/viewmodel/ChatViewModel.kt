@@ -14,7 +14,41 @@ import java.util.UUID
 
 class ChatViewModel : ViewModel() {
     private val apiKey = ApiConfig.getApiKey()
-    private val chatSession = ChatSession(apiKey)
+
+    private var _compressionEnabled = true
+    private var _keepLastMessages = 8
+    private var _summarizeEvery = 6
+
+    var compressionEnabled = mutableStateOf(true)
+    var keepLastMessages = mutableStateOf(8)
+    var summarizeEvery = mutableStateOf(6)
+
+    private var chatSession: ChatSession = createChatSession()
+
+    private fun createChatSession(): ChatSession {
+        return ChatSession(
+            apiKey = apiKey,
+            compressionEnabled = _compressionEnabled,
+            keepLastMessages = _keepLastMessages,
+            summarizeEvery = _summarizeEvery
+        )
+    }
+
+    private fun recreateChatSession() {
+        val newSession = createChatSession()
+
+        val currentMessages = messages.toList()
+
+        chatSession = newSession
+
+        if (currentMessages.isNotEmpty()) {
+            val uiMessages = currentMessages.map { it.role to it.content }
+            chatSession.rebuildHistoryFromUiMessages(uiMessages)
+        }
+
+        currentModel.value = chatSession.getCurrentModel()
+        updateTokenStats()
+    }
 
     val messages = mutableStateListOf<ChatMessageUI>()
     val isTyping = mutableStateOf(false)
@@ -32,10 +66,27 @@ class ChatViewModel : ViewModel() {
     val tokenStats = mutableStateOf(chatSession.getTokenStats())
     val tokenHistory = mutableStateOf(chatSession.getTokenHistory())
     val contextWarning = mutableStateOf(chatSession.getContextWarning())
+    val compressionStats = mutableStateOf(chatSession.getCompressionStats())
 
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
         draftMessage.value = message
         cursorPosition.value = cursorPos
+    }
+
+    fun toggleCompression(enabled: Boolean) {
+        _compressionEnabled = enabled
+        compressionEnabled.value = enabled
+        recreateChatSession()
+        println("📊 Компрессия ${if (enabled) "включена" else "выключена"}, сессия пересоздана")
+    }
+
+    fun updateCompressionParams(keepLast: Int, sumEvery: Int) {
+        _keepLastMessages = keepLast
+        _summarizeEvery = sumEvery
+        keepLastMessages.value = keepLast
+        summarizeEvery.value = sumEvery
+        recreateChatSession()
+        println("📊 Параметры компрессии обновлены: keepLast=$keepLast, summarizeEvery=$sumEvery")
     }
 
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
@@ -61,6 +112,10 @@ class ChatViewModel : ViewModel() {
                 val metadata = buildString {
                     val size = chatSession.getHistorySize()
                     append("Сообщений в истории: $size")
+                    if (chatSession.isCompressionEnabled()) {
+                        append(" • Компрессия: вкл")
+                        compressionStats.value = chatSession.getCompressionStats()
+                    }
                 }
 
                 messages.add(
@@ -232,6 +287,7 @@ class ChatViewModel : ViewModel() {
         tokenStats.value = chatSession.getTokenStats()
         tokenHistory.value = chatSession.getTokenHistory()
         contextWarning.value = chatSession.getContextWarning()
+        compressionStats.value = chatSession.getCompressionStats()
     }
 
     fun refreshTokenStats() {

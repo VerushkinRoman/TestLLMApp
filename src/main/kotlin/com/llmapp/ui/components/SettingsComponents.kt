@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -33,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.llmapp.model.ResponseControl
@@ -48,7 +53,14 @@ fun SettingsPanel(
     onStopSequencesChanged: (List<String>?) -> Unit,
     onTemperatureChanged: (Double?) -> Unit,
     onPresetLoaded: (Int) -> Unit,
-    onResetToDefault: () -> Unit
+    onResetToDefault: () -> Unit,
+    compressionEnabled: Boolean,
+    keepLastMessages: Int,
+    summarizeEvery: Int,
+    compressionStats: com.llmapp.agent.CompressedChatHistory.CompressionStats?,
+    onCompressionToggle: (Boolean) -> Unit,
+    onKeepLastMessagesChange: (Int) -> Unit,
+    onSummarizeEveryChange: (Int) -> Unit
 ) {
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -60,9 +72,9 @@ fun SettingsPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Response Control Settings",
+            text = "Настройки",
             fontSize = 24.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
 
@@ -83,6 +95,16 @@ fun SettingsPanel(
                         onTemperatureChanged = onTemperatureChanged,
                         onPresetLoaded = onPresetLoaded,
                         onResetToDefault = onResetToDefault
+                    )
+
+                    CompressionSettingsCard(
+                        compressionEnabled = compressionEnabled,
+                        keepLastMessages = keepLastMessages,
+                        summarizeEvery = summarizeEvery,
+                        onCompressionToggle = onCompressionToggle,
+                        onKeepLastMessagesChange = onKeepLastMessagesChange,
+                        onSummarizeEveryChange = onSummarizeEveryChange,
+                        compressionStats = compressionStats
                     )
 
                     InfoCard(
@@ -109,6 +131,16 @@ fun SettingsPanel(
                             Technical: Precise, code-friendly responses
                             Casual: Friendly, emoji-rich responses
                             Kotlin Dev: Professional Kotlin/Compose development assistant
+                        """.trimIndent()
+                    )
+
+                    InfoCard(
+                        title = "Compression Guide",
+                        content = """
+                            • Сжатие контекста помогает экономить токены в длинных диалогах
+                            • "Хранить последних сообщений": сколько последних сообщений оставить без сжатия
+                            • "Резюме каждые N сообщений": через сколько сообщений создавать summary
+                            • Для моделей с большим контекстом (1M+) можно увеличить оба параметра
                         """.trimIndent()
                     )
 
@@ -325,7 +357,7 @@ fun PresetButtons(onPresetLoaded: (Int) -> Unit) {
         Text(
             text = "Quick Presets",
             fontSize = 14.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+            fontWeight = FontWeight.Medium
         )
 
         Row(
@@ -388,7 +420,7 @@ fun InfoCard(title: String, content: String) {
             Text(
                 title,
                 fontSize = 18.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -397,6 +429,156 @@ fun InfoCard(title: String, content: String) {
                 fontSize = 14.sp,
                 lineHeight = 20.sp
             )
+        }
+    }
+}
+
+@Composable
+fun CompressionSettingsCard(
+    compressionEnabled: Boolean,
+    keepLastMessages: Int,
+    summarizeEvery: Int,
+    onCompressionToggle: (Boolean) -> Unit,
+    onKeepLastMessagesChange: (Int) -> Unit,
+    onSummarizeEveryChange: (Int) -> Unit,
+    compressionStats: com.llmapp.agent.CompressedChatHistory.CompressionStats?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "📊 Сжатие контекста",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Switch(
+                    checked = compressionEnabled,
+                    onCheckedChange = onCompressionToggle
+                )
+            }
+
+            if (compressionEnabled) {
+                Text(
+                    text = "Экономит токены, сжимая старые сообщения в краткое резюме",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Хранить последних сообщений:", fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            onKeepLastMessagesChange(
+                                (keepLastMessages - 1).coerceAtLeast(
+                                    2
+                                )
+                            )
+                        }) {
+                            Text("-", fontSize = 20.sp)
+                        }
+                        Text(
+                            "$keepLastMessages",
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        IconButton(onClick = {
+                            onKeepLastMessagesChange(
+                                (keepLastMessages + 1).coerceAtMost(
+                                    20
+                                )
+                            )
+                        }) {
+                            Text("+", fontSize = 20.sp)
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Резюме каждые N сообщений:", fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            onSummarizeEveryChange(
+                                (summarizeEvery - 1).coerceAtLeast(
+                                    3
+                                )
+                            )
+                        }) {
+                            Text("-", fontSize = 20.sp)
+                        }
+                        Text(
+                            "$summarizeEvery",
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        IconButton(onClick = {
+                            onSummarizeEveryChange(
+                                (summarizeEvery + 1).coerceAtMost(
+                                    15
+                                )
+                            )
+                        }) {
+                            Text("+", fontSize = 20.sp)
+                        }
+                    }
+                }
+
+                if (compressionStats != null && compressionStats.totalMessages > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "📈 Текущая эффективность:",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Text(
+                        text = "Сэкономлено ~${compressionStats.tokensSaved} токенов (${
+                            "%.1f".format(
+                                (1 - compressionStats.compressionRatio) * 100
+                            )
+                        }%)",
+                        fontSize = 12.sp,
+                        color = Color(0xFF4CAF50)
+                    )
+
+                    LinearProgressIndicator(
+                        progress = (1 - compressionStats.compressionRatio).toFloat(),
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF4CAF50)
+                    )
+                }
+            } else {
+                Text(
+                    text = "Включите сжатие для экономии токенов в длинных диалогах",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

@@ -7,24 +7,6 @@ import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-val allFreeModels = listOf(
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nvidia/nemotron-3-nano-omni:free",
-    "nvidia/nemotron-nano-9b-v2:free",
-    "nvidia/nemotron-nano-12b-2-vl:free",
-    "openai/gpt-oss-20b:free",
-    "openai/gpt-oss-120b:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "google/gemma-4-31b-it:free",
-    "poolside/laguna-xs.2:free",
-    "poolside/laguna-m.1:free",
-    "openrouter/owl-alpha",
-    "z-ai/glm-4.5-air:free",
-    "moonshotai/kimi-k2.6:free"
-)
-
 class LLMAgentWithFallback(
     apiKey: String,
     initialModel: String,
@@ -37,17 +19,18 @@ class LLMAgentWithFallback(
         systemPrompt = systemPrompt,
         maxHistorySize = maxHistorySize
     )
-    private var currentModelIndex = allFreeModels.indexOf(initialModel).takeIf { it >= 0 } ?: 0
+    private var currentModelIndex =
+        DemoData.allFreeModels.indexOf(initialModel).takeIf { it >= 0 } ?: 0
 
     suspend fun processRequest(userInput: String): com.llmapp.agent.LLMResponse {
         var lastException: Exception? = null
 
-        for (i in currentModelIndex until allFreeModels.size) {
-            val model = allFreeModels[i]
+        for (i in currentModelIndex until DemoData.allFreeModels.size) {
+            val model = DemoData.allFreeModels[i]
 
             try {
                 if (i != currentModelIndex) {
-                    println("🔄 Переключение на fallback модель: ${getModelShortName(model)}")
+                    println("🔄 Переключение на fallback модель: ${DemoData.getModelShortName(model)}")
                     currentAgent.changeModel(model)
                     currentModelIndex = i
                 }
@@ -56,9 +39,9 @@ class LLMAgentWithFallback(
 
             } catch (e: Exception) {
                 lastException = e
-                println("⚠️ Модель ${getModelShortName(model)} не работает: ${e.message}")
+                println("⚠️ Модель ${DemoData.getModelShortName(model)} не работает: ${e.message}")
 
-                if (i < allFreeModels.size - 1) {
+                if (i < DemoData.allFreeModels.size - 1) {
                     println("🔄 Пробуем следующую модель...")
                     delay(1.seconds)
                 }
@@ -75,34 +58,13 @@ class LLMAgentWithFallback(
     fun getTokenStats() = currentAgent.getTokenStats()
     fun getContextWarning() = currentAgent.getContextWarning()
     fun getContextStatus() = currentAgent.getContextStatus()
-
-    private fun getModelShortName(modelId: String): String {
-        return when {
-            modelId.contains("nemotron-3-nano-30b") -> "NVIDIA Nano 30B"
-            modelId.contains("nemotron-3-super-120b") -> "NVIDIA Super 120B"
-            modelId.contains("nemotron-3-ultra-550b") -> "NVIDIA Ultra 550B"
-            modelId.contains("nemotron-3-nano-omni") -> "NVIDIA Nano Omni"
-            modelId.contains("nemotron-nano-9b") -> "NVIDIA Nano 9B"
-            modelId.contains("nemotron-nano-12b") -> "NVIDIA Nano 12B VL"
-            modelId.contains("gpt-oss-20b") -> "GPT-OSS 20B"
-            modelId.contains("gpt-oss-120b") -> "GPT-OSS 120B"
-            modelId.contains("gemma-4-26b") -> "Gemma 4 26B"
-            modelId.contains("gemma-4-31b") -> "Gemma 4 31B"
-            modelId.contains("laguna-xs") -> "Laguna XS"
-            modelId.contains("laguna-m") -> "Laguna M"
-            modelId.contains("owl-alpha") -> "Owl Alpha"
-            modelId.contains("glm-4.5-air") -> "GLM 4.5 Air"
-            modelId.contains("kimi-k2.6") -> "Kimi K2.6"
-            else -> modelId.take(30)
-        }
-    }
 }
 
 suspend fun demonstrateTokenTracking() {
     val apiKey = ApiConfig.getApiKey()
     val primaryModel = "openai/gpt-oss-20b:free"
 
-    println("\n✅ Используем модель: ${getModelShortName(primaryModel)}")
+    println("\n✅ Используем модель: ${DemoData.getModelShortName(primaryModel)}")
 
     val agent = LLMAgentWithFallback(
         apiKey = apiKey,
@@ -116,23 +78,14 @@ suspend fun demonstrateTokenTracking() {
     println("=".repeat(80))
 
     // Собираем статистику
-    val shortDialogueStats = mutableListOf<Triple<Int, Int, Int>>() // prompt, completion, total
+    val shortDialogueStats = mutableListOf<Triple<Int, Int, Int>>()
     val longDialogueStats = mutableListOf<Triple<Int, Int, Int>>()
     val extraStats = mutableListOf<Triple<Int, Int, Int>>()
-    val overflowStats = mutableListOf<Triple<Int, Int, Int>>()
-    var overflowMessage = ""
-    var maxTokensReached = 0
 
     println("\n📝 ТЕСТ 1: Короткий диалог (3 сообщения)")
     println("-".repeat(40))
 
-    val shortDialogue = listOf(
-        "Привет! Как дела?",
-        "Расскажи кратко о Kotlin",
-        "Спасибо, пока!"
-    )
-
-    for (message in shortDialogue) {
+    for (message in DemoData.shortDialogue) {
         println("\n👤 Пользователь: $message")
         try {
             val response = agent.processRequest(message)
@@ -157,31 +110,13 @@ suspend fun demonstrateTokenTracking() {
     println("Стоимость: ${agent.getTokenStats().getFormattedCost()}")
 
     println("\n" + "=".repeat(80))
-    println("📝 ТЕСТ 2: Длинный диалог (15 сообщений с контекстом)")
+    println("📝 ТЕСТ 2: Длинный диалог (${DemoData.longDialogueTopics.size} сообщений с контекстом)")
     println("-".repeat(40))
 
     agent.clearHistory()
     longDialogueStats.clear()
 
-    val longDialogueTopics = listOf(
-        "Расскажи подробно о функциональном программировании в Kotlin",
-        "Приведи 5 примеров использования лямбд и функций высшего порядка",
-        "Теперь про корутины: как они работают под капотом?",
-        "Объясни разницу между launch, async и produce",
-        "Покажи пример обработки ошибок в корутинах",
-        "Как тестировать код с корутинами?",
-        "Расскажи про StateFlow и SharedFlow",
-        "Как реализовать паттерн MVI с Flow?",
-        "Сравни Compose и традиционный XML подход",
-        "Какие best practices для большого Compose проекта?",
-        "Объясни принципы SOLID в Kotlin с примерами",
-        "Как работает type-safe builder в Kotlin? Покажи пример DSL",
-        "Расскажи про инлайн классы и когда их использовать",
-        "Что такое сериализация в Kotlin? Как использовать kotlinx.serialization?",
-        "Как оптимизировать производительность Compose приложений?"
-    )
-
-    for ((index, question) in longDialogueTopics.withIndex()) {
+    for ((index, question) in DemoData.longDialogueTopics.withIndex()) {
         println("\n[${index + 1}] 👤: ${question.take(50)}...")
         try {
             val response = agent.processRequest(question)
@@ -216,15 +151,7 @@ suspend fun demonstrateTokenTracking() {
     println("📝 ТЕСТ 3: ДОПОЛНИТЕЛЬНЫЕ ЗАПРОСЫ")
     println("-".repeat(40))
 
-    val extraQuestions = listOf(
-        "Что такое корутины в Kotlin?",
-        "Как работает Flow?",
-        "Расскажи про Compose UI",
-        "Что такое функции расширения?",
-        "Как работает делегирование в Kotlin?"
-    )
-
-    for (question in extraQuestions) {
+    for (question in DemoData.extraQuestions) {
         println("\n👤: $question")
         try {
             val response = agent.processRequest(question)
@@ -241,60 +168,6 @@ suspend fun demonstrateTokenTracking() {
             println("❌ Ошибка: ${e.message}")
         }
         delay(500.milliseconds)
-    }
-
-    println("\n" + "=".repeat(80))
-    println("📊 ТЕСТ 4: ПРОВЕРКА ПЕРЕПОЛНЕНИЯ КОНТЕКСТА")
-    println("-".repeat(40))
-
-    var counter = longDialogueTopics.size + 1
-    var overflowOccurred = false
-
-    while (counter < 20) {
-        val longText = "Расскажи очень подробно о Kotlin. " +
-                "Опиши все фичи языка: функции расширения, делегирование, sealed классы, " +
-                "инлайновые функции, реифицированные типы, оператор invoke, компонентные функции. " +
-                "Приведи примеры для каждой фичи. Добавим много текста для заполнения контекста. " +
-                "Повторяем важную информацию чтобы увеличить количество токенов. ${"X".repeat(500)}"
-
-        println("\n[${counter}] Запрос #$counter (проверка лимита контекста)...")
-        try {
-            val response = agent.processRequest(longText)
-            println("✅ Ответ получен. Всего токенов: ${agent.getTokenStats().totalTokens}")
-            println("📊 Токены запроса: prompt=${response.promptTokens}, completion=${response.completionTokens}, total=${response.totalTokens}")
-            overflowStats.add(
-                Triple(
-                    response.promptTokens ?: 0,
-                    response.completionTokens ?: 0,
-                    response.totalTokens ?: 0
-                )
-            )
-            println(agent.getContextWarning())
-            maxTokensReached = agent.getTokenStats().totalTokens
-
-            if (agent.getTokenStats().totalTokens > 100000) {
-                println("⚠️ Достигнуто 100k+ токенов! Контекст почти полон!")
-            }
-
-            delay(500.milliseconds)
-        } catch (e: Exception) {
-            println("❌ ОШИБКА: ${e.message}")
-            if (e.message?.contains("429") == true || e.message?.contains("rate") == true) {
-                overflowMessage = "Достигнут лимит запросов API (50 в день)"
-                println("⚠️ $overflowMessage")
-                break
-            }
-            if (e.message?.contains("context") == true || e.message?.contains("token") == true ||
-                e.message?.contains("400") == true || e.message?.contains("length") == true
-            ) {
-                overflowOccurred = true
-                overflowMessage =
-                    "ПЕРЕПОЛНЕНИЕ КОНТЕКСТА на $maxTokensReached токенах! Модель начала 'забывать' начало диалога"
-                println("💥 $overflowMessage")
-                break
-            }
-        }
-        counter++
     }
 
     // Формируем статистику для отправки модели
@@ -319,9 +192,8 @@ suspend fun demonstrateTokenTracking() {
         🔹 КОРОТКИЙ ДИАЛОГ (3 сообщения):
            • Всего токенов: $shortTotalTokens
            • Среднее на сообщение: $shortAvgTokens
-           • Стоимость: ${agent.getTokenStats().getFormattedCost()}
         
-        🔹 ДЛИННЫЙ ДИАЛОГ (15 сообщений):
+        🔹 ДЛИННЫЙ ДИАЛОГ (${DemoData.longDialogueTopics.size} сообщений):
            • Всего токенов: $longTotalTokens
            • Среднее на сообщение: $longAvgTokens
            • Рост токенов: ${"%.1f".format(growthRate)}x
@@ -330,20 +202,15 @@ suspend fun demonstrateTokenTracking() {
            • Всего токенов: $extraTotalTokens
            • Среднее на сообщение: $extraAvgTokens
         
-        🔹 ПЕРЕПОЛНЕНИЕ КОНТЕКСТА:
-           • Произошло: ${if (overflowOccurred) "ДА" else "НЕТ"}
-           • Максимум токенов: $maxTokensReached
-           • ${if (overflowOccurred) overflowMessage else "Переполнение не достигнуто"}
-        
         🔹 ОБЩАЯ СТАТИСТИКА:
            • Всего запросов: ${agent.getTokenStats().requestCount}
+           • Всего токенов: ${agent.getTokenStats().totalTokens}
            • Общая стоимость: ${agent.getTokenStats().getFormattedCost()}
         
         Вопросы для анализа:
         1. Сравните короткий и длинный диалог. Как растет количество токенов?
-        2. Что происходит при переполнении контекста?
-        3. Как стоимость зависит от длины диалога?
-        4. Какие выводы можно сделать для оптимизации использования токенов?
+        2. Как стоимость зависит от длины диалога?
+        3. Какие выводы можно сделать для оптимизации использования токенов?
         
         Пожалуйста, сделай подробные выводы на русском языке.
     """.trimIndent()
@@ -376,27 +243,6 @@ suspend fun demonstrateTokenTracking() {
     }
 
     println("\n✅ Демонстрация завершена!")
-}
-
-fun getModelShortName(modelId: String): String {
-    return when {
-        modelId.contains("nemotron-3-nano-30b") -> "NVIDIA Nano 30B"
-        modelId.contains("nemotron-3-super-120b") -> "NVIDIA Super 120B"
-        modelId.contains("nemotron-3-ultra-550b") -> "NVIDIA Ultra 550B"
-        modelId.contains("nemotron-3-nano-omni") -> "NVIDIA Nano Omni"
-        modelId.contains("nemotron-nano-9b") -> "NVIDIA Nano 9B"
-        modelId.contains("nemotron-nano-12b") -> "NVIDIA Nano 12B VL"
-        modelId.contains("gpt-oss-20b") -> "GPT-OSS 20B"
-        modelId.contains("gpt-oss-120b") -> "GPT-OSS 120B"
-        modelId.contains("gemma-4-26b") -> "Gemma 4 26B"
-        modelId.contains("gemma-4-31b") -> "Gemma 4 31B"
-        modelId.contains("laguna-xs") -> "Laguna XS"
-        modelId.contains("laguna-m") -> "Laguna M"
-        modelId.contains("owl-alpha") -> "Owl Alpha"
-        modelId.contains("glm-4.5-air") -> "GLM 4.5 Air"
-        modelId.contains("kimi-k2.6") -> "Kimi K2.6"
-        else -> modelId.take(30)
-    }
 }
 
 fun main() = runBlocking {
