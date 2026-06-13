@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ModelTraining
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,13 @@ fun AppNavigationRail(
                 onClick = { onScreenSelected(Screen.Models) },
                 icon = { Icon(Icons.Default.ModelTraining, "Models") },
                 label = { Text("Models", fontSize = 10.sp) }
+            )
+
+            NavigationRailItem(
+                selected = currentScreen == Screen.Demo,
+                onClick = { onScreenSelected(Screen.Demo) },
+                icon = { Icon(Icons.Default.Science, "Demo") },
+                label = { Text("Demo", fontSize = 10.sp) }
             )
 
             NavigationRailItem(

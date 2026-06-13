@@ -73,16 +73,15 @@ suspend fun demonstrateTokenTracking() {
         maxHistorySize = 100
     )
 
-    println("\n" + "=".repeat(80))
-    println("ДЕМОНСТРАЦИЯ ОТСЛЕЖИВАНИЯ ТОКЕНОВ")
-    println("=".repeat(80))
+    println(DemoData.getTokenDemoHeader())
 
     // Собираем статистику
     val shortDialogueStats = mutableListOf<Triple<Int, Int, Int>>()
     val longDialogueStats = mutableListOf<Triple<Int, Int, Int>>()
     val extraStats = mutableListOf<Triple<Int, Int, Int>>()
 
-    println("\n📝 ТЕСТ 1: Короткий диалог (3 сообщения)")
+    // ТЕСТ 1: Короткий диалог
+    println(DemoData.getShortDialogueTestHeader())
     println("-".repeat(40))
 
     for (message in DemoData.shortDialogue) {
@@ -105,12 +104,18 @@ suspend fun demonstrateTokenTracking() {
         }
     }
 
-    println("\n📊 ИТОГО после короткого диалога:")
-    println(agent.getTokenStats().getFormattedTokens())
-    println("Стоимость: ${agent.getTokenStats().getFormattedCost()}")
+    val stats1 = agent.getTokenStats()
+    println(
+        DemoData.formatShortDialogueSummary(
+            stats1.totalTokens,
+            stats1.totalPromptTokens,
+            stats1.totalCompletionTokens,
+            stats1.estimatedCostUsd
+        )
+    )
 
-    println("\n" + "=".repeat(80))
-    println("📝 ТЕСТ 2: Длинный диалог (${DemoData.longDialogueTopics.size} сообщений с контекстом)")
+    // ТЕСТ 2: Длинный диалог
+    println(DemoData.getLongDialogueTestHeader(DemoData.longDialogueTopics.size))
     println("-".repeat(40))
 
     agent.clearHistory()
@@ -142,13 +147,26 @@ suspend fun demonstrateTokenTracking() {
         }
     }
 
-    println("\n📊 ФИНАЛЬНАЯ СТАТИСТИКА после длинного диалога:")
-    println(agent.getTokenStats().getFormattedTokens())
-    println("Стоимость: ${agent.getTokenStats().getFormattedCost()}")
-    println("Статус контекста: ${agent.getContextStatus()}")
+    val finalStats = agent.getTokenStats()
+    val contextStatusMessage = when (agent.getContextStatus()) {
+        com.llmapp.agent.ContextStatus.SAFE -> "✅ Безопасно"
+        com.llmapp.agent.ContextStatus.WARNING -> "⚠️ Предупреждение"
+        com.llmapp.agent.ContextStatus.CRITICAL -> "🔴 Критично"
+        com.llmapp.agent.ContextStatus.OVERFLOW -> "💥 Переполнение"
+    }
 
-    println("\n" + "=".repeat(80))
-    println("📝 ТЕСТ 3: ДОПОЛНИТЕЛЬНЫЕ ЗАПРОСЫ")
+    println(
+        DemoData.getLongDialogueFinalStats(
+            finalStats.totalTokens,
+            finalStats.totalPromptTokens,
+            finalStats.totalCompletionTokens,
+            finalStats.estimatedCostUsd,
+            contextStatusMessage
+        )
+    )
+
+    // ТЕСТ 3: Дополнительные запросы
+    println(DemoData.getExtraQuestionsTestHeader())
     println("-".repeat(40))
 
     for (question in DemoData.extraQuestions) {
@@ -186,34 +204,14 @@ suspend fun demonstrateTokenTracking() {
         (longTotalTokens.toDouble() / shortTotalTokens)
     } else 0.0
 
-    val statsReport = """
-        📊 СТАТИСТИКА ДЛЯ АНАЛИЗА:
-        
-        🔹 КОРОТКИЙ ДИАЛОГ (3 сообщения):
-           • Всего токенов: $shortTotalTokens
-           • Среднее на сообщение: $shortAvgTokens
-        
-        🔹 ДЛИННЫЙ ДИАЛОГ (${DemoData.longDialogueTopics.size} сообщений):
-           • Всего токенов: $longTotalTokens
-           • Среднее на сообщение: $longAvgTokens
-           • Рост токенов: ${"%.1f".format(growthRate)}x
-        
-        🔹 ДОПОЛНИТЕЛЬНЫЕ ЗАПРОСЫ (5 сообщений):
-           • Всего токенов: $extraTotalTokens
-           • Среднее на сообщение: $extraAvgTokens
-        
-        🔹 ОБЩАЯ СТАТИСТИКА:
-           • Всего запросов: ${agent.getTokenStats().requestCount}
-           • Всего токенов: ${agent.getTokenStats().totalTokens}
-           • Общая стоимость: ${agent.getTokenStats().getFormattedCost()}
-        
-        Вопросы для анализа:
-        1. Сравните короткий и длинный диалог. Как растет количество токенов?
-        2. Как стоимость зависит от длины диалога?
-        3. Какие выводы можно сделать для оптимизации использования токенов?
-        
-        Пожалуйста, сделай подробные выводы на русском языке.
-    """.trimIndent()
+    val statsReport = DemoData.getStatsReport(
+        shortTotalTokens, shortAvgTokens,
+        longTotalTokens, longAvgTokens, growthRate,
+        extraTotalTokens, extraAvgTokens,
+        agent.getTokenStats().requestCount,
+        agent.getTokenStats().totalTokens,
+        agent.getTokenStats().estimatedCostUsd
+    )
 
     println("\n" + "=".repeat(80))
     println("📊 ПЕРЕДАЕМ СТАТИСТИКУ МОДЕЛИ ДЛЯ АНАЛИЗА")

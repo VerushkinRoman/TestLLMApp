@@ -12,9 +12,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.controller.ChatStorageManager
@@ -24,9 +30,68 @@ import com.llmapp.ui.components.SavedChatsPanel
 import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
+import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
+import java.util.prefs.Preferences
 
+class WindowSettings {
+    companion object {
+        private const val PREFS_NODE = "com.llmapp.ui"
+
+        fun getPreferences(): Preferences {
+            return Preferences.userRoot().node(PREFS_NODE)
+        }
+
+        fun saveWindowState(width: Int, height: Int, x: Int, y: Int, placement: String) {
+            val prefs = getPreferences()
+            prefs.putInt("window_width", width)
+            prefs.putInt("window_height", height)
+            prefs.putInt("window_x", x)
+            prefs.putInt("window_y", y)
+            prefs.put("window_placement", placement)
+        }
+
+        fun loadWindowState(): WindowStateData {
+            val prefs = getPreferences()
+            return WindowStateData(
+                width = prefs.getInt("window_width", 1366),
+                height = prefs.getInt("window_height", 768),
+                x = prefs.getInt("window_x", 50),
+                y = prefs.getInt("window_y", 50),
+                placement = prefs.get("window_placement", WindowPlacement.Floating.name)
+            )
+        }
+    }
+
+    data class WindowStateData(
+        val width: Int,
+        val height: Int,
+        val x: Int,
+        val y: Int,
+        val placement: String
+    )
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
+    val savedState = WindowSettings.loadWindowState()
+
+    val placement = try {
+        WindowPlacement.valueOf(savedState.placement)
+    } catch (_: Exception) {
+        WindowPlacement.Floating
+    }
+
+    val windowState = WindowState(
+        placement = placement,
+        isMinimized = false,
+        position = WindowPosition(
+            x = savedState.x.dp,
+            y = savedState.y.dp
+        ),
+        size = DpSize(savedState.width.dp, savedState.height.dp)
+    )
+
     val viewModel = remember { ChatViewModel() }
     val storageManager = remember { ChatStorageManager() }
 
@@ -49,7 +114,21 @@ fun main() = application {
 
     Window(
         title = "LLM Chat - OpenRouter Client",
-        onCloseRequest = ::exitApplication
+        onCloseRequest = {
+            WindowSettings.saveWindowState(
+                width = windowState.size.width.value.toInt(),
+                height = windowState.size.height.value.toInt(),
+                x = windowState.position.x.value.toInt(),
+                y = windowState.position.y.value.toInt(),
+                placement = windowState.placement.name
+            )
+            exitApplication()
+        },
+        state = windowState,
+        resizable = true,
+        transparent = false,
+        focusable = true,
+        alwaysOnTop = false
     ) {
         MaterialTheme(
             colorScheme = darkColorScheme(
@@ -94,6 +173,10 @@ fun MainScreen(
 
     val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
 
+    LaunchedEffect(Unit) {
+        viewModel.setChatMemoryService(chatMemoryService)
+    }
+
     LaunchedEffect(messages.size, isTyping) {
         if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping) {
             chatMemoryService.saveCurrentChatDebounced(messages.toList(), currentModel)
@@ -132,7 +215,7 @@ fun MainScreen(
                     viewModel.updateDraft(text, cursorPos)
                 },
                 onSendMessage = { message ->
-                    if (message.isNotBlank() && !viewModel.isGenerating.value) {
+                    if (message.isNotBlank() && !viewModel.isGenerating.value && !viewModel.isDemoRunning.value) {
                         viewModel.sendMessage(message)
                         viewModel.updateDraft("", 0)
                     }
@@ -147,10 +230,34 @@ fun MainScreen(
                     viewModel.stopGeneration()
                 },
                 isGenerating = viewModel.isGenerating.value,
+                isDemoRunning = viewModel.isDemoRunning.value,
                 tokenStats = tokenStats,
                 tokenHistory = tokenHistory,
                 contextWarning = contextWarning,
                 onClearTokenStats = { viewModel.clearTokenStats() }
+            )
+
+            Screen.Demo -> DemoScreen(
+                onStartTokenDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startTokenDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartCompressionDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startCompressionDemo()
+                    currentScreen = Screen.Chat
+                },
+                isDemoRunning = viewModel.isDemoRunning.value,
+                onClearHistory = {
+                    viewModel.clearHistory()
+                }
             )
 
             Screen.Agents -> SavedChatsPanel(

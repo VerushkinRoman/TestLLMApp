@@ -138,6 +138,8 @@ fun ChatTopBar(
     )
 }
 
+// src/main/kotlin/com/llmapp/ui/components/ChatComponents.kt
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MessageBubble(
@@ -145,7 +147,8 @@ fun MessageBubble(
     currentModel: String,
     onRegenerate: (() -> Unit)? = null,
     onEdit: ((String) -> Unit)? = null,
-    isRegenerating: Boolean = false
+    isRegenerating: Boolean = false,
+    isDemoRunning: Boolean = false
 ) {
     val isUser = message.role == "user"
     val clipboard = LocalClipboard.current
@@ -198,7 +201,7 @@ fun MessageBubble(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (isEditing && isUser) {
+                if (isEditing && isUser && onEdit != null) {
                     Column {
                         OutlinedTextField(
                             value = editText,
@@ -225,7 +228,7 @@ fun MessageBubble(
                             }
                             Button(
                                 onClick = {
-                                    onEdit?.invoke(editText)
+                                    onEdit.invoke(editText)
                                     isEditing = false
                                 },
                                 modifier = Modifier.weight(1f)
@@ -254,6 +257,7 @@ fun MessageBubble(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Кнопка Copy - ВСЕГДА АКТИВНА (даже во время демо)
                     Button(
                         onClick = {
                             scope.launch {
@@ -266,6 +270,7 @@ fun MessageBubble(
                             }
                         },
                         modifier = Modifier.weight(1f),
+                        enabled = true,  // Всегда активна
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -293,13 +298,21 @@ fun MessageBubble(
                         }
                     }
 
-                    if (isUser && onEdit != null && !isEditing) {
+                    // Кнопка Edit - отключается во время демо (колбэк = null)
+                    if (isUser && onEdit != null) {
                         Button(
                             onClick = { isEditing = true },
                             modifier = Modifier.weight(1f),
+                            enabled = !isDemoRunning,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                containerColor = if (isDemoRunning)
+                                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = if (isDemoRunning)
+                                    MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         ) {
                             Row(
@@ -317,14 +330,21 @@ fun MessageBubble(
                         }
                     }
 
-                    if (!isUser && onRegenerate != null && !isEditing) {
+                    // Кнопка Regenerate - отключается во время демо (колбэк = null)
+                    if (!isUser && onRegenerate != null) {
                         Button(
                             onClick = onRegenerate,
                             modifier = Modifier.weight(1f),
-                            enabled = !isRegenerating,
+                            enabled = !isRegenerating && !isDemoRunning,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                containerColor = if (isDemoRunning)
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = if (isDemoRunning)
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         ) {
                             Row(
@@ -400,13 +420,64 @@ fun MessageBubble(
                                 responseTimeMs = message.responseTimeMs,
                                 promptTokens = message.promptTokens,
                                 completionTokens = message.completionTokens,
-                                totalTokens = message.totalTokens
+                                totalTokens = message.totalTokens,
                             )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun CopyMetricsButton(
+    modelName: String,
+    responseTimeMs: Long?,
+    promptTokens: Int?,
+    completionTokens: Int?,
+    totalTokens: Int?,
+) {
+    val clipboard = LocalClipboard.current
+    var showCopied by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val copyText = buildString {
+        append("Модель: $modelName")
+
+        responseTimeMs?.let { ms ->
+            val timeSec = ms / 1000.0
+            append(" | Время: ${String.format("%.2f", timeSec)}с")
+        }
+
+        promptTokens?.let { append(" | Prompt: $it") }
+        completionTokens?.let { append(" | Completion: $it") }
+        totalTokens?.let { append(" | Total: $it") }
+    }
+
+    IconButton(
+        onClick = {
+            scope.launch {
+                val transferable = StringSelection(copyText)
+                val clipEntry = ClipEntry(transferable)
+                clipboard.setClipEntry(clipEntry)
+                showCopied = true
+                delay(1.seconds)
+                showCopied = false
+            }
+        },
+        modifier = Modifier.size(20.dp),
+    ) {
+        Icon(
+            if (showCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+            contentDescription = if (showCopied) "Copied!" else "Copy metrics",
+            modifier = Modifier.size(14.dp),
+            tint = if (showCopied)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
     }
 }
 
@@ -492,6 +563,7 @@ fun MessageInput(
     onSendMessage: () -> Unit,
     onStopGeneration: (() -> Unit)? = null,
     isGenerating: Boolean = false,
+    isDemoRunning: Boolean = false,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null
 ) {
@@ -507,204 +579,189 @@ fun MessageInput(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            var textFieldValue by remember(inputText) {
-                mutableStateOf(
-                    TextFieldValue(
-                        text = inputText,
-                        selection = TextRange(cursorPosition)
-                    )
-                )
-            }
-
-            LaunchedEffect(inputText) {
-                if (textFieldValue.text != inputText) {
-                    textFieldValue = TextFieldValue(
-                        text = inputText,
-                        selection = TextRange(cursorPosition)
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = textFieldValue,
-                onValueChange = { newValue ->
-                    if (!isGenerating) {
-                        textFieldValue = newValue
-                        onInputChange(newValue.text, newValue.selection.start)
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .then(
-                        if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                        else Modifier
-                    )
-                    .onKeyEvent { keyEvent ->
-                        when (keyEvent.key) {
-                            Key.Enter if !keyEvent.isCtrlPressed && !isGenerating -> {
-                                onSendMessage()
-                                true
-                            }
-
-                            Key.Enter if keyEvent.isCtrlPressed -> {
-                                if (!isGenerating) {
-                                    val newValue = textFieldValue.copy(
-                                        text = textFieldValue.text + "\n",
-                                        selection = TextRange(textFieldValue.text.length + 1)
-                                    )
-                                    textFieldValue = newValue
-                                    onInputChange(newValue.text, newValue.selection.start)
-                                }
-                                true
-                            }
-
-                            else -> {
-                                false
-                            }
-                        }
-                    },
-                placeholder = { Text("Type your message...") },
-                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = if (!isGenerating)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    unfocusedBorderColor = if (!isGenerating)
-                        MaterialTheme.colorScheme.outline
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                    focusedTextColor = if (!isGenerating)
-                        MaterialTheme.colorScheme.onSurface
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    unfocusedTextColor = if (!isGenerating)
-                        MaterialTheme.colorScheme.onSurface
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(24.dp),
-                keyboardOptions = KeyboardOptions(
-                    imeAction = if (isGenerating) ImeAction.None else ImeAction.Send
-                ),
-                keyboardActions = KeyboardActions(
-                    onSend = {
-                        if (!isGenerating) {
-                            onSendMessage()
-                        }
-                    }
-                ),
-                singleLine = false,
-                maxLines = 5,
-                readOnly = isGenerating
-            )
-
-            if (isGenerating && onStopGeneration != null) {
-                Surface(
+            if (isDemoRunning) {
+                OutlinedTextField(
+                    value = "🔬 Демонстрация запущена... Ожидайте завершения",
+                    onValueChange = {},
                     modifier = Modifier
-                        .size(48.dp)
-                        .clickable(onClick = onStopGeneration),
+                        .weight(1f)
+                        .then(
+                            if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                            else Modifier
+                        ),
+                    placeholder = { Text("Демонстрация запущена...") },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        focusedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    readOnly = true,
+                    enabled = false
+                )
+
+                Surface(
+                    modifier = Modifier.size(48.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.error,
-                    shadowElevation = 6.dp
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(
-                                    color = Color.White,
-                                    shape = RoundedCornerShape(4.dp)
-                                )
+                    Box(contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             } else {
-                Surface(
+                var textFieldValue by remember(inputText) {
+                    mutableStateOf(
+                        TextFieldValue(
+                            text = inputText,
+                            selection = TextRange(cursorPosition)
+                        )
+                    )
+                }
+
+                LaunchedEffect(inputText) {
+                    if (textFieldValue.text != inputText) {
+                        textFieldValue = TextFieldValue(
+                            text = inputText,
+                            selection = TextRange(cursorPosition)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = textFieldValue,
+                    onValueChange = { newValue ->
+                        if (!isGenerating) {
+                            textFieldValue = newValue
+                            onInputChange(newValue.text, newValue.selection.start)
+                        }
+                    },
                     modifier = Modifier
-                        .size(48.dp)
-                        .clickable(enabled = !isGenerating) {
+                        .weight(1f)
+                        .then(
+                            if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                            else Modifier
+                        )
+                        .onKeyEvent { keyEvent ->
+                            when (keyEvent.key) {
+                                Key.Enter if !keyEvent.isCtrlPressed && !isGenerating -> {
+                                    onSendMessage()
+                                    true
+                                }
+
+                                Key.Enter if keyEvent.isCtrlPressed -> {
+                                    if (!isGenerating) {
+                                        val newValue = textFieldValue.copy(
+                                            text = textFieldValue.text + "\n",
+                                            selection = TextRange(textFieldValue.text.length + 1)
+                                        )
+                                        textFieldValue = newValue
+                                        onInputChange(newValue.text, newValue.selection.start)
+                                    }
+                                    true
+                                }
+
+                                else -> false
+                            }
+                        },
+                    placeholder = { Text("Type your message...") },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = if (!isGenerating)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        unfocusedBorderColor = if (!isGenerating)
+                            MaterialTheme.colorScheme.outline
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        focusedTextColor = if (!isGenerating)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        unfocusedTextColor = if (!isGenerating)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = if (isGenerating) ImeAction.None else ImeAction.Send
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
                             if (!isGenerating) {
                                 onSendMessage()
                             }
-                        },
-                    shape = CircleShape,
-                    color = if (!isGenerating)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                    shadowElevation = if (!isGenerating) 6.dp else 0.dp
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
+                        }
+                    ),
+                    singleLine = false,
+                    maxLines = 5,
+                    readOnly = isGenerating
+                )
+
+                if (isGenerating && onStopGeneration != null) {
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable(onClick = onStopGeneration),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.error,
+                        shadowElevation = 6.dp
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            "Send",
-                            modifier = Modifier.size(24.dp),
-                            tint = if (!isGenerating)
-                                MaterialTheme.colorScheme.onPrimary
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        color = Color.White,
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable(enabled = !isGenerating) {
+                                if (!isGenerating) {
+                                    onSendMessage()
+                                }
+                            },
+                        shape = CircleShape,
+                        color = if (!isGenerating)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        shadowElevation = if (!isGenerating) 6.dp else 0.dp
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                "Send",
+                                modifier = Modifier.size(24.dp),
+                                tint = if (!isGenerating)
+                                    MaterialTheme.colorScheme.onPrimary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun CopyMetricsButton(
-    modelName: String,
-    responseTimeMs: Long?,
-    promptTokens: Int?,
-    completionTokens: Int?,
-    totalTokens: Int?
-) {
-    val clipboard = LocalClipboard.current
-    var showCopied by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    val copyText = buildString {
-        append("Модель: $modelName")
-
-        responseTimeMs?.let { ms ->
-            val timeSec = ms / 1000.0
-            append(" | Время: ${String.format("%.2f", timeSec)}с")
-        }
-
-        promptTokens?.let { append(" | Prompt: $it") }
-        completionTokens?.let { append(" | Completion: $it") }
-        totalTokens?.let { append(" | Total: $it") }
-    }
-
-    IconButton(
-        onClick = {
-            scope.launch {
-                val transferable = StringSelection(copyText)
-                val clipEntry = ClipEntry(transferable)
-                clipboard.setClipEntry(clipEntry)
-                showCopied = true
-                delay(1.seconds)
-                showCopied = false
-            }
-        },
-        modifier = Modifier.size(20.dp)
-    ) {
-        Icon(
-            if (showCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-            contentDescription = if (showCopied) "Copied!" else "Copy metrics",
-            modifier = Modifier.size(14.dp),
-            tint = if (showCopied)
-                MaterialTheme.colorScheme.primary
-            else
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
     }
 }

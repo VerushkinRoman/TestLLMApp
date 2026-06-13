@@ -48,23 +48,14 @@ class ComparisonResult(
 }
 
 class SummaryDemo {
-
     suspend fun runComparison() {
         val apiKey = ApiConfig.getApiKey()
         val primaryModel = "openai/gpt-oss-20b:free"
 
-        println("\n" + "=".repeat(100))
-        println("🧪 ЭКСПЕРИМЕНТ: Сравнение работы с компрессией контекста и без")
-        println("=".repeat(100))
-
-        println("\n📌 Параметры эксперимента:")
-        println("   • Модель: ${DemoData.getModelShortName(primaryModel)}")
-        println("   • Количество сообщений: ${DemoData.longDialogueTopics.size}")
-        println("   • Компрессия: последние 8 сообщений как есть, summary каждые 6 сообщений")
+        println(DemoData.getCompressionDemoHeader(primaryModel, DemoData.longDialogueTopics.size))
 
         // Тест 1: Без компрессии
-        println("\n" + "━".repeat(100))
-        println("🔵 ТЕСТ 1: Обычный агент (БЕЗ компрессии контекста)")
+        println(DemoData.getNoCompressionTestHeader())
         println("━".repeat(100))
 
         val regularAgent = LLMAgent(
@@ -80,8 +71,7 @@ class SummaryDemo {
         delay(5.seconds)
 
         // Тест 2: С компрессией
-        println("\n" + "━".repeat(100))
-        println("🟢 ТЕСТ 2: Сжатый агент (С компрессией контекста)")
+        println(DemoData.getCompressionTestHeader())
         println("━".repeat(100))
 
         val compressedAgent = CompressedLLMAgent(
@@ -104,10 +94,7 @@ class SummaryDemo {
         compareResults(regularResult, compressedResult)
 
         // Тест 3: Проверка адаптивности к контексту модели
-        println("\n" + "=".repeat(100))
-        println("🎯 ТЕСТ 3: Адаптивная компрессия под разные модели")
-        println("=".repeat(100))
-
+        println(DemoData.getAdaptiveCompressionHeader())
         testAdaptiveCompression(apiKey)
     }
 
@@ -126,7 +113,6 @@ class SummaryDemo {
         var totalPromptTokens = 0
         var totalCompletionTokens = 0
         var requestCount = 0
-        var compressionStats: String?
 
         println("\n📝 Начинаем диалог из ${DemoData.longDialogueTopics.size} вопросов...")
         println("-".repeat(80))
@@ -170,10 +156,10 @@ class SummaryDemo {
                 requestCount++
 
                 if (response.compressionStats != null && index % 5 == 0 && index > 0) {
-                    compressionStats =
+                    val compressionLine =
                         response.compressionStats.getFormatted().lines().drop(1).joinToString(" ")
                             .take(80)
-                    println("💾 $compressionStats")
+                    println("💾 $compressionLine")
                 }
 
                 delay(500.milliseconds)
@@ -278,51 +264,8 @@ class SummaryDemo {
             println("   ${compressed.compressionStats}")
         }
 
-        println("\n💡 ВЫВОДЫ:")
-        println("-".repeat(80))
-
-        when {
-            tokensSavedPercent > 30 -> println(
-                "   ✅ ОТЛИЧНО! Компрессия сократила расход токенов на ${
-                    "%.1f".format(
-                        tokensSavedPercent
-                    )
-                }%"
-            )
-
-            tokensSavedPercent > 15 -> println(
-                "   👍 ХОРОШО! Компрессия сократила расход токенов на ${
-                    "%.1f".format(
-                        tokensSavedPercent
-                    )
-                }%"
-            )
-
-            tokensSavedPercent > 0 -> println(
-                "   👌 НЕПЛОХО! Компрессия сократила расход токенов на ${
-                    "%.1f".format(
-                        tokensSavedPercent
-                    )
-                }%"
-            )
-
-            else -> println("   ⚠️ Компрессия не дала экономии токенов в этом тесте")
-        }
-
-        if (costSaved > 0) {
-            println("   💰 Экономия средств: $${"%.6f".format(costSaved)}")
-        }
-
-        println(
-            """
-            |
-            | Рекомендации:
-            |   1. Компрессия особенно эффективна для длинных диалогов (>20 сообщений)
-            |   2. Настройте keepLastMessages (8-12) и summarizeEvery (5-8) под ваши задачи
-            |   3. Для моделей с большим контекстом можно увеличить keepLastMessages
-            |   4. Для коротких диалогов компрессию можно отключать
-        """.trimMargin()
-        )
+        // Используем общие выводы из DemoData
+        println(DemoData.getCompressionConclusions(tokensSavedPercent, costSaved))
     }
 
     private suspend fun testAdaptiveCompression(apiKey: String) {

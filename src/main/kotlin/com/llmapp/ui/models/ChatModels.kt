@@ -15,12 +15,12 @@ data class ChatMessageUI(
             when {
                 ms < 1000 -> "${ms}ms"
                 ms < 60000 -> "${ms / 1000}.${(ms % 1000) / 100}s"
-                else -> "${ms / 60000}m ${(ms % 60000) / 1000}s"
+                else -> "${ms / 60000}м ${(ms % 60000) / 1000}s"
             }
         }
     }
 }
 
 enum class Screen {
-    Chat, Models, Settings, Agents
+    Chat, Models, Settings, Agents, Demo
 }

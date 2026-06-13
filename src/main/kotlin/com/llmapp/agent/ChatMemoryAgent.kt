@@ -27,6 +27,8 @@ class ChatMemoryAgent(
 
     private var saveDebounceJob: kotlinx.coroutines.Job? = null
 
+    private var isDemoMode = false
+
     fun loadChats() {
         _savedChats.value = storageManager.getChatsByAgent("chat_memory")
     }
@@ -35,7 +37,13 @@ class ChatMemoryAgent(
     fun createNewChat(): String {
         val chatId = Uuid.random().toString()
         _currentChatId.value = chatId
+        isDemoMode = false
         return chatId
+    }
+
+    fun markAsDemoMode() {
+        isDemoMode = true
+        _currentChatId.value = null
     }
 
     @OptIn(ExperimentalUuidApi::class)
@@ -43,6 +51,7 @@ class ChatMemoryAgent(
         val chat = storageManager.getChat(chatId)
         if (chat != null) {
             _currentChatId.value = chatId
+            isDemoMode = false
 
             val messages = chat.messages.mapNotNull { msg ->
                 when (msg.role) {
@@ -74,6 +83,11 @@ class ChatMemoryAgent(
         messages: List<ChatMessageUI>,
         modelUsed: String
     ) {
+        if (isDemoMode) {
+            println("📝 Демо-чат не сохраняется")
+            return
+        }
+
         if (messages.isEmpty()) return
 
         val chatId = _currentChatId.value
@@ -114,6 +128,8 @@ class ChatMemoryAgent(
     }
 
     fun saveCurrentChatDebounced(messages: List<ChatMessageUI>, modelUsed: String) {
+        if (isDemoMode) return
+
         saveDebounceJob?.cancel()
         saveDebounceJob = CoroutineScope(Dispatchers.Main).launch {
             delay(500.milliseconds)
@@ -136,7 +152,7 @@ class ChatMemoryAgent(
 
     fun loadLastChat(): Pair<String?, List<ChatMessageUI>> {
         val lastChat = storageManager.getLastActiveChat("chat_memory")
-        return if (lastChat != null) {
+        return if (lastChat != null && !isDemoMode) {
             val messages = loadChat(lastChat.id)
             Pair(lastChat.id, messages)
         } else {

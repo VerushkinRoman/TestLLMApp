@@ -4,10 +4,12 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.controller.PresetManager
 import com.llmapp.model.freeModels
+import com.llmapp.ui.DemoManager
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -24,6 +26,11 @@ class ChatViewModel : ViewModel() {
     var summarizeEvery = mutableStateOf(6)
 
     private var chatSession: ChatSession = createChatSession()
+
+    // Demo manager
+    private var demoManager: DemoManager? = null
+
+    val isDemoRunning = mutableStateOf(false)
 
     private fun createChatSession(): ChatSession {
         return ChatSession(
@@ -68,12 +75,52 @@ class ChatViewModel : ViewModel() {
     val contextWarning = mutableStateOf(chatSession.getContextWarning())
     val compressionStats = mutableStateOf(chatSession.getCompressionStats())
 
+    private var chatMemoryService: ChatMemoryAgent? = null
+
+    fun setChatMemoryService(service: ChatMemoryAgent) {
+        chatMemoryService = service
+    }
+
+    fun initDemoManager(onMessageAdded: (ChatMessageUI) -> Unit) {
+        chatMemoryService?.markAsDemoMode()
+
+        demoManager = DemoManager(
+            onMessageAdded = { message ->
+                onMessageAdded(message)
+            },
+            onDemoStarted = {
+                isDemoRunning.value = true
+                isGenerating.value = true
+                isTyping.value = true
+            },
+            onDemoFinished = {
+                isDemoRunning.value = false
+                isGenerating.value = false
+                isTyping.value = false
+                chatMemoryService?.createNewChat()
+            },
+            onTypingStateChanged = { typing ->
+                isTyping.value = typing
+            }
+        )
+    }
+
+    fun startTokenDemo() {
+        demoManager?.startTokenDemo()
+    }
+
+    fun startCompressionDemo() {
+        demoManager?.startCompressionDemo()
+    }
+
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
+        if (isDemoRunning.value) return
         draftMessage.value = message
         cursorPosition.value = cursorPos
     }
 
     fun toggleCompression(enabled: Boolean) {
+        if (isDemoRunning.value) return
         _compressionEnabled = enabled
         compressionEnabled.value = enabled
         recreateChatSession()
@@ -81,6 +128,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun updateCompressionParams(keepLast: Int, sumEvery: Int) {
+        if (isDemoRunning.value) return
         _keepLastMessages = keepLast
         _summarizeEvery = sumEvery
         keepLastMessages.value = keepLast
@@ -90,7 +138,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
-        if (isGenerating.value) return
+        if (isGenerating.value || isDemoRunning.value) return
 
         if (addToHistory) {
             messages.add(
@@ -150,7 +198,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun regenerateMessage(assistantMessageId: String) {
-        if (isGenerating.value) return
+        if (isGenerating.value || isDemoRunning.value) return
 
         val assistantIndex = messages.indexOfFirst { it.id == assistantMessageId }
         if (assistantIndex == -1) return
@@ -181,6 +229,8 @@ class ChatViewModel : ViewModel() {
     }
 
     fun editUserMessage(messageId: String, newContent: String) {
+        if (isDemoRunning.value) return
+
         val messageIndex = messages.indexOfFirst { it.id == messageId }
         if (messageIndex == -1 || messages[messageIndex].role != "user") return
 
@@ -196,29 +246,34 @@ class ChatViewModel : ViewModel() {
     }
 
     fun stopGeneration() {
+        if (isDemoRunning.value) return
         currentGenerationJob?.cancel()
         isTyping.value = false
         isGenerating.value = false
     }
 
     fun clearHistory() {
+        if (isDemoRunning.value) return
         chatSession.clearHistory()
         messages.clear()
         updateTokenStats()
     }
 
     fun clearTokenStats() {
+        if (isDemoRunning.value) return
         chatSession.clearTokenStats()
         updateTokenStats()
     }
 
     fun changeModel(modelId: String) {
+        if (isDemoRunning.value) return
         chatSession.changeModel(modelId)
         currentModel.value = modelId
         updateTokenStats()
     }
 
     fun setControlEnabled(enabled: Boolean) {
+        if (isDemoRunning.value) return
         val newControl = responseControl.value.copy(enabled = enabled)
         chatSession.setResponseControl(newControl)
         responseControl.value = newControl
@@ -226,6 +281,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun setFormatDescription(format: String) {
+        if (isDemoRunning.value) return
         val newControl = responseControl.value.copy(
             formatDescription = format.ifBlank { null },
             enabled = true
@@ -236,6 +292,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun setMaxTokens(tokens: Int?) {
+        if (isDemoRunning.value) return
         val newControl = responseControl.value.copy(
             maxTokens = tokens,
             enabled = true
@@ -246,6 +303,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun setStopSequences(stops: List<String>?) {
+        if (isDemoRunning.value) return
         val newControl = responseControl.value.copy(
             stopSequences = stops,
             enabled = true
@@ -256,6 +314,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun setTemperature(temp: Double?) {
+        if (isDemoRunning.value) return
         val newControl = responseControl.value.copy(
             temperature = temp,
             enabled = true
@@ -266,6 +325,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun loadPreset(presetNumber: Int) {
+        if (isDemoRunning.value) return
         val preset = PresetManager.getPreset(presetNumber)
         if (preset != null) {
             chatSession.setResponseControl(preset)
@@ -275,6 +335,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun resetToDefault() {
+        if (isDemoRunning.value) return
         val defaultControl = PresetManager.getDefaultControl()
         chatSession.setResponseControl(defaultControl)
         responseControl.value = defaultControl
@@ -291,6 +352,11 @@ class ChatViewModel : ViewModel() {
     }
 
     fun refreshTokenStats() {
+        updateTokenStats()
+    }
+
+    fun addDemoMessage(message: ChatMessageUI) {
+        messages.add(message)
         updateTokenStats()
     }
 }

@@ -50,6 +50,7 @@ fun ChatScreen(
     onEditMessage: ((String, String) -> Unit)? = null,
     onStopGeneration: (() -> Unit)? = null,
     isGenerating: Boolean = false,
+    isDemoRunning: Boolean = false,
     tokenStats: TokenStats,
     tokenHistory: List<TokenSnapshot>,
     contextWarning: String,
@@ -104,7 +105,8 @@ fun ChatScreen(
                             onEdit = if (message.role == "user" && onEditMessage != null) {
                                 { newText -> onEditMessage(message.id, newText) }
                             } else null,
-                            isRegenerating = false
+                            isRegenerating = false,
+                            isDemoRunning = isDemoRunning
                         )
                     }
 
@@ -137,13 +139,14 @@ fun ChatScreen(
             cursorPosition = cursorPosition,
             onInputChange = onInputTextChange,
             onSendMessage = {
-                if (inputText.isNotBlank() && !isGenerating) {
+                if (inputText.isNotBlank() && !isGenerating && !isDemoRunning) {
                     onSendMessage(inputText)
                     focusRequester.requestFocus()
                 }
             },
             onStopGeneration = onStopGeneration,
             isGenerating = isGenerating,
+            isDemoRunning = isDemoRunning,
             modifier = Modifier.imePadding(),
             focusRequester = focusRequester
         )
