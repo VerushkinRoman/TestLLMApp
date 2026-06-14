@@ -436,4 +436,14 @@ class ChatViewModel : ViewModel() {
             updateTokenStats()
         }
     }
+
+    fun refreshApiKeys() {
+        chatSession.refreshApiKeys()
+        println("✅ API ключи обновлены в чат-сессии")
+    }
+
+    fun forceRotateToNextKey() {
+        ApiConfig.rotateToNextKey()
+        chatSession.refreshApiKeys()
+    }
 }

@@ -42,10 +42,11 @@ class ChatSession(
 ) {
     private var strategicAgent: StrategicLLMAgent? = null
     private var useStrategicAgent = true
+    private var currentApiKey = apiKey
 
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
-            apiKey = apiKey,
+            apiKey = currentApiKey,
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -57,7 +58,7 @@ class ChatSession(
 
     private val regularAgent: LLMAgent? = if (!compressionEnabled) {
         LLMAgent(
-            apiKey = apiKey,
+            apiKey = currentApiKey,
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -69,11 +70,23 @@ class ChatSession(
 
     init {
         strategicAgent = StrategicLLMAgent(
-            apiKey = apiKey,
+            apiKey = currentApiKey,
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl()
         )
+    }
+
+    fun refreshApiKeys() {
+        val newApiKey = com.llmapp.api.ApiConfig.getApiKey()
+        if (newApiKey == currentApiKey) return
+
+        currentApiKey = newApiKey
+        println("🔄 ChatSession: Обновляем API ключ для всех агентов")
+
+        compressedAgent?.refreshApiKey(newApiKey)
+        regularAgent?.refreshApiKey(newApiKey)
+        strategicAgent?.refreshApiKey(newApiKey)
     }
 
     fun isCompressionEnabled(): Boolean = compressionEnabled
@@ -98,6 +111,8 @@ class ChatSession(
     fun getResponseControl(): ResponseControl = responseControl
 
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
+        refreshApiKeys()
+
         try {
             if (useStrategicAgent && strategicAgent != null) {
                 try {

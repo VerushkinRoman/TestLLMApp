@@ -73,6 +73,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.llmapp.api.ApiConfig
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -129,6 +130,18 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                Text(
+                    text = "🔑${ApiConfig.getCurrentKeyIndex()}",
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+
             Text(
                 text = currentModel.take(20),
                 fontSize = 12.sp,

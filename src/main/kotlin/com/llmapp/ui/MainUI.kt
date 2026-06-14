@@ -333,7 +333,13 @@ fun MainScreen(
                         viewModel.keepLastMessages.value,
                         it
                     )
-                }
+                },
+                onRotateToNextKey = { viewModel.forceRotateToNextKey() },
+                onResetKeyRotation = {
+                    com.llmapp.api.ApiConfig.resetKeyRotation()
+                    viewModel.refreshApiKeys()
+                },
+                onShowKeyStats = { println(com.llmapp.api.KeyUsageMonitor.getStatsReport()) }
             )
         }
     }

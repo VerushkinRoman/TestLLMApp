@@ -47,6 +47,11 @@ class CompressedLLMAgent(
         tokenTracker.updateModel(model)
     }
 
+    fun refreshApiKey(newApiKey: String) {
+        apiClient.updateApiKey(newApiKey)
+        println("🔑 CompressedLLMAgent: API ключ обновлен")
+    }
+
     suspend fun processRequest(userInput: String): LLMResponseWithCompression {
         try {
             val enhancedPrompt = enhancePrompt(userInput)

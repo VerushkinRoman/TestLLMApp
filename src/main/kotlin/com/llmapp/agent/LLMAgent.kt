@@ -31,6 +31,11 @@ class LLMAgent(
         tokenTracker.updateModel(model)
     }
 
+    fun refreshApiKey(newApiKey: String) {
+        apiClient.updateApiKey(newApiKey)
+        println("🔑 LLMAgent: API ключ обновлен")
+    }
+
     suspend fun processRequest(userInput: String): LLMResponse {
         try {
             val enhancedPrompt = enhancePrompt(userInput)
