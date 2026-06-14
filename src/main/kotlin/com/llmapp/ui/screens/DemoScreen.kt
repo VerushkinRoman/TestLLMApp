@@ -12,26 +12,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,42 +41,53 @@ import androidx.compose.ui.unit.sp
 fun DemoScreen(
     onStartTokenDemo: () -> Unit,
     onStartCompressionDemo: () -> Unit,
+    onStartStrategyDemo: () -> Unit,
     isDemoRunning: Boolean,
     onClearHistory: () -> Unit = {}
 ) {
-    val listState = rememberLazyListState()
-    var selectedDemo by remember { mutableStateOf<String?>(null) }
-
     val demos = listOf(
         DemoItem(
             id = "token",
-            title = "📊 Демонстрация отслеживания токенов",
+            title = "📊 Отслеживание токенов",
             icon = Icons.Default.BarChart,
-            description = "Показывает, как отслеживаются токены в диалогах разной длины",
+            description = "Показывает потребление токенов в диалогах разной длины",
             features = listOf(
-                "• Короткий диалог (3 сообщения) - базовое потребление токенов",
-                "• Длинный диалог (20 сообщений) - рост контекста и стоимости",
-                "• Дополнительные запросы (5 сообщений) - накопление контекста",
-                "• Анализ статистики моделью с выводами"
+                "Короткий диалог",
+                "Длинный диалог",
+                "Доп. запросы"
             ),
-            color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+            color = Color(0xFF4CAF50),
             onStart = onStartTokenDemo
         ),
         DemoItem(
             id = "compression",
-            title = "🗜️ Демонстрация сжатия контекста",
+            title = "🗜️ Сжатие контекста",
             icon = Icons.Default.Compress,
-            description = "Сравнивает работу агента с компрессией и без неё",
+            description = "Сравнение работы с компрессией и без",
             features = listOf(
-                "• Тест без компрессии - обычный агент",
-                "• Тест с компрессией (keepLast=8, summarizeEvery=6)",
-                "• Сравнение токенов, времени и стоимости",
-                "• Адаптивная компрессия под разные модели"
+                "Без компрессии",
+                "С компрессией",
+                "Сравнение"
             ),
-            color = androidx.compose.ui.graphics.Color(0xFF2196F3),
+            color = Color(0xFF2196F3),
             onStart = onStartCompressionDemo
+        ),
+        DemoItem(
+            id = "strategies",
+            title = "🎯 Стратегии контекста",
+            icon = Icons.Default.Timeline,
+            description = "Сравнение 3 стратегий управления контекстом",
+            features = listOf(
+                "Sliding Window",
+                "Sticky Facts",
+                "Branching"
+            ),
+            color = Color(0xFF9C27B0),
+            onStart = onStartStrategyDemo
         )
     )
+
+    val gridState = rememberLazyGridState()
 
     Column(
         modifier = Modifier
@@ -96,34 +108,31 @@ fun DemoScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(1f)) {
-                LazyColumn(
-                    state = listState,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(demos) { demo ->
-                        DemoCard(
-                            demo = demo,
-                            isRunning = isDemoRunning && selectedDemo == demo.id,
-                            onStart = {
-                                selectedDemo = demo.id
-                                onClearHistory()
-                                demo.onStart()
-                            }
-                        )
-                    }
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Adaptive(minSize = 320.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(demos) { demo ->
+                    CompactDemoCard(
+                        demo = demo,
+                        isRunning = isDemoRunning,
+                        onStart = {
+                            onClearHistory()
+                            demo.onStart()
+                        }
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.width(4.dp))
-
             VerticalScrollbar(
-                modifier = Modifier.width(12.dp),
-                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.width(12.dp).align(Alignment.CenterEnd),
+                adapter = rememberScrollbarAdapter(gridState),
                 style = ScrollbarStyle(
-                    minimalHeight = 30.dp,
+                    minimalHeight = 60.dp,
                     thickness = 12.dp,
                     shape = MaterialTheme.shapes.small,
                     hoverDurationMillis = 300,
@@ -136,21 +145,25 @@ fun DemoScreen(
 }
 
 @Composable
-fun DemoCard(
+fun CompactDemoCard(
     demo: DemoItem,
     isRunning: Boolean,
     onStart: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -159,19 +172,19 @@ fun DemoCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
                         demo.icon,
                         contentDescription = null,
                         modifier = Modifier
-                            .width(32.dp)
-                            .height(32.dp),
+                            .width(28.dp)
+                            .height(28.dp),
                         tint = demo.color
                     )
                     Text(
                         text = demo.title,
-                        fontSize = 18.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = demo.color
                     )
@@ -179,8 +192,8 @@ fun DemoCard(
 
                 if (isRunning) {
                     Text(
-                        text = "▶️ ЗАПУЩЕНО...",
-                        fontSize = 11.sp,
+                        text = "▶️",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -188,40 +201,63 @@ fun DemoCard(
 
             Text(
                 text = demo.description,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                modifier = Modifier.padding(vertical = 4.dp)
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                demo.features.forEach { feature ->
+                    CompactFeatureChip(
+                        text = feature,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = "Что включает:",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            demo.features.forEach { feature ->
-                Text(
-                    text = feature,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
+            // Кнопка запуска
             TextButton(
                 onClick = onStart,
                 enabled = !isRunning,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    if (isRunning) "Демонстрация выполняется..." else "▶ Запустить демонстрацию",
-                    fontSize = 14.sp
+                    if (isRunning) "Выполняется..." else "▶ Запустить",
+                    fontSize = 12.sp
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun CompactFeatureChip(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                fontSize = 10.sp,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }
@@ -229,9 +265,9 @@ fun DemoCard(
 data class DemoItem(
     val id: String,
     val title: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon: ImageVector,
     val description: String,
     val features: List<String>,
-    val color: androidx.compose.ui.graphics.Color,
+    val color: Color,
     val onStart: () -> Unit
 )

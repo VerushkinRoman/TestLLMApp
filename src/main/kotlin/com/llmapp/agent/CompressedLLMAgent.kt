@@ -109,8 +109,6 @@ class CompressedLLMAgent(
     private suspend fun sendToLLM(): Pair<OpenRouterResponse, Long> {
         val messages = history.getMessagesForRequest(compressionEnabled)
 
-        println("📊 Отправляю запрос с ${messages.size} сообщениями (компрессия: ${if (compressionEnabled) "вкл" else "выкл"})")
-
         val request = OpenRouterRequest(
             model = model,
             messages = messages,

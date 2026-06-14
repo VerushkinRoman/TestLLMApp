@@ -138,8 +138,6 @@ fun ChatTopBar(
     )
 }
 
-// src/main/kotlin/com/llmapp/ui/components/ChatComponents.kt
-
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MessageBubble(
@@ -257,7 +255,6 @@ fun MessageBubble(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Кнопка Copy - ВСЕГДА АКТИВНА (даже во время демо)
                     Button(
                         onClick = {
                             scope.launch {
@@ -298,7 +295,6 @@ fun MessageBubble(
                         }
                     }
 
-                    // Кнопка Edit - отключается во время демо (колбэк = null)
                     if (isUser && onEdit != null) {
                         Button(
                             onClick = { isEditing = true },
@@ -330,7 +326,6 @@ fun MessageBubble(
                         }
                     }
 
-                    // Кнопка Regenerate - отключается во время демо (колбэк = null)
                     if (!isUser && onRegenerate != null) {
                         Button(
                             onClick = onRegenerate,

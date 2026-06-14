@@ -2,6 +2,7 @@ package com.llmapp.chat
 
 import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.LLMAgent
+import com.llmapp.agent.StrategicLLMAgent
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
@@ -39,6 +40,9 @@ class ChatSession(
     private val keepLastMessages: Int = 8,
     private val summarizeEvery: Int = 6
 ) {
+    private var strategicAgent: StrategicLLMAgent? = null
+    private var useStrategicAgent = true
+
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
             apiKey = apiKey,
@@ -63,14 +67,23 @@ class ChatSession(
 
     private var responseControl = ResponseControl()
 
-    fun isCompressionEnabled(): Boolean = compressionEnabled
+    init {
+        strategicAgent = StrategicLLMAgent(
+            apiKey = apiKey,
+            model = currentModel,
+            systemPrompt = systemPrompt,
+            responseControl = ResponseControl()
+        )
+    }
 
+    fun isCompressionEnabled(): Boolean = compressionEnabled
     fun getCompressionStats() = compressedAgent?.getCompressionStats()
 
     fun changeModel(newModel: String) {
         currentModel = newModel
         compressedAgent?.changeModel(newModel)
         regularAgent?.changeModel(newModel)
+        strategicAgent?.changeModel(newModel)
     }
 
     fun getCurrentModel(): String = currentModel
@@ -79,12 +92,39 @@ class ChatSession(
         responseControl = control
         compressedAgent?.updateResponseControl(control)
         regularAgent?.updateResponseControl(control)
+        strategicAgent?.updateResponseControl(control)
     }
 
     fun getResponseControl(): ResponseControl = responseControl
 
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
         try {
+            if (useStrategicAgent && strategicAgent != null) {
+                try {
+                    val response = strategicAgent!!.processRequest(userPrompt)
+                    printMetadata(
+                        finishReason = response.finishReason,
+                        promptTokens = response.promptTokens,
+                        completionTokens = response.completionTokens,
+                        totalTokens = response.totalTokens,
+                        responseTimeMs = response.responseTimeMs
+                    )
+                    println("📊 Стратегия: ${response.strategyUsed}")
+
+                    return ChatResponse(
+                        content = response.content,
+                        promptTokens = response.promptTokens,
+                        completionTokens = response.completionTokens,
+                        totalTokens = response.totalTokens,
+                        finishReason = response.finishReason,
+                        responseTimeMs = response.responseTimeMs
+                    )
+                } catch (_: Exception) {
+                    println("⚠️ Стратегический агент не работает, переключаюсь на обычный")
+                    useStrategicAgent = false
+                }
+            }
+
             val response = when {
                 compressedAgent != null -> {
                     if (isRegeneration) {
@@ -147,14 +187,11 @@ class ChatSession(
         responseTimeMs: Long
     ) {
         val metadata = buildString {
-            if (finishReason != null) {
-                append("🏁 Завершено: $finishReason")
-            }
+            if (finishReason != null) append("🏁 Завершено: $finishReason")
             if (promptTokens != null || completionTokens != null || totalTokens != null) {
                 if (isNotEmpty()) append(" | ")
-                append("📊 Токены: ${totalTokens ?: "?"} (запрос: ${promptTokens ?: "?"} ответ:${completionTokens ?: "?"})")
+                append("📊 Токены: ${totalTokens ?: "?"} (↑${promptTokens ?: "?"}/↓${completionTokens ?: "?"})")
             }
-
             if (responseTimeMs > 0) {
                 if (isNotEmpty()) append(" | ")
                 val timeStr = when {
@@ -162,34 +199,76 @@ class ChatSession(
                     responseTimeMs < 60000 -> "${responseTimeMs / 1000}.${(responseTimeMs % 1000) / 100}с"
                     else -> "${responseTimeMs / 60000}м ${(responseTimeMs % 60000) / 1000}с"
                 }
-                append("⏱️ Время: $timeStr")
+                append("⏱️ $timeStr")
             }
         }
-
-        if (metadata.isNotEmpty()) {
-            println("📈 $metadata")
-        }
+        if (metadata.isNotEmpty()) println("📈 $metadata")
     }
 
     fun clearHistory() {
         compressedAgent?.clearHistory()
         regularAgent?.clearHistory()
+        strategicAgent?.clearHistory()
     }
 
     fun getHistorySize(): Int =
         compressedAgent?.getHistorySize() ?: regularAgent?.getHistorySize() ?: 0
 
-    fun getTokenStats(): TokenStats =
-        compressedAgent?.getTokenStats() ?: regularAgent?.getTokenStats() ?: TokenStats()
+    fun getTokenStats(): TokenStats {
+        if (useStrategicAgent && strategicAgent != null) {
+            try {
+                val stats = strategicAgent!!.getTokenStats()
+                if (stats.totalTokens > 0 || stats.requestCount > 0) {
+                    return stats
+                }
+            } catch (_: Exception) {
+            }
+        }
 
-    fun getTokenHistory(): List<TokenSnapshot> =
-        compressedAgent?.getTokenHistory() ?: regularAgent?.getTokenHistory() ?: emptyList()
+        val stats =
+            compressedAgent?.getTokenStats() ?: regularAgent?.getTokenStats() ?: TokenStats()
 
-    fun getContextWarning(): String =
-        compressedAgent?.getContextWarning() ?: regularAgent?.getContextWarning() ?: ""
+        return stats
+    }
+
+    fun getTokenHistory(): List<TokenSnapshot> {
+        if (useStrategicAgent && strategicAgent != null) {
+            try {
+                return strategicAgent!!.getTokenHistory()
+            } catch (_: Exception) {
+            }
+        }
+        return compressedAgent?.getTokenHistory() ?: regularAgent?.getTokenHistory() ?: emptyList()
+    }
+
+    fun getContextWarning(): String {
+        if (useStrategicAgent && strategicAgent != null) {
+            try {
+                val stats = strategicAgent!!.getTokenStats()
+                val contextWindowSize = 131072
+                val contextPercent = (stats.totalTokens.toDouble() / contextWindowSize) * 100
+                return when {
+                    contextPercent > 90 -> "🔴 КРИТИЧЕСКИ: ${stats.totalTokens}/131072 (${
+                        "%.1f".format(contextPercent)
+                    }%)"
+
+                    contextPercent > 70 -> "⚠️ ВНИМАНИЕ: ${stats.totalTokens}/131072 (${
+                        "%.1f".format(contextPercent)
+                    }%)"
+
+                    else -> "✅ Контекст в порядке: ${stats.totalTokens}/131072 (${
+                        "%.1f".format(contextPercent)
+                    }%)"
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return compressedAgent?.getContextWarning() ?: regularAgent?.getContextWarning() ?: ""
+    }
 
     fun clearTokenStats() {
         compressedAgent?.clearTokenStats()
         regularAgent?.clearTokenStats()
+        strategicAgent?.clearTokenStats()
     }
 }

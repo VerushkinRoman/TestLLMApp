@@ -5,12 +5,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
+import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.controller.PresetManager
+import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
 import com.llmapp.ui.DemoManager
 import com.llmapp.ui.models.ChatMessageUI
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -70,9 +75,15 @@ class ChatViewModel : ViewModel() {
     val isGenerating = mutableStateOf(false)
     private var currentGenerationJob: kotlinx.coroutines.Job? = null
 
-    val tokenStats = mutableStateOf(chatSession.getTokenStats())
-    val tokenHistory = mutableStateOf(chatSession.getTokenHistory())
-    val contextWarning = mutableStateOf(chatSession.getContextWarning())
+    private val _tokenStatsFlow = MutableStateFlow(chatSession.getTokenStats())
+    val tokenStatsFlow: StateFlow<TokenStats> = _tokenStatsFlow.asStateFlow()
+
+    private val _tokenHistoryFlow = MutableStateFlow(chatSession.getTokenHistory())
+    val tokenHistoryFlow: StateFlow<List<TokenSnapshot>> = _tokenHistoryFlow.asStateFlow()
+
+    private val _contextWarningFlow = MutableStateFlow(chatSession.getContextWarning())
+    val contextWarningFlow: StateFlow<String> = _contextWarningFlow.asStateFlow()
+
     val compressionStats = mutableStateOf(chatSession.getCompressionStats())
 
     private var chatMemoryService: ChatMemoryAgent? = null
@@ -92,15 +103,65 @@ class ChatViewModel : ViewModel() {
                 isDemoRunning.value = true
                 isGenerating.value = true
                 isTyping.value = true
+                _tokenStatsFlow.value = TokenStats()
+                _tokenHistoryFlow.value = emptyList()
+                _contextWarningFlow.value = "✅ Демонстрация запущена..."
             },
             onDemoFinished = {
                 isDemoRunning.value = false
                 isGenerating.value = false
                 isTyping.value = false
                 chatMemoryService?.createNewChat()
+                updateTokenStats()
             },
             onTypingStateChanged = { typing ->
                 isTyping.value = typing
+            },
+            onStatsUpdated = { stats ->
+                if (isDemoRunning.value) {
+                    val newStats = TokenStats(
+                        totalPromptTokens = stats.totalPromptTokens,
+                        totalCompletionTokens = stats.totalCompletionTokens,
+                        totalTokens = stats.totalTokens,
+                        estimatedCostUsd = stats.estimatedCostUsd,
+                        requestCount = stats.requestCount
+                    )
+
+                    _tokenStatsFlow.value = newStats
+
+                    val contextWindowSize = 131072
+                    val contextPercent = (newStats.totalTokens.toDouble() / contextWindowSize) * 100
+
+                    val snapshot = TokenSnapshot(
+                        requestNumber = stats.requestCount,
+                        promptTokens = stats.totalPromptTokens,
+                        completionTokens = stats.totalCompletionTokens,
+                        totalTokens = stats.totalTokens,
+                        cumulativeTokens = stats.totalTokens,
+                        cumulativeCost = stats.estimatedCostUsd,
+                        contextUsagePercent = contextPercent,
+                        timestamp = System.currentTimeMillis(),
+                        contextWindowSize = contextWindowSize
+                    )
+
+                    val currentHistory = _tokenHistoryFlow.value.toMutableList()
+                    currentHistory.add(snapshot)
+                    _tokenHistoryFlow.value = currentHistory.toList()
+
+                    _contextWarningFlow.value = when {
+                        contextPercent > 90 -> "🔴 КРИТИЧЕСКИ: ${newStats.totalTokens}/131072 (${
+                            "%.1f".format(contextPercent)
+                        }%)"
+
+                        contextPercent > 70 -> "⚠️ ВНИМАНИЕ: ${newStats.totalTokens}/131072 (${
+                            "%.1f".format(contextPercent)
+                        }%)"
+
+                        else -> "✅ Контекст в порядке: ${newStats.totalTokens}/131072 (${
+                            "%.1f".format(contextPercent)
+                        }%)"
+                    }
+                }
             }
         )
     }
@@ -135,6 +196,10 @@ class ChatViewModel : ViewModel() {
         summarizeEvery.value = sumEvery
         recreateChatSession()
         println("📊 Параметры компрессии обновлены: keepLast=$keepLast, summarizeEvery=$sumEvery")
+    }
+
+    fun startStrategyDemo() {
+        demoManager?.startStrategyDemo()
     }
 
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
@@ -180,7 +245,6 @@ class ChatViewModel : ViewModel() {
                 )
 
                 updateTokenStats()
-
             } catch (e: Exception) {
                 messages.add(
                     ChatMessageUI(
@@ -345,18 +409,31 @@ class ChatViewModel : ViewModel() {
     fun getChatSession(): ChatSession = chatSession
 
     private fun updateTokenStats() {
-        tokenStats.value = chatSession.getTokenStats()
-        tokenHistory.value = chatSession.getTokenHistory()
-        contextWarning.value = chatSession.getContextWarning()
+        if (isDemoRunning.value) {
+            return
+        }
+
+        val newStats = chatSession.getTokenStats()
+        val newHistory = chatSession.getTokenHistory()
+        val newWarning = chatSession.getContextWarning()
+
+        _tokenStatsFlow.value = newStats
+        _tokenHistoryFlow.value = newHistory
+        _contextWarningFlow.value = newWarning
         compressionStats.value = chatSession.getCompressionStats()
     }
 
     fun refreshTokenStats() {
+        if (isDemoRunning.value) {
+            return
+        }
         updateTokenStats()
     }
 
     fun addDemoMessage(message: ChatMessageUI) {
         messages.add(message)
-        updateTokenStats()
+        if (!isDemoRunning.value) {
+            updateTokenStats()
+        }
     }
 }

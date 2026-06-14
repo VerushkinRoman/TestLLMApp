@@ -53,7 +53,6 @@ class TokenTracker {
     fun updateModel(modelId: String) {
         currentModelId = modelId
         contextWindowSize = getContextWindowForModel(modelId)
-        println("📊 Обновлен контекст для модели ${getModelShortName(modelId)}: $contextWindowSize токенов")
     }
 
     fun trackRequest(usage: TokenUsage, requestNumber: Int): TokenStats {
@@ -98,21 +97,15 @@ class TokenTracker {
 
         return when (status) {
             ContextStatus.SAFE -> "✅ Контекст в порядке: ${currentTokens}/${contextWindowSize} токенов (${
-                "%.1f".format(
-                    currentTokens.toDouble() / contextWindowSize * 100
-                )
+                "%.1f".format(currentTokens.toDouble() / contextWindowSize * 100)
             }%)"
 
             ContextStatus.WARNING -> "⚠️ ВНИМАНИЕ: Контекст заполнен на 70%+ (${currentTokens}/${contextWindowSize} = ${
-                "%.1f".format(
-                    currentTokens.toDouble() / contextWindowSize * 100
-                )
+                "%.1f".format(currentTokens.toDouble() / contextWindowSize * 100)
             }%)"
 
             ContextStatus.CRITICAL -> "🔴 КРИТИЧЕСКИ: Контекст почти полон! (${currentTokens}/${contextWindowSize} = ${
-                "%.1f".format(
-                    currentTokens.toDouble() / contextWindowSize * 100
-                )
+                "%.1f".format(currentTokens.toDouble() / contextWindowSize * 100)
             }%)"
 
             ContextStatus.OVERFLOW -> "💥 ПЕРЕПОЛНЕНИЕ! Контекст превышен на ${currentTokens - contextWindowSize} токенов (${currentTokens}/${contextWindowSize})"
@@ -122,17 +115,6 @@ class TokenTracker {
     fun reset() {
         _stats.value = TokenStats()
         _historySnapshots.value = emptyList()
-    }
-
-    private fun getModelShortName(modelId: String): String {
-        return when {
-            modelId.contains("nemotron-3-nano-30b") -> "NVIDIA Nano 30B"
-            modelId.contains("nemotron-3-super-120b") -> "NVIDIA Super 120B"
-            modelId.contains("nemotron-3-ultra-550b") -> "NVIDIA Ultra 550B"
-            modelId.contains("gpt-oss-20b") -> "GPT-OSS 20B"
-            modelId.contains("gemma-4-26b") -> "Gemma 4 26B"
-            else -> modelId.take(30)
-        }
     }
 }
 
@@ -149,7 +131,7 @@ data class TokenSnapshot(
     val cumulativeCost: Double,
     val contextUsagePercent: Double,
     val timestamp: Long,
-    val contextWindowSize: Int  // НОВОЕ ПОЛЕ
+    val contextWindowSize: Int
 ) {
     fun getFormattedCost(): String = "$${"%.6f".format(cumulativeCost)}"
 }

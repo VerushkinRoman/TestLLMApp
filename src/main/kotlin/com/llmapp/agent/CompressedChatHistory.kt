@@ -45,8 +45,6 @@ class CompressedChatHistory(
             return ""
         }
 
-        println("📝 Создаю summary для ${pendingForSummary.size} сообщений...")
-
         val messagesToSummarize = pendingForSummary.toList()
         val summaryPrompt = buildSummaryPrompt(messagesToSummarize)
 
@@ -70,7 +68,6 @@ class CompressedChatHistory(
         lastSummaryIndex = fullHistory.size
         pendingForSummary.clear()
 
-        println("✅ Summary создан: ${summary.take(100)}...")
         return summary
     }
 

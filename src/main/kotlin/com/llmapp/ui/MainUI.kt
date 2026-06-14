@@ -167,9 +167,9 @@ fun MainScreen(
     val responseControl by viewModel.responseControl
     val availableModels by viewModel.availableModels
 
-    val tokenStats by viewModel.tokenStats
-    val tokenHistory by viewModel.tokenHistory
-    val contextWarning by viewModel.contextWarning
+    val tokenStats by viewModel.tokenStatsFlow.collectAsState()
+    val tokenHistory by viewModel.tokenHistoryFlow.collectAsState()
+    val contextWarning by viewModel.contextWarningFlow.collectAsState()
 
     val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
 
@@ -252,6 +252,14 @@ fun MainScreen(
                         viewModel.addDemoMessage(message)
                     }
                     viewModel.startCompressionDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartStrategyDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startStrategyDemo()
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,

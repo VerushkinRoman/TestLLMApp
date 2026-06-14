@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.llmapp.agent.TokenSnapshot
@@ -63,7 +66,6 @@ fun TokenStatsPanel(
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Заголовок с возможностью развернуть
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -85,13 +87,11 @@ fun TokenStatsPanel(
                     )
                 }
 
-                // Индикатор статуса контекста
                 StatusIndicator(contextWarning)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Базовая статистика (всегда видна)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -116,12 +116,10 @@ fun TokenStatsPanel(
             if (expanded) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Детальная статистика
                 DetailStats(stats)
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // История запросов
                 Text(
                     text = "📈 История запросов:",
                     fontSize = 12.sp,
@@ -139,7 +137,6 @@ fun TokenStatsPanel(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Кнопка очистки
                 TextButton(
                     onClick = onClearHistory,
                     modifier = Modifier.fillMaxWidth(),
@@ -168,7 +165,7 @@ fun TokenStatsPanel(
 }
 
 @Composable
-fun StatBadge(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, label: String) {
+fun StatBadge(icon: ImageVector, value: String, label: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.primaryContainer
@@ -292,13 +289,16 @@ fun StatusIndicator(warning: String) {
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.2f)
+        color = color.copy(alpha = 0.2f),
+        modifier = Modifier.widthIn(max = 200.dp)
     ) {
         Text(
-            text = warning.take(30),
+            text = warning,
             fontSize = 10.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            color = color
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

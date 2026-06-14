@@ -1,9 +1,13 @@
 package com.llmapp.ui
 
 import com.llmapp.agent.CompressedLLMAgent
+import com.llmapp.agent.ContextStrategyType
 import com.llmapp.agent.LLMAgent
+import com.llmapp.agent.StrategicLLMAgent
 import com.llmapp.api.ApiConfig
 import com.llmapp.demo.DemoData
+import com.llmapp.demo.StrategyTestScenario
+import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,19 +21,20 @@ import kotlin.time.Duration.Companion.seconds
 sealed class DemoType {
     object TokenComparison : DemoType()
     object CompressionComparison : DemoType()
+    object StrategyComparison : DemoType()
 }
 
 class DemoManager(
     private val onMessageAdded: (ChatMessageUI) -> Unit,
     private val onDemoStarted: () -> Unit,
     private val onDemoFinished: () -> Unit,
-    private val onTypingStateChanged: (Boolean) -> Unit
+    private val onTypingStateChanged: (Boolean) -> Unit,
+    private val onStatsUpdated: ((TokenStats) -> Unit)? = null
 ) {
     private val apiKey = ApiConfig.getApiKey()
     private val scope = CoroutineScope(Dispatchers.Main)
 
     private val _isRunning = MutableStateFlow(false)
-
     private val _currentDemo = MutableStateFlow<DemoType?>(null)
 
     private val primaryModel = "openai/gpt-oss-20b:free"
@@ -46,7 +51,7 @@ class DemoManager(
             } catch (e: Exception) {
                 addMessage(
                     role = "assistant",
-                    content = "❌ Ошибка при выполнении демонстрации: ${e.message}",
+                    content = "❌ Ошибка: ${e.message}",
                     metadata = "Ошибка"
                 )
             } finally {
@@ -69,7 +74,7 @@ class DemoManager(
             } catch (e: Exception) {
                 addMessage(
                     role = "assistant",
-                    content = "❌ Ошибка при выполнении демонстрации: ${e.message}",
+                    content = "❌ Ошибка: ${e.message}",
                     metadata = "Ошибка"
                 )
             } finally {
@@ -78,6 +83,249 @@ class DemoManager(
                 onDemoFinished()
             }
         }
+    }
+
+    fun startStrategyDemo() {
+        if (_isRunning.value) return
+        _isRunning.value = true
+        _currentDemo.value = DemoType.StrategyComparison
+        onDemoStarted()
+
+        scope.launch {
+            try {
+                runStrategyComparison()
+            } catch (e: Exception) {
+                addMessage(
+                    role = "assistant",
+                    content = "❌ Ошибка при выполнении демонстрации стратегий: ${e.message}",
+                    metadata = "Ошибка"
+                )
+            } finally {
+                _isRunning.value = false
+                _currentDemo.value = null
+                onDemoFinished()
+            }
+        }
+    }
+
+    private suspend fun runStrategyComparison() {
+        addMessage(
+            role = "assistant",
+            content = """
+            🧪 ЗАПУСК ДЕМОНСТРАЦИИ СТРАТЕГИЙ УПРАВЛЕНИЯ КОНТЕКСТОМ
+            
+            Будут протестированы 3 стратегии:
+            1. Sliding Window - скользящее окно (только последние N сообщений)
+            2. Sticky Facts - сохранение ключевых фактов
+            3. Branching - ветвление диалога
+            
+            Сценарий: сбор требований к KMP приложению для заметок (12 вопросов)
+        """.trimIndent(),
+            metadata = "ДЕМОНСТРАЦИЯ СТРАТЕГИЙ"
+        )
+        delay(2.seconds)
+
+        val apiKey = ApiConfig.getApiKey()
+        val model = "openai/gpt-oss-20b:free"
+
+        // Тест 1: Sliding Window
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🔵 ТЕСТ 1: Sliding Window Strategy\n" + "━".repeat(
+                60
+            ),
+            metadata = "Тест 1/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.SLIDING_WINDOW,
+            strategyName = "Sliding Window",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        // Тест 2: Sticky Facts
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🟢 ТЕСТ 2: Sticky Facts Strategy\n" + "━".repeat(60),
+            metadata = "Тест 2/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.STICKY_FACTS,
+            strategyName = "Sticky Facts",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        // Тест 3: Branching
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🟣 ТЕСТ 3: Branching Strategy\n" + "━".repeat(60),
+            metadata = "Тест 3/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.BRANCHING,
+            strategyName = "Branching",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            
+            ${"═".repeat(100)}
+            📊 СРАВНИТЕЛЬНЫЙ АНАЛИЗ СТРАТЕГИЙ
+            ${"═".repeat(100)}
+            
+            💡 РЕКОМЕНДАЦИИ:
+            • Для коротких диалогов (до 10 сообщений) - любая стратегия подходит
+            • Для длинных диалогов (20+ сообщений) - используйте Sticky Facts
+            • Для исследовательских задач и A/B тестирования - Branching
+            • Если важна предсказуемость расхода токенов - Sliding Window
+            
+        """.trimIndent(),
+            metadata = "Сравнительный анализ"
+        )
+    }
+
+    private suspend fun runStrategyTest(
+        apiKey: String,
+        model: String,
+        strategy: ContextStrategyType,
+        strategyName: String,
+        scenario: List<String>
+    ) {
+        val agent = StrategicLLMAgent(
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = "Ты опытный технический архитектор. Отвечай кратко, по делу, на русском языке."
+        )
+
+        agent.setStrategy(strategy)
+
+        addMessage(
+            role = "assistant",
+            content = "📌 Стратегия: ${agent.getCurrentStrategyName()}\n📝 Начинаем диалог из ${scenario.size} вопросов...",
+            metadata = "Начало теста"
+        )
+        delay(500.milliseconds)
+
+        var cumulativePromptTokens = 0
+        var cumulativeCompletionTokens = 0
+        var cumulativeTotalTokens = 0
+
+        for ((index, question) in scenario.withIndex()) {
+            addMessage(
+                role = "user",
+                content = question,
+                metadata = "[${index + 1}/${scenario.size}]"
+            )
+            delay(500.milliseconds)
+
+            onTypingStateChanged(true)
+            delay(500.milliseconds)
+
+            try {
+                val response = agent.processRequest(question)
+
+                val promptTokens = response.promptTokens ?: 0
+                val completionTokens = response.completionTokens ?: 0
+                val totalTokens = response.totalTokens ?: 0
+
+                cumulativePromptTokens += promptTokens
+                cumulativeCompletionTokens += completionTokens
+                cumulativeTotalTokens += totalTokens
+
+                val currentStats = TokenStats(
+                    totalPromptTokens = cumulativePromptTokens,
+                    totalCompletionTokens = cumulativeCompletionTokens,
+                    totalTokens = cumulativeTotalTokens,
+                    estimatedCostUsd = (cumulativePromptTokens + cumulativeCompletionTokens) * 0.3e-6,
+                    requestCount = index + 1
+                )
+
+                onStatsUpdated?.invoke(currentStats)
+
+                val metadata = buildString {
+                    append("📊 Токены: ↑$promptTokens ↓$completionTokens Σ$totalTokens")
+                    append(" | Всего за тест: ↑$cumulativePromptTokens ↓$cumulativeCompletionTokens Σ$cumulativeTotalTokens")
+                    append(" | Стратегия: ${response.strategyUsed}")
+                }
+
+                addMessage(
+                    role = "assistant",
+                    content = response.content,
+                    metadata = metadata,
+                    promptTokens = promptTokens,
+                    completionTokens = completionTokens,
+                    totalTokens = totalTokens,
+                    responseTimeMs = response.responseTimeMs
+                )
+
+                if (strategy == ContextStrategyType.STICKY_FACTS && index % 3 == 0 && index > 0) {
+                    val facts = agent.getFacts()
+                    if (facts.isNotEmpty()) {
+                        val factsText =
+                            facts.entries.joinToString("\n") { "• ${it.key}: ${it.value.take(80)}" }
+                        addMessage(
+                            role = "assistant",
+                            content = "📝 Извлеченные факты из диалога:\n$factsText",
+                            metadata = "Автоматическое извлечение фактов"
+                        )
+                    }
+                }
+
+                delay(500.milliseconds)
+
+            } catch (e: Exception) {
+                addMessage(
+                    role = "assistant",
+                    content = "❌ Ошибка: ${e.message}",
+                    metadata = "Ошибка"
+                )
+            } finally {
+                onTypingStateChanged(false)
+            }
+        }
+
+        val finalStats = TokenStats(
+            totalPromptTokens = cumulativePromptTokens,
+            totalCompletionTokens = cumulativeCompletionTokens,
+            totalTokens = cumulativeTotalTokens,
+            estimatedCostUsd = (cumulativePromptTokens + cumulativeCompletionTokens) * 0.3e-6,
+            requestCount = scenario.size
+        )
+        onStatsUpdated?.invoke(finalStats)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            
+            📊 ИТОГ ТЕСТА ($strategyName)
+            ${"─".repeat(40)}
+            • Запросов: ${finalStats.requestCount}
+            • Всего токенов: ${finalStats.totalTokens}
+            • Prompt: ${finalStats.totalPromptTokens} | Completion: ${finalStats.totalCompletionTokens}
+            • Стоимость: ${finalStats.getFormattedCost()}
+            
+        """.trimIndent(),
+            metadata = "Итоговая статистика"
+        )
     }
 
     private suspend fun runTokenComparison() {
