@@ -30,12 +30,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -44,6 +49,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,24 +66,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.llmapp.api.ApiConfig
+import androidx.compose.ui.window.Popup
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.awt.datatransfer.StringSelection
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,8 +98,16 @@ fun ChatTopBar(
     controlEnabled: Boolean,
     currentModel: String,
     currentAgentName: String? = null,
-    currentAgentIcon: String? = null
+    currentAgentIcon: String? = null,
+    memorySettings: MemorySettings = MemorySettings(),
+    onMemorySettingChanged: (MemorySettings) -> Unit = {},
+    onEditProfile: () -> Unit = {},
+    onEditConstraints: () -> Unit = {}
 ) {
+    var showMemoryMenu by remember { mutableStateOf(false) }
+    val buttonPosition = remember { mutableStateOf(Offset.Zero) }
+    val buttonSize = remember { mutableStateOf(IntSize.Zero) }
+
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,13 +150,52 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .onGloballyPositioned { coordinates ->
+                        buttonPosition.value = coordinates.positionInWindow()
+                        buttonSize.value = coordinates.size
+                    }
+            ) {
+                IconButton(
+                    onClick = { showMemoryMenu = !showMemoryMenu },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        Icons.Default.Memory,
+                        contentDescription = "Memory Settings",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            MemoryStatusChip(
+                label = "STM",
+                active = memorySettings.useShortTerm,
+                color = Color(0xFF4CAF50)
+            )
+
+            MemoryStatusChip(
+                label = "WM",
+                active = memorySettings.useWorkingMemory,
+                color = Color(0xFFFF9800)
+            )
+
+            MemoryStatusChip(
+                label = "LTM",
+                active = memorySettings.useLongTerm,
+                color = Color(0xFF9C27B0)
+            )
+
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier.padding(end = 8.dp)
             ) {
                 Text(
-                    text = "🔑${ApiConfig.getCurrentKeyIndex()}",
+                    text = "🔑${com.llmapp.api.ApiConfig.getCurrentKeyIndex()}",
                     fontSize = 10.sp,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
@@ -149,7 +208,169 @@ fun ChatTopBar(
             )
         }
     )
+
+    if (showMemoryMenu) {
+        Popup(
+            alignment = Alignment.TopStart,
+            offset = IntOffset(
+                x = (buttonPosition.value.x + buttonSize.value.width).roundToInt() - 280, // 280 - ширина меню
+                y = (buttonPosition.value.y + buttonSize.value.height).roundToInt()
+            ),
+            onDismissRequest = { showMemoryMenu = false }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.widthIn(max = 280.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("🧠 Настройки памяти", fontWeight = FontWeight.Bold) },
+                        onClick = { showMemoryMenu = false },
+                        enabled = false
+                    )
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("💬 Краткосрочная память")
+                                Switch(
+                                    checked = memorySettings.useShortTerm,
+                                    onCheckedChange = {
+                                        onMemorySettingChanged(memorySettings.copy(useShortTerm = it))
+                                    }
+                                )
+                            }
+                        },
+                        onClick = { }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("💼 Рабочая память")
+                                Switch(
+                                    checked = memorySettings.useWorkingMemory,
+                                    onCheckedChange = {
+                                        onMemorySettingChanged(memorySettings.copy(useWorkingMemory = it))
+                                    }
+                                )
+                            }
+                        },
+                        onClick = { }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("📚 Долговременная память")
+                                Switch(
+                                    checked = memorySettings.useLongTerm,
+                                    onCheckedChange = {
+                                        onMemorySettingChanged(memorySettings.copy(useLongTerm = it))
+                                    }
+                                )
+                            }
+                        },
+                        onClick = { }
+                    )
+
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("✏️ Редактировать профиль")
+                                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                            }
+                        },
+                        onClick = {
+                            onEditProfile()
+                            showMemoryMenu = false
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("🔧 Редактировать ограничения")
+                                Icon(Icons.Default.Settings, null, modifier = Modifier.size(16.dp))
+                            }
+                        },
+                        onClick = {
+                            onEditConstraints()
+                            showMemoryMenu = false
+                        }
+                    )
+
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("🗑️ Сбросить рабочую память")
+                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                            }
+                        },
+                        onClick = {
+                            onMemorySettingChanged(memorySettings.copy(resetWorkingMemory = true))
+                            showMemoryMenu = false
+                        }
+                    )
+                }
+            }
+        }
+    }
 }
+
+@Composable
+fun MemoryStatusChip(
+    label: String,
+    active: Boolean,
+    color: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (active) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.padding(horizontal = 2.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (active) color else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+data class MemorySettings(
+    val useShortTerm: Boolean = true,
+    val useWorkingMemory: Boolean = true,
+    val useLongTerm: Boolean = true,
+    val resetWorkingMemory: Boolean = false
+)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

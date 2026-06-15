@@ -5,13 +5,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
+import com.llmapp.agent.MemoryAwareAgent
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.controller.PresetManager
+import com.llmapp.memory.ProjectConstraints
+import com.llmapp.memory.UserProfile
 import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
 import com.llmapp.ui.DemoManager
+import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,28 +30,84 @@ class ChatViewModel : ViewModel() {
     private var _keepLastMessages = 8
     private var _summarizeEvery = 6
 
+    // Сначала инициализируем все Compose State поля
+    val messages = mutableStateListOf<ChatMessageUI>()
+    val isTyping = mutableStateOf(false)
+    val currentModel = mutableStateOf("")
+    val responseControl = mutableStateOf(com.llmapp.model.ResponseControl())
+    val controlEnabled = mutableStateOf(false)
+    val availableModels = mutableStateOf(freeModels)
+
     var compressionEnabled = mutableStateOf(true)
     var keepLastMessages = mutableStateOf(8)
     var summarizeEvery = mutableStateOf(6)
 
-    private var chatSession: ChatSession = createChatSession()
+    val draftMessage = mutableStateOf("")
+    val cursorPosition = mutableStateOf(0)
 
-    // Demo manager
-    private var demoManager: DemoManager? = null
-
+    val isGenerating = mutableStateOf(false)
     val isDemoRunning = mutableStateOf(false)
 
-    private fun createChatSession(): ChatSession {
-        return ChatSession(
+    private var currentGenerationJob: kotlinx.coroutines.Job? = null
+
+    // StateFlow поля
+    private val _tokenStatsFlow = MutableStateFlow(TokenStats())
+    val tokenStatsFlow: StateFlow<TokenStats> = _tokenStatsFlow.asStateFlow()
+
+    private val _tokenHistoryFlow = MutableStateFlow(emptyList<TokenSnapshot>())
+    val tokenHistoryFlow: StateFlow<List<TokenSnapshot>> = _tokenHistoryFlow.asStateFlow()
+
+    private val _contextWarningFlow = MutableStateFlow("")
+    val contextWarningFlow: StateFlow<String> = _contextWarningFlow.asStateFlow()
+
+    val compressionStats =
+        mutableStateOf(null as com.llmapp.agent.CompressedChatHistory.CompressionStats?)
+
+    // StateFlow для памяти
+    private val _userProfile = MutableStateFlow(UserProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    private val _projectConstraints = MutableStateFlow(ProjectConstraints())
+    val projectConstraints: StateFlow<ProjectConstraints> = _projectConstraints.asStateFlow()
+
+    // Поздняя инициализация для остальных полей
+    private lateinit var chatSession: ChatSession
+    private var memoryAwareAgent: MemoryAwareAgent? = null
+    private var chatMemoryService: ChatMemoryAgent? = null
+    private var demoManager: DemoManager? = null
+
+    init {
+        // Инициализируем сессию после того, как все поля созданы
+        initChatSession()
+    }
+
+    private fun initChatSession() {
+        chatSession = ChatSession(
             apiKey = apiKey,
             compressionEnabled = _compressionEnabled,
             keepLastMessages = _keepLastMessages,
             summarizeEvery = _summarizeEvery
         )
+
+        // Теперь можно безопасно устанавливать значения
+        currentModel.value = chatSession.getCurrentModel()
+        responseControl.value = chatSession.getResponseControl()
+        controlEnabled.value = responseControl.value.enabled
+
+        initMemoryAgent(
+            apiKey,
+            chatSession.getCurrentModel(),
+            "Ты полезный ассистент. Отвечай на русском языке."
+        )
     }
 
     private fun recreateChatSession() {
-        val newSession = createChatSession()
+        val newSession = ChatSession(
+            apiKey = apiKey,
+            compressionEnabled = _compressionEnabled,
+            keepLastMessages = _keepLastMessages,
+            summarizeEvery = _summarizeEvery
+        )
 
         val currentMessages = messages.toList()
 
@@ -62,31 +122,31 @@ class ChatViewModel : ViewModel() {
         updateTokenStats()
     }
 
-    val messages = mutableStateListOf<ChatMessageUI>()
-    val isTyping = mutableStateOf(false)
-    val currentModel = mutableStateOf(chatSession.getCurrentModel())
-    val responseControl = mutableStateOf(chatSession.getResponseControl())
-    val controlEnabled = mutableStateOf(responseControl.value.enabled)
-    val availableModels = mutableStateOf(freeModels)
+    fun updateMemorySettings(settings: MemorySettings) {
+        memoryAwareAgent?.let { agent ->
+            agent.useShortTerm = settings.useShortTerm
+            agent.useWorkingMemory = settings.useWorkingMemory
+            agent.useLongTerm = settings.useLongTerm
+            println("📊 Настройки памяти обновлены: STM=${settings.useShortTerm}, WM=${settings.useWorkingMemory}, LTM=${settings.useLongTerm}")
+        }
+    }
 
-    val draftMessage = mutableStateOf("")
-    val cursorPosition = mutableStateOf(0)
+    fun updateUserProfile(profile: UserProfile) {
+        _userProfile.value = profile
+        memoryAwareAgent?.updateProfile(profile)
+        println("👤 Профиль обновлен: ${profile.name}")
+    }
 
-    val isGenerating = mutableStateOf(false)
-    private var currentGenerationJob: kotlinx.coroutines.Job? = null
+    fun updateProjectConstraints(constraints: ProjectConstraints) {
+        _projectConstraints.value = constraints
+        memoryAwareAgent?.updateConstraints(constraints)
+        println("🔧 Ограничения обновлены")
+    }
 
-    private val _tokenStatsFlow = MutableStateFlow(chatSession.getTokenStats())
-    val tokenStatsFlow: StateFlow<TokenStats> = _tokenStatsFlow.asStateFlow()
-
-    private val _tokenHistoryFlow = MutableStateFlow(chatSession.getTokenHistory())
-    val tokenHistoryFlow: StateFlow<List<TokenSnapshot>> = _tokenHistoryFlow.asStateFlow()
-
-    private val _contextWarningFlow = MutableStateFlow(chatSession.getContextWarning())
-    val contextWarningFlow: StateFlow<String> = _contextWarningFlow.asStateFlow()
-
-    val compressionStats = mutableStateOf(chatSession.getCompressionStats())
-
-    private var chatMemoryService: ChatMemoryAgent? = null
+    fun resetWorkingMemory() {
+        memoryAwareAgent?.clearWorkingMemory()
+        println("💼 Рабочая память сброшена")
+    }
 
     fun setChatMemoryService(service: ChatMemoryAgent) {
         chatMemoryService = service
@@ -174,6 +234,14 @@ class ChatViewModel : ViewModel() {
         demoManager?.startCompressionDemo()
     }
 
+    fun startStrategyDemo() {
+        demoManager?.startStrategyDemo()
+    }
+
+    fun startMemoryDemo() {
+        demoManager?.startMemoryDemo()
+    }
+
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
         if (isDemoRunning.value) return
         draftMessage.value = message
@@ -196,10 +264,6 @@ class ChatViewModel : ViewModel() {
         summarizeEvery.value = sumEvery
         recreateChatSession()
         println("📊 Параметры компрессии обновлены: keepLast=$keepLast, summarizeEvery=$sumEvery")
-    }
-
-    fun startStrategyDemo() {
-        demoManager?.startStrategyDemo()
     }
 
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
@@ -333,6 +397,7 @@ class ChatViewModel : ViewModel() {
         if (isDemoRunning.value) return
         chatSession.changeModel(modelId)
         currentModel.value = modelId
+        memoryAwareAgent?.changeModel(modelId)
         updateTokenStats()
     }
 
@@ -445,5 +510,20 @@ class ChatViewModel : ViewModel() {
     fun forceRotateToNextKey() {
         ApiConfig.rotateToNextKey()
         chatSession.refreshApiKeys()
+    }
+
+    private fun initMemoryAgent(apiKey: String, model: String, systemPrompt: String) {
+        memoryAwareAgent = MemoryAwareAgent(
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = systemPrompt
+        )
+
+        _userProfile.value = memoryAwareAgent!!.getUserProfile()
+        _projectConstraints.value = memoryAwareAgent!!.getProjectConstraints()
+
+        println("✅ MemoryAwareAgent инициализирован")
+        println("   Профиль: ${_userProfile.value.name.ifEmpty { "не настроен" }}")
+        println("   Ограничения: ${if (_projectConstraints.value.techStack.isNotEmpty()) "настроены" else "не настроены"}")
     }
 }

@@ -20,20 +20,23 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,6 +45,7 @@ fun DemoScreen(
     onStartTokenDemo: () -> Unit,
     onStartCompressionDemo: () -> Unit,
     onStartStrategyDemo: () -> Unit,
+    onStartMemoryDemo: () -> Unit,
     isDemoRunning: Boolean,
     onClearHistory: () -> Unit = {}
 ) {
@@ -51,11 +55,7 @@ fun DemoScreen(
             title = "📊 Отслеживание токенов",
             icon = Icons.Default.BarChart,
             description = "Показывает потребление токенов в диалогах разной длины",
-            features = listOf(
-                "Короткий диалог",
-                "Длинный диалог",
-                "Доп. запросы"
-            ),
+            features = listOf("Короткий диалог", "Длинный диалог", "Доп. запросы"),
             color = Color(0xFF4CAF50),
             onStart = onStartTokenDemo
         ),
@@ -64,11 +64,7 @@ fun DemoScreen(
             title = "🗜️ Сжатие контекста",
             icon = Icons.Default.Compress,
             description = "Сравнение работы с компрессией и без",
-            features = listOf(
-                "Без компрессии",
-                "С компрессией",
-                "Сравнение"
-            ),
+            features = listOf("Без компрессии", "С компрессией", "Сравнение"),
             color = Color(0xFF2196F3),
             onStart = onStartCompressionDemo
         ),
@@ -77,13 +73,18 @@ fun DemoScreen(
             title = "🎯 Стратегии контекста",
             icon = Icons.Default.Timeline,
             description = "Сравнение 3 стратегий управления контекстом",
-            features = listOf(
-                "Sliding Window",
-                "Sticky Facts",
-                "Branching"
-            ),
+            features = listOf("Sliding Window", "Sticky Facts", "Branching"),
             color = Color(0xFF9C27B0),
             onStart = onStartStrategyDemo
+        ),
+        DemoItem(
+            id = "memory",
+            title = "🧠 Модель памяти",
+            icon = Icons.Default.Memory,
+            description = "Трехслойная модель памяти: краткосрочная, рабочая, долговременная",
+            features = listOf("Профиль", "Рабочая задача", "Ограничения"),
+            color = Color(0xFFFF9800),
+            onStart = onStartMemoryDemo
         )
     )
 
@@ -93,25 +94,30 @@ fun DemoScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "🧪 Демонстрации",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
 
         Text(
             text = "Выберите демонстрацию для запуска. Во время демонстрации чат будет заблокирован.",
             fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 state = gridState,
-                columns = GridCells.Adaptive(minSize = 320.dp),
+                columns = GridCells.Adaptive(minSize = 350.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
@@ -153,7 +159,7 @@ fun CompactDemoCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp),
+            .height(220.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -163,73 +169,66 @@ fun CompactDemoCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        demo.icon,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .width(28.dp)
-                            .height(28.dp),
-                        tint = demo.color
-                    )
-                    Text(
-                        text = demo.title,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = demo.color
-                    )
-                }
-
-                if (isRunning) {
-                    Text(
-                        text = "▶️",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Icon(
+                    demo.icon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(36.dp),
+                    tint = demo.color
+                )
+                Text(
+                    text = demo.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = demo.color,
+                    textAlign = TextAlign.Center
+                )
             }
 
             Text(
                 text = demo.description,
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 maxLines = 2,
-                modifier = Modifier.padding(vertical = 4.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 demo.features.forEach { feature ->
-                    CompactFeatureChip(
-                        text = feature,
-                        modifier = Modifier.weight(1f)
-                    )
+                    CompactFeatureChip(text = feature.take(12))
                 }
             }
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Кнопка запуска
-            TextButton(
+            Button(
                 onClick = onStart,
                 enabled = !isRunning,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = demo.color,
+                    contentColor = Color.White
+                )
             ) {
                 Text(
-                    if (isRunning) "Выполняется..." else "▶ Запустить",
-                    fontSize = 12.sp
+                    text = if (isRunning) "▶ Выполняется..." else "▶ Запустить",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
@@ -238,25 +237,22 @@ fun CompactDemoCard(
 
 @Composable
 fun CompactFeatureChip(
-    text: String,
-    modifier: Modifier = Modifier
+    text: String
 ) {
     Surface(
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
-        modifier = modifier
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 fontSize = 10.sp,
                 maxLines = 1,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                textAlign = TextAlign.Center
             )
         }
     }

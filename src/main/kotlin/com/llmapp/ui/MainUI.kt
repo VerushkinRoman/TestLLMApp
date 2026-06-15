@@ -25,7 +25,10 @@ import androidx.compose.ui.window.application
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.controller.ChatStorageManager
 import com.llmapp.ui.components.AppNavigationRail
+import com.llmapp.ui.components.ConstraintsEditDialog
+import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.ModelsPanel
+import com.llmapp.ui.components.ProfileEditDialog
 import com.llmapp.ui.components.SavedChatsPanel
 import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.models.Screen
@@ -160,6 +163,13 @@ fun MainScreen(
     var currentScreen by remember { mutableStateOf(Screen.Chat) }
     var selectedChatId by remember { mutableStateOf<String?>(null) }
 
+    var memorySettings by remember { mutableStateOf(MemorySettings()) }
+    var showProfileDialog by remember { mutableStateOf(false) }
+    var showConstraintsDialog by remember { mutableStateOf(false) }
+
+    val userProfile by viewModel.userProfile.collectAsState()
+    val projectConstraints by viewModel.projectConstraints.collectAsState()
+
     val messages = viewModel.messages
     val isTyping by viewModel.isTyping
     val currentModel by viewModel.currentModel
@@ -181,6 +191,28 @@ fun MainScreen(
         if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping) {
             chatMemoryService.saveCurrentChatDebounced(messages.toList(), currentModel)
         }
+    }
+
+    if (showProfileDialog) {
+        ProfileEditDialog(
+            profile = userProfile,
+            onDismiss = { showProfileDialog = false },
+            onSave = { profile ->
+                viewModel.updateUserProfile(profile)
+                showProfileDialog = false
+            }
+        )
+    }
+
+    if (showConstraintsDialog) {
+        ConstraintsEditDialog(
+            constraints = projectConstraints,
+            onDismiss = { showConstraintsDialog = false },
+            onSave = { constraints ->
+                viewModel.updateProjectConstraints(constraints)
+                showConstraintsDialog = false
+            }
+        )
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -234,7 +266,27 @@ fun MainScreen(
                 tokenStats = tokenStats,
                 tokenHistory = tokenHistory,
                 contextWarning = contextWarning,
-                onClearTokenStats = { viewModel.clearTokenStats() }
+                onClearTokenStats = { viewModel.clearTokenStats() },
+                memorySettings = memorySettings,
+                onMemorySettingChanged = { settings ->
+                    memorySettings = settings
+                    viewModel.updateMemorySettings(settings)
+                    if (settings.resetWorkingMemory) {
+                        viewModel.resetWorkingMemory()
+                        memorySettings = settings.copy(resetWorkingMemory = false)
+                    }
+                },
+                userProfile = userProfile,
+                projectConstraints = projectConstraints,
+                onUpdateProfile = { profile ->
+                    viewModel.updateUserProfile(profile)
+                },
+                onUpdateConstraints = { constraints ->
+                    viewModel.updateProjectConstraints(constraints)
+                },
+                onResetWorkingMemory = {
+                    viewModel.resetWorkingMemory()
+                }
             )
 
             Screen.Demo -> DemoScreen(
@@ -260,6 +312,14 @@ fun MainScreen(
                         viewModel.addDemoMessage(message)
                     }
                     viewModel.startStrategyDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartMemoryDemo = {  // НОВЫЙ обработчик
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startMemoryDemo()
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,
