@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +47,7 @@ fun DemoScreen(
     onStartCompressionDemo: () -> Unit,
     onStartStrategyDemo: () -> Unit,
     onStartMemoryDemo: () -> Unit,
+    onStartPersonalizationDemo: () -> Unit,
     isDemoRunning: Boolean,
     onClearHistory: () -> Unit = {}
 ) {
@@ -85,6 +87,15 @@ fun DemoScreen(
             features = listOf("Профиль", "Рабочая задача", "Ограничения"),
             color = Color(0xFFFF9800),
             onStart = onStartMemoryDemo
+        ),
+        DemoItem(
+            id = "personalization",
+            title = "👤 Персонализация",
+            icon = Icons.Default.Person,
+            description = "Демонстрация персонализации агента под профиль пользователя",
+            features = listOf("Профили", "Стили", "Ограничения"),
+            color = Color(0xFFE91E63),
+            onStart = onStartPersonalizationDemo
         )
     )
 

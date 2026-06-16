@@ -5,7 +5,9 @@ import com.llmapp.agent.ContextStrategyType
 import com.llmapp.agent.LLMAgent
 import com.llmapp.agent.MemoryAwareAgent
 import com.llmapp.agent.StrategicLLMAgent
+import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
+import com.llmapp.chat.ChatSession
 import com.llmapp.demo.DemoData
 import com.llmapp.demo.StrategyTestScenario
 import com.llmapp.memory.ProjectConstraints
@@ -28,16 +30,19 @@ sealed class DemoType {
     object CompressionComparison : DemoType()
     object StrategyComparison : DemoType()
     object MemoryComparison : DemoType()
+    object Personalization : DemoType()
 }
 
 class DemoManager(
+    private val chatSession: ChatSession,
     private val onMessageAdded: (ChatMessageUI) -> Unit,
     private val onDemoStarted: () -> Unit,
     private val onDemoFinished: () -> Unit,
     private val onTypingStateChanged: (Boolean) -> Unit,
-    private val onStatsUpdated: ((TokenStats) -> Unit)? = null
+    private val onStatsUpdated: ((TokenStats) -> Unit)? = null,
+    private val onTokenHistoryUpdated: ((List<TokenSnapshot>) -> Unit)? = null,
+    private val onContextWarningUpdated: ((String) -> Unit)? = null
 ) {
-    private val apiKey = ApiConfig.getApiKey()
     private val scope = CoroutineScope(Dispatchers.Main)
 
     private val _isRunning = MutableStateFlow(false)
@@ -53,6 +58,7 @@ class DemoManager(
 
         scope.launch {
             try {
+                chatSession.clearHistory()
                 runTokenComparison()
             } catch (e: Exception) {
                 addMessage(
@@ -76,6 +82,7 @@ class DemoManager(
 
         scope.launch {
             try {
+                chatSession.clearHistory()
                 runCompressionComparison()
             } catch (e: Exception) {
                 addMessage(
@@ -99,6 +106,7 @@ class DemoManager(
 
         scope.launch {
             try {
+                chatSession.clearHistory()
                 runStrategyComparison()
             } catch (e: Exception) {
                 addMessage(
@@ -122,6 +130,7 @@ class DemoManager(
 
         scope.launch {
             try {
+                chatSession.clearHistory()
                 runMemoryDemonstration()
             } catch (e: Exception) {
                 addMessage(
@@ -137,190 +146,16 @@ class DemoManager(
         }
     }
 
-    private suspend fun runStrategyComparison() {
-        addMessage(
-            role = "assistant",
-            content = """
-            🧪 ЗАПУСК ДЕМОНСТРАЦИИ СТРАТЕГИЙ УПРАВЛЕНИЯ КОНТЕКСТОМ
-            
-            Будут протестированы 3 стратегии:
-            1. Sliding Window - скользящее окно (только последние N сообщений)
-            2. Sticky Facts - сохранение ключевых фактов
-            3. Branching - ветвление диалога
-            
-            Сценарий: сбор требований к KMP приложению для заметок (12 вопросов)
-        """.trimIndent(),
-            metadata = "ДЕМОНСТРАЦИЯ СТРАТЕГИЙ"
-        )
-        delay(2.seconds)
+    fun startPersonalizationDemo() {
+        if (_isRunning.value) return
+        _isRunning.value = true
+        _currentDemo.value = DemoType.Personalization
+        onDemoStarted()
 
-        val apiKey = ApiConfig.getApiKey()
-        val model = "openai/gpt-oss-20b:free"
-
-        // Тест 1: Sliding Window
-        addMessage(
-            role = "assistant",
-            content = "\n" + "━".repeat(60) + "\n🔵 ТЕСТ 1: Sliding Window Strategy\n" + "━".repeat(
-                60
-            ),
-            metadata = "Тест 1/3"
-        )
-        delay(1.seconds)
-
-        runStrategyTest(
-            apiKey = apiKey,
-            model = model,
-            strategy = ContextStrategyType.SLIDING_WINDOW,
-            strategyName = "Sliding Window",
-            scenario = StrategyTestScenario.TZQuestions
-        )
-
-        delay(2.seconds)
-
-        // Тест 2: Sticky Facts
-        addMessage(
-            role = "assistant",
-            content = "\n" + "━".repeat(60) + "\n🟢 ТЕСТ 2: Sticky Facts Strategy\n" + "━".repeat(60),
-            metadata = "Тест 2/3"
-        )
-        delay(1.seconds)
-
-        runStrategyTest(
-            apiKey = apiKey,
-            model = model,
-            strategy = ContextStrategyType.STICKY_FACTS,
-            strategyName = "Sticky Facts",
-            scenario = StrategyTestScenario.TZQuestions
-        )
-
-        delay(2.seconds)
-
-        // Тест 3: Branching
-        addMessage(
-            role = "assistant",
-            content = "\n" + "━".repeat(60) + "\n🟣 ТЕСТ 3: Branching Strategy\n" + "━".repeat(60),
-            metadata = "Тест 3/3"
-        )
-        delay(1.seconds)
-
-        runStrategyTest(
-            apiKey = apiKey,
-            model = model,
-            strategy = ContextStrategyType.BRANCHING,
-            strategyName = "Branching",
-            scenario = StrategyTestScenario.TZQuestions
-        )
-
-        delay(2.seconds)
-
-        addMessage(
-            role = "assistant",
-            content = """
-            
-            ${"═".repeat(100)}
-            📊 СРАВНИТЕЛЬНЫЙ АНАЛИЗ СТРАТЕГИЙ
-            ${"═".repeat(100)}
-            
-            💡 РЕКОМЕНДАЦИИ:
-            • Для коротких диалогов (до 10 сообщений) - любая стратегия подходит
-            • Для длинных диалогов (20+ сообщений) - используйте Sticky Facts
-            • Для исследовательских задач и A/B тестирования - Branching
-            • Если важна предсказуемость расхода токенов - Sliding Window
-            
-        """.trimIndent(),
-            metadata = "Сравнительный анализ"
-        )
-    }
-
-    private suspend fun runStrategyTest(
-        apiKey: String,
-        model: String,
-        strategy: ContextStrategyType,
-        strategyName: String,
-        scenario: List<String>
-    ) {
-        val agent = StrategicLLMAgent(
-            apiKey = apiKey,
-            model = model,
-            systemPrompt = "Ты опытный технический архитектор. Отвечай кратко, по делу, на русском языке."
-        )
-
-        agent.setStrategy(strategy)
-
-        addMessage(
-            role = "assistant",
-            content = "📌 Стратегия: ${agent.getCurrentStrategyName()}\n📝 Начинаем диалог из ${scenario.size} вопросов...",
-            metadata = "Начало теста"
-        )
-        delay(500.milliseconds)
-
-        var cumulativePromptTokens = 0
-        var cumulativeCompletionTokens = 0
-        var cumulativeTotalTokens = 0
-
-        for ((index, question) in scenario.withIndex()) {
-            addMessage(
-                role = "user",
-                content = question,
-                metadata = "[${index + 1}/${scenario.size}]"
-            )
-            delay(500.milliseconds)
-
-            onTypingStateChanged(true)
-            delay(500.milliseconds)
-
+        scope.launch {
             try {
-                val response = agent.processRequest(question)
-
-                val promptTokens = response.promptTokens ?: 0
-                val completionTokens = response.completionTokens ?: 0
-                val totalTokens = response.totalTokens ?: 0
-
-                cumulativePromptTokens += promptTokens
-                cumulativeCompletionTokens += completionTokens
-                cumulativeTotalTokens += totalTokens
-
-                val currentStats = TokenStats(
-                    totalPromptTokens = cumulativePromptTokens,
-                    totalCompletionTokens = cumulativeCompletionTokens,
-                    totalTokens = cumulativeTotalTokens,
-                    estimatedCostUsd = (cumulativePromptTokens + cumulativeCompletionTokens) * 0.3e-6,
-                    requestCount = index + 1
-                )
-
-                onStatsUpdated?.invoke(currentStats)
-
-                val metadata = buildString {
-                    append("📊 Токены: ↑$promptTokens ↓$completionTokens Σ$totalTokens")
-                    append(" | Всего за тест: ↑$cumulativePromptTokens ↓$cumulativeCompletionTokens Σ$cumulativeTotalTokens")
-                    append(" | Стратегия: ${response.strategyUsed}")
-                }
-
-                addMessage(
-                    role = "assistant",
-                    content = response.content,
-                    metadata = metadata,
-                    promptTokens = promptTokens,
-                    completionTokens = completionTokens,
-                    totalTokens = totalTokens,
-                    responseTimeMs = response.responseTimeMs
-                )
-
-                if (strategy == ContextStrategyType.STICKY_FACTS && index % 3 == 0 && index > 0) {
-                    val facts = agent.getFacts()
-                    if (facts.isNotEmpty()) {
-                        val factsText =
-                            facts.entries.joinToString("\n") { "• ${it.key}: ${it.value.take(80)}" }
-                        addMessage(
-                            role = "assistant",
-                            content = "📝 Извлеченные факты из диалога:\n$factsText",
-                            metadata = "Автоматическое извлечение фактов"
-                        )
-                    }
-                }
-
-                delay(500.milliseconds)
-
+                chatSession.clearHistory()
+                runPersonalizationDemo()
             } catch (e: Exception) {
                 addMessage(
                     role = "assistant",
@@ -328,35 +163,16 @@ class DemoManager(
                     metadata = "Ошибка"
                 )
             } finally {
-                onTypingStateChanged(false)
+                _isRunning.value = false
+                _currentDemo.value = null
+                onDemoFinished()
             }
         }
-
-        val finalStats = TokenStats(
-            totalPromptTokens = cumulativePromptTokens,
-            totalCompletionTokens = cumulativeCompletionTokens,
-            totalTokens = cumulativeTotalTokens,
-            estimatedCostUsd = (cumulativePromptTokens + cumulativeCompletionTokens) * 0.3e-6,
-            requestCount = scenario.size
-        )
-        onStatsUpdated?.invoke(finalStats)
-
-        addMessage(
-            role = "assistant",
-            content = """
-            
-            📊 ИТОГ ТЕСТА ($strategyName)
-            ${"─".repeat(40)}
-            • Запросов: ${finalStats.requestCount}
-            • Всего токенов: ${finalStats.totalTokens}
-            • Prompt: ${finalStats.totalPromptTokens} | Completion: ${finalStats.totalCompletionTokens}
-            • Стоимость: ${finalStats.getFormattedCost()}
-            
-        """.trimIndent(),
-            metadata = "Итоговая статистика"
-        )
     }
 
+    // ============================================================
+    // 1. ДЕМОНСТРАЦИЯ ТОКЕНОВ
+    // ============================================================
     private suspend fun runTokenComparison() {
         addMessage(
             role = "assistant",
@@ -365,16 +181,7 @@ class DemoManager(
         )
         delay(1.seconds)
 
-        val agent = LLMAgent(
-            apiKey = apiKey,
-            model = primaryModel,
-            systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу. Отвечай максимально лаконично.",
-            maxHistorySize = 100
-        )
-
-        var cumulativePromptTokens = 0
-        var cumulativeCompletionTokens = 0
-        var cumulativeTotalTokens = 0
+        // Используем chatSession для всех запросов
         var requestCounter = 0
 
         // ТЕСТ 1: Короткий диалог
@@ -391,23 +198,10 @@ class DemoManager(
             onTypingStateChanged(true)
             delay(500.milliseconds)
 
-            val response = agent.processRequest(message)
-
-            cumulativePromptTokens += response.promptTokens ?: 0
-            cumulativeCompletionTokens += response.completionTokens ?: 0
-            cumulativeTotalTokens += response.totalTokens ?: 0
+            val response = chatSession.ask(message)
             requestCounter++
 
-            val stats = agent.getTokenStats()
-            val currentStats = TokenStats(
-                totalPromptTokens = cumulativePromptTokens,
-                totalCompletionTokens = cumulativeCompletionTokens,
-                totalTokens = cumulativeTotalTokens,
-                estimatedCostUsd = stats.estimatedCostUsd,
-                requestCount = requestCounter
-            )
-            onStatsUpdated?.invoke(currentStats)
-
+            val stats = chatSession.getTokenStats()
             val metadata = DemoData.formatTokenMetadata(
                 response.promptTokens ?: 0,
                 response.completionTokens ?: 0,
@@ -429,7 +223,7 @@ class DemoManager(
             delay(500.milliseconds)
         }
 
-        val stats1 = agent.getTokenStats()
+        val stats1 = chatSession.getTokenStats()
         addMessage(
             role = "assistant",
             content = DemoData.getShortDialogueSummary(
@@ -443,7 +237,7 @@ class DemoManager(
         delay(2.seconds)
 
         // ТЕСТ 2: Длинный диалог
-        agent.clearHistory()
+        chatSession.clearHistory()
 
         addMessage(
             role = "assistant",
@@ -462,7 +256,7 @@ class DemoManager(
             delay(500.milliseconds)
 
             val response = try {
-                agent.processRequest(question)
+                chatSession.ask(question)
             } catch (e: Exception) {
                 addMessage(
                     role = "assistant",
@@ -473,23 +267,10 @@ class DemoManager(
                 delay(500.milliseconds)
                 continue
             }
-
-            cumulativePromptTokens += response.promptTokens ?: 0
-            cumulativeCompletionTokens += response.completionTokens ?: 0
-            cumulativeTotalTokens += response.totalTokens ?: 0
             requestCounter++
 
-            val stats = agent.getTokenStats()
-            val currentStats = TokenStats(
-                totalPromptTokens = cumulativePromptTokens,
-                totalCompletionTokens = cumulativeCompletionTokens,
-                totalTokens = cumulativeTotalTokens,
-                estimatedCostUsd = stats.estimatedCostUsd,
-                requestCount = requestCounter
-            )
-            onStatsUpdated?.invoke(currentStats)
-
-            val contextStatus = agent.getContextWarning()
+            val stats = chatSession.getTokenStats()
+            val contextStatus = chatSession.getContextWarning()
             val metadata = DemoData.formatLongDialogueMetadata(
                 index + 1,
                 DemoData.longDialogueTopics.size,
@@ -514,7 +295,7 @@ class DemoManager(
             delay(300.milliseconds)
         }
 
-        val finalStats = agent.getTokenStats()
+        val finalStats = chatSession.getTokenStats()
         addMessage(
             role = "assistant",
             content = DemoData.getFinalTokenStats(
@@ -541,23 +322,10 @@ class DemoManager(
             onTypingStateChanged(true)
             delay(500.milliseconds)
 
-            val response = agent.processRequest(question)
-
-            cumulativePromptTokens += response.promptTokens ?: 0
-            cumulativeCompletionTokens += response.completionTokens ?: 0
-            cumulativeTotalTokens += response.totalTokens ?: 0
+            val response = chatSession.ask(question)
             requestCounter++
 
-            val stats = agent.getTokenStats()
-            val currentStats = TokenStats(
-                totalPromptTokens = cumulativePromptTokens,
-                totalCompletionTokens = cumulativeCompletionTokens,
-                totalTokens = cumulativeTotalTokens,
-                estimatedCostUsd = stats.estimatedCostUsd,
-                requestCount = requestCounter
-            )
-            onStatsUpdated?.invoke(currentStats)
-
+            val stats = chatSession.getTokenStats()
             addMessage(
                 role = "assistant",
                 content = response.content,
@@ -576,8 +344,7 @@ class DemoManager(
             delay(300.milliseconds)
         }
 
-        val finalStats2 = agent.getTokenStats()
-
+        val finalStats2 = chatSession.getTokenStats()
         addMessage(
             role = "assistant",
             content = DemoData.getTokenDemoConclusion(
@@ -586,12 +353,15 @@ class DemoManager(
                 finalStats2.totalPromptTokens,
                 finalStats2.totalCompletionTokens,
                 finalStats2.estimatedCostUsd,
-                agent.getContextWarning()
+                chatSession.getContextWarning()
             ),
             metadata = "Итоговый анализ"
         )
     }
 
+    // ============================================================
+    // 2. ДЕМОНСТРАЦИЯ КОМПРЕССИИ
+    // ============================================================
     private suspend fun runCompressionComparison() {
         addMessage(
             role = "assistant",
@@ -599,6 +369,8 @@ class DemoManager(
             metadata = "ДЕМОНСТРАЦИЯ КОМПРЕССИИ"
         )
         delay(2.seconds)
+
+        val apiKey = ApiConfig.getApiKey()
 
         // Тест 1: Без компрессии
         addMessage(
@@ -631,18 +403,11 @@ class DemoManager(
 
             val response = regularAgent.processRequest(question)
 
+            updateStats(regularAgent)
+
             regularTotalTokens += response.totalTokens ?: 0
             regularTotalPrompt += response.promptTokens ?: 0
             regularTotalCompletion += response.completionTokens ?: 0
-
-            val currentStats = TokenStats(
-                totalPromptTokens = regularTotalPrompt,
-                totalCompletionTokens = regularTotalCompletion,
-                totalTokens = regularTotalTokens,
-                estimatedCostUsd = (regularTotalPrompt + regularTotalCompletion) * 0.3e-6,
-                requestCount = index + 1
-            )
-            onStatsUpdated?.invoke(currentStats)
 
             val metadata = DemoData.formatCompressionTestMetadata(
                 index + 1,
@@ -722,15 +487,6 @@ class DemoManager(
             compressedTotalPrompt += response.promptTokens ?: 0
             compressedTotalCompletion += response.completionTokens ?: 0
 
-            val currentStats = TokenStats(
-                totalPromptTokens = compressedTotalPrompt,
-                totalCompletionTokens = compressedTotalCompletion,
-                totalTokens = compressedTotalTokens,
-                estimatedCostUsd = (compressedTotalPrompt + compressedTotalCompletion) * 0.3e-6,
-                requestCount = index + 1
-            )
-            onStatsUpdated?.invoke(currentStats)
-
             val metadata = DemoData.formatCompressionTestMetadata(
                 index + 1,
                 DemoData.longDialogueTopics.size,
@@ -778,62 +534,260 @@ class DemoManager(
         )
     }
 
+    // ============================================================
+    // 3. ДЕМОНСТРАЦИЯ СТРАТЕГИЙ
+    // ============================================================
+    private suspend fun runStrategyComparison() {
+        addMessage(
+            role = "assistant",
+            content = """
+            🧪 ЗАПУСК ДЕМОНСТРАЦИИ СТРАТЕГИЙ УПРАВЛЕНИЯ КОНТЕКСТОМ
+            
+            Будут протестированы 3 стратегии:
+            1. Sliding Window - скользящее окно (только последние N сообщений)
+            2. Sticky Facts - сохранение ключевых фактов
+            3. Branching - ветвление диалога
+            
+            Сценарий: сбор требований к KMP приложению для заметок (12 вопросов)
+            """.trimIndent(),
+            metadata = "ДЕМОНСТРАЦИЯ СТРАТЕГИЙ"
+        )
+        delay(2.seconds)
+
+        val apiKey = ApiConfig.getApiKey()
+        val model = "openai/gpt-oss-20b:free"
+
+        // Тест 1: Sliding Window
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🔵 ТЕСТ 1: Sliding Window Strategy\n" + "━".repeat(
+                60
+            ),
+            metadata = "Тест 1/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.SLIDING_WINDOW,
+            strategyName = "Sliding Window",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        // Тест 2: Sticky Facts
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🟢 ТЕСТ 2: Sticky Facts Strategy\n" + "━".repeat(60),
+            metadata = "Тест 2/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.STICKY_FACTS,
+            strategyName = "Sticky Facts",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        // Тест 3: Branching
+        addMessage(
+            role = "assistant",
+            content = "\n" + "━".repeat(60) + "\n🟣 ТЕСТ 3: Branching Strategy\n" + "━".repeat(60),
+            metadata = "Тест 3/3"
+        )
+        delay(1.seconds)
+
+        runStrategyTest(
+            apiKey = apiKey,
+            model = model,
+            strategy = ContextStrategyType.BRANCHING,
+            strategyName = "Branching",
+            scenario = StrategyTestScenario.TZQuestions
+        )
+
+        delay(2.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            
+            ${"═".repeat(100)}
+            📊 СРАВНИТЕЛЬНЫЙ АНАЛИЗ СТРАТЕГИЙ
+            ${"═".repeat(100)}
+            
+            💡 РЕКОМЕНДАЦИИ:
+            • Для коротких диалогов (до 10 сообщений) - любая стратегия подходит
+            • Для длинных диалогов (20+ сообщений) - используйте Sticky Facts
+            • Для исследовательских задач и A/B тестирования - Branching
+            • Если важна предсказуемость расхода токенов - Sliding Window
+            
+            """.trimIndent(),
+            metadata = "Сравнительный анализ"
+        )
+    }
+
+    private suspend fun runStrategyTest(
+        apiKey: String,
+        model: String,
+        strategy: ContextStrategyType,
+        strategyName: String,
+        scenario: List<String>
+    ) {
+        val agent = StrategicLLMAgent(
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = "Ты опытный технический архитектор. Отвечай кратко, по делу, на русском языке."
+        )
+
+        agent.setStrategy(strategy)
+
+        addMessage(
+            role = "assistant",
+            content = "📌 Стратегия: ${agent.getCurrentStrategyName()}\n📝 Начинаем диалог из ${scenario.size} вопросов...",
+            metadata = "Начало теста"
+        )
+        delay(500.milliseconds)
+
+        var cumulativePromptTokens = 0
+        var cumulativeCompletionTokens = 0
+        var cumulativeTotalTokens = 0
+
+        for ((index, question) in scenario.withIndex()) {
+            addMessage(
+                role = "user",
+                content = question,
+                metadata = "[${index + 1}/${scenario.size}]"
+            )
+            delay(500.milliseconds)
+
+            onTypingStateChanged(true)
+            delay(500.milliseconds)
+
+            try {
+                val response = agent.processRequest(question)
+
+                updateStats(agent)
+
+                val promptTokens = response.promptTokens ?: 0
+                val completionTokens = response.completionTokens ?: 0
+                val totalTokens = response.totalTokens ?: 0
+
+                cumulativePromptTokens += promptTokens
+                cumulativeCompletionTokens += completionTokens
+                cumulativeTotalTokens += totalTokens
+
+                val metadata = buildString {
+                    append("📊 Токены: ↑$promptTokens ↓$completionTokens Σ$totalTokens")
+                    append(" | Всего за тест: ↑$cumulativePromptTokens ↓$cumulativeCompletionTokens Σ$cumulativeTotalTokens")
+                    append(" | Стратегия: ${response.strategyUsed}")
+                }
+
+                addMessage(
+                    role = "assistant",
+                    content = response.content,
+                    metadata = metadata,
+                    promptTokens = promptTokens,
+                    completionTokens = completionTokens,
+                    totalTokens = totalTokens,
+                    responseTimeMs = response.responseTimeMs
+                )
+
+                if (strategy == ContextStrategyType.STICKY_FACTS && index % 3 == 0 && index > 0) {
+                    val facts = agent.getFacts()
+                    if (facts.isNotEmpty()) {
+                        val factsText =
+                            facts.entries.joinToString("\n") { "• ${it.key}: ${it.value.take(80)}" }
+                        addMessage(
+                            role = "assistant",
+                            content = "📝 Извлеченные факты из диалога:\n$factsText",
+                            metadata = "Автоматическое извлечение фактов"
+                        )
+                    }
+                }
+
+                delay(500.milliseconds)
+
+            } catch (e: Exception) {
+                addMessage(
+                    role = "assistant",
+                    content = "❌ Ошибка: ${e.message}",
+                    metadata = "Ошибка"
+                )
+            } finally {
+                onTypingStateChanged(false)
+            }
+        }
+
+        addMessage(
+            role = "assistant",
+            content = """
+            
+            📊 ИТОГ ТЕСТА ($strategyName)
+            ${"─".repeat(40)}
+            • Запросов: ${scenario.size}
+            • Всего токенов: $cumulativeTotalTokens
+            • Prompt: $cumulativePromptTokens | Completion: $cumulativeCompletionTokens
+            
+            """.trimIndent(),
+            metadata = "Итоговая статистика"
+        )
+    }
+
+    // ============================================================
+    // 4. ДЕМОНСТРАЦИЯ ПАМЯТИ
+    // ============================================================
     private suspend fun runMemoryDemonstration() {
         addMessage(
             role = "assistant",
             content = """
-        🧠 ЗАПУСК ПОЛНОЙ ДЕМОНСТРАЦИИ ТРЕХСЛОЙНОЙ МОДЕЛИ ПАМЯТИ
-        
-        Эта демонстрация покажет ВСЕ возможности системы памяти:
-        
-        1. Настройку профиля пользователя
-        2. Настройку ограничений проекта
-        3. Создание рабочей задачи с контекстом
-        4. Добавление решений в рабочую память
-        5. Добавление знаний в долговременную память
-        6. Полноценный диалог по проекту (8 вопросов)
-        7. Работу с контекстом (updateWorkingContext/getWorkingContext)
-        8. Сохранение решений в долговременную память
-        9. Сравнение ответов С памятью и БЕЗ памяти
-        10. Очистку контекста рабочей памяти
-        
-        Начинаем...
-        """.trimIndent(),
+            🧠 ЗАПУСК ПОЛНОЙ ДЕМОНСТРАЦИИ ТРЕХСЛОЙНОЙ МОДЕЛИ ПАМЯТИ
+            
+            Эта демонстрация покажет ВСЕ возможности системы памяти:
+            
+            1. Настройку профиля пользователя
+            2. Настройку ограничений проекта
+            3. Создание рабочей задачи с контекстом
+            4. Добавление решений в рабочую память
+            5. Добавление знаний в долговременную память
+            6. Полноценный диалог по проекту (8 вопросов)
+            7. Работу с контекстом (updateWorkingContext/getWorkingContext)
+            8. Сохранение решений в долговременную память
+            9. Сравнение ответов С памятью и БЕЗ памяти
+            10. Очистку контекста рабочей памяти
+            
+            Начинаем...
+            """.trimIndent(),
             metadata = "ДЕМОНСТРАЦИЯ ПАМЯТИ"
         )
         delay(4.seconds)
 
+        val apiKey = ApiConfig.getApiKey()
+        val model = "nvidia/nemotron-3-super-120b-a12b:free"
+
         // ========== СОЗДАЕМ АГЕНТА С ПАМЯТЬЮ ==========
         val agent = MemoryAwareAgent(
             apiKey = apiKey,
-            model = primaryModel,
+            model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке, по делу, с примерами кода если нужно."
         )
-
-        // Функция для обновления статистики
-        fun updateStats() {
-            val stats = agent.getTokenStats()
-            val currentStats = TokenStats(
-                totalPromptTokens = stats.totalPromptTokens,
-                totalCompletionTokens = stats.totalCompletionTokens,
-                totalTokens = stats.totalTokens,
-                estimatedCostUsd = stats.estimatedCostUsd,
-                requestCount = stats.requestCount
-            )
-            onStatsUpdated?.invoke(currentStats)
-        }
 
         // ========== ШАГ 1: ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        📝 ШАГ 1: НАСТРОЙКА ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ
-        ${"═".repeat(80)}
-        
-        Сохраняем информацию о пользователе в ДОЛГОВРЕМЕННУЮ ПАМЯТЬ.
-        Эти данные будут использоваться во всех диалогах и сохранятся между сессиями.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            📝 ШАГ 1: НАСТРОЙКА ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ
+            ${"═".repeat(80)}
+            
+            Сохраняем информацию о пользователе в ДОЛГОВРЕМЕННУЮ ПАМЯТЬ.
+            Эти данные будут использоваться во всех диалогах и сохранятся между сессиями.
+            """.trimIndent(),
             metadata = "Шаг 1/10"
         )
         delay(3.seconds)
@@ -848,23 +802,23 @@ class DemoManager(
                 "Улучшить архитектуру",
                 "Перейти на KMP"
             ),
-            customNotes = "Предпочитаю примеры кода и практические решения. Нужны объяснения почему выбран тот или иной подход."
+            customNotes = "Предпочитаю примеры кода и практические решения."
         )
         agent.updateProfile(profile)
 
         addMessage(
             role = "assistant",
             content = """
-        ✅ ПРОФИЛЬ СОХРАНЕН:
-        
-        👤 Имя: ${profile.name}
-        📊 Опыт: ${profile.experience}
-        🛠️ Технологии: ${profile.preferredTech.joinToString(", ")}
-        🎯 Цели: ${profile.commonGoals.joinToString(", ")}
-        📝 Заметки: ${profile.customNotes}
-        
-        📁 Файл: ~/.llm_memory/profile.md
-        """.trimIndent(),
+            ✅ ПРОФИЛЬ СОХРАНЕН:
+            
+            👤 Имя: ${profile.name}
+            📊 Опыт: ${profile.experience}
+            🛠️ Технологии: ${profile.preferredTech.joinToString(", ")}
+            🎯 Цели: ${profile.commonGoals.joinToString(", ")}
+            📝 Заметки: ${profile.customNotes}
+            
+            📁 Файл: ~/.llm_memory/profile.md
+            """.trimIndent(),
             metadata = "Профиль сохранен"
         )
         delay(4.seconds)
@@ -873,13 +827,13 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        🔧 ШАГ 2: НАСТРОЙКА ОГРАНИЧЕНИЙ ПРОЕКТА
-        ${"═".repeat(80)}
-        
-        Сохраняем технические ограничения в ДОЛГОВРЕМЕННУЮ ПАМЯТЬ.
-        Агент будет учитывать их при генерации ответов.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            🔧 ШАГ 2: НАСТРОЙКА ОГРАНИЧЕНИЙ ПРОЕКТА
+            ${"═".repeat(80)}
+            
+            Сохраняем технические ограничения в ДОЛГОВРЕМЕННУЮ ПАМЯТЬ.
+            Агент будет учитывать их при генерации ответов.
+            """.trimIndent(),
             metadata = "Шаг 2/10"
         )
         delay(3.seconds)
@@ -895,23 +849,23 @@ class DemoManager(
             3. Код должен быть кроссплатформенным (where possible)
             4. Документация на русском языке для всех public API
             5. Использовать sealed classes для состояния и событий
-        """.trimIndent()
+            """.trimIndent()
         )
         agent.updateConstraints(constraints)
 
         addMessage(
             role = "assistant",
             content = """
-        ✅ ОГРАНИЧЕНИЯ СОХРАНЕНЫ:
-        
-        📚 Разрешенный стек: ${constraints.techStack.joinToString(", ")}
-        🚫 Запрещено: ${constraints.forbiddenTech.joinToString(", ")}
-        🏗️ Архитектура: ${constraints.architecture}
-        📏 Стандарты: ${constraints.codingStandards.take(80)}...
-        📋 Особые правила: ${constraints.specialRules.take(100)}...
-        
-        📁 Файл: ~/.llm_memory/constraints.md
-        """.trimIndent(),
+            ✅ ОГРАНИЧЕНИЯ СОХРАНЕНЫ:
+            
+            📚 Разрешенный стек: ${constraints.techStack.joinToString(", ")}
+            🚫 Запрещено: ${constraints.forbiddenTech.joinToString(", ")}
+            🏗️ Архитектура: ${constraints.architecture}
+            📏 Стандарты: ${constraints.codingStandards.take(80)}...
+            📋 Особые правила: ${constraints.specialRules.take(100)}...
+            
+            📁 Файл: ~/.llm_memory/constraints.md
+            """.trimIndent(),
             metadata = "Ограничения сохранены"
         )
         delay(4.seconds)
@@ -920,13 +874,13 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        📚 ШАГ 3: ДОБАВЛЕНИЕ ЗНАНИЙ В БАЗУ ЗНАНИЙ
-        ${"═".repeat(80)}
-        
-        Добавляем знания в Knowledge Base через addKnowledge().
-        Эти знания будут доступны агенту во всех диалогах.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            📚 ШАГ 3: ДОБАВЛЕНИЕ ЗНАНИЙ В БАЗУ ЗНАНИЙ
+            ${"═".repeat(80)}
+            
+            Добавляем знания в Knowledge Base через addKnowledge().
+            Эти знания будут доступны агенту во всех диалогах.
+            """.trimIndent(),
             metadata = "Шаг 3/10"
         )
         delay(3.seconds)
@@ -943,44 +897,33 @@ class DemoManager(
             "архитектурное_решение",
             "Применяем Clean Architecture с разделением на data (репозитории), domain (use cases), presentation (ViewModels + Compose UI)"
         )
-        agent.addKnowledge(
-            "тестирование_политика",
-            "Unit тесты на use cases и ViewModels. Интеграционные тесты на репозитории с фейковыми API. E2E тесты на UI."
-        )
-        agent.addKnowledge(
-            "корутины_правила",
-            "Используем structured concurrency, никогда не используем GlobalScope, всегда привязываемся к lifecycle"
-        )
 
-        val bestPractice = agent.getKnowledge("лучшая_практика_kmp")
         addMessage(
             role = "assistant",
             content = """
-        ✅ ЗНАНИЯ ДОБАВЛЕНЫ (${agent.getAllKnowledge().size} записей):
-        
-        • лучшая_практика_kmp: "$bestPractice"
-        • кодинг_стандарт_проекта: "${agent.getKnowledge("кодинг_стандарт_проекта")}"
-        • архитектурное_решение: "${agent.getKnowledge("архитектурное_решение")?.take(80)}..."
-        • тестирование_политика: "${agent.getKnowledge("тестирование_политика")?.take(80)}..."
-        • корутины_правила: "${agent.getKnowledge("корутины_правила")?.take(80)}..."
-        
-        📁 Файл: ~/.llm_memory/knowledge.md
-        """.trimIndent(),
+            ✅ ЗНАНИЯ ДОБАВЛЕНЫ (${agent.getAllKnowledge().size} записей):
+            
+            • лучшая_практика_kmp: "${agent.getKnowledge("лучшая_практика_kmp")}"
+            • кодинг_стандарт_проекта: "${agent.getKnowledge("кодинг_стандарт_проекта")}"
+            • архитектурное_решение: "${agent.getKnowledge("архитектурное_решение")?.take(80)}..."
+            
+            📁 Файл: ~/.llm_memory/knowledge.md
+            """.trimIndent(),
             metadata = "Знания добавлены"
         )
         delay(5.seconds)
 
-        // ========== ШАГ 4: СОЗДАНИЕ ЗАДАЧИ И РАБОЧЕЙ ПАМЯТИ ==========
+        // ========== ШАГ 4: СОЗДАНИЕ ЗАДАЧИ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        💼 ШАГ 4: СОЗДАНИЕ ЗАДАЧИ И РАБОЧЕЙ ПАМЯТИ
-        ${"═".repeat(80)}
-        
-        Создаем задачу в РАБОЧЕЙ ПАМЯТИ.
-        Рабочая память хранит контекст ТЕКУЩЕЙ задачи и временные решения.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            💼 ШАГ 4: СОЗДАНИЕ ЗАДАЧИ И РАБОЧЕЙ ПАМЯТИ
+            ${"═".repeat(80)}
+            
+            Создаем задачу в РАБОЧЕЙ ПАМЯТИ.
+            Рабочая память хранит контекст ТЕКУЩЕЙ задачи и временные решения.
+            """.trimIndent(),
             metadata = "Шаг 4/10"
         )
         delay(3.seconds)
@@ -990,7 +933,6 @@ class DemoManager(
             initialContext = mapOf(
                 "требования" to "Чат-бот должен помнить контекст диалога между сессиями",
                 "ограничения" to "Использовать только бесплатные модели OpenRouter",
-                "бюджет" to "Бесплатно (используем free модели)",
                 "срок" to "2 недели на MVP"
             )
         )
@@ -999,32 +941,32 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        ✅ ЗАДАЧА СОЗДАНА:
-        
-        📋 Название: ${agent.getWorkingMemory().taskName}
-        📍 Состояние: ${agent.getWorkingMemory().currentState.displayName}
-        🎯 Контекст задачи:
-           • требования: ${agent.getWorkingMemory().contextData["requirements"] ?: agent.getWorkingMemory().contextData["требования"]}
-           • ограничения: ${agent.getWorkingMemory().contextData["ограничения"]}
-           • срок: ${agent.getWorkingMemory().contextData["срок"]}
-        
-        Рабочая память активна! Агент теперь знает, над чем мы работаем.
-        """.trimIndent(),
+            ✅ ЗАДАЧА СОЗДАНА:
+            
+            📋 Название: ${agent.getWorkingMemory().taskName}
+            📍 Состояние: ${agent.getWorkingMemory().currentState.displayName}
+            🎯 Контекст задачи:
+               • требования: ${agent.getWorkingMemory().contextData["требования"]}
+               • ограничения: ${agent.getWorkingMemory().contextData["ограничения"]}
+               • срок: ${agent.getWorkingMemory().contextData["срок"]}
+            
+            Рабочая память активна! Агент теперь знает, над чем мы работаем.
+            """.trimIndent(),
             metadata = "Задача создана"
         )
         delay(4.seconds)
 
-        // ========== ШАГ 5: РАБОТА С КОНТЕКСТОМ ==========
+        // ========== ШАГ 5: КОНТЕКСТ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        📝 ШАГ 5: РАБОТА С КОНТЕКСТОМ РАБОЧЕЙ ПАМЯТИ
-        ${"═".repeat(80)}
-        
-        Добавляем динамические данные в контекст через updateWorkingContext().
-        Эти данные характеризуют ТЕКУЩЕЕ состояние задачи.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            📝 ШАГ 5: РАБОТА С КОНТЕКСТОМ РАБОЧЕЙ ПАМЯТИ
+            ${"═".repeat(80)}
+            
+            Добавляем динамические данные в контекст через updateWorkingContext().
+            Эти данные характеризуют ТЕКУЩЕЕ состояние задачи.
+            """.trimIndent(),
             metadata = "Шаг 5/10"
         )
         delay(3.seconds)
@@ -1044,29 +986,29 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        ✅ КОНТЕКСТ ОБНОВЛЕН (${agent.getWorkingMemory().contextData.size} ключей):
-        
-        • текущий_спринт = "${agent.getWorkingContext("текущий_спринт")}"
-        • дедлайн_спринта = "${agent.getWorkingContext("дедлайн_спринта")}"
-        • текущие_задачи = "${agent.getWorkingContext("текущие_задачи")?.take(60)}..."
-        • блокеры = "${agent.getWorkingContext("блокеры")}"
-        • выполнено = "${agent.getWorkingContext("выполнено")?.take(60)}..."
-        """.trimIndent(),
+            ✅ КОНТЕКСТ ОБНОВЛЕН (${agent.getWorkingMemory().contextData.size} ключей):
+            
+            • текущий_спринт = "${agent.getWorkingContext("текущий_спринт")}"
+            • дедлайн_спринта = "${agent.getWorkingContext("дедлайн_спринта")}"
+            • текущие_задачи = "${agent.getWorkingContext("текущие_задачи")?.take(60)}..."
+            • блокеры = "${agent.getWorkingContext("блокеры")}"
+            • выполнено = "${agent.getWorkingContext("выполнено")?.take(60)}..."
+            """.trimIndent(),
             metadata = "Контекст обновлен"
         )
         delay(5.seconds)
 
-        // ========== ШАГ 6: ДОБАВЛЕНИЕ РЕШЕНИЙ В РАБОЧУЮ ПАМЯТЬ ==========
+        // ========== ШАГ 6: РЕШЕНИЯ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        💡 ШАГ 6: ДОБАВЛЕНИЕ РЕШЕНИЙ В РАБОЧУЮ ПАМЯТЬ
-        ${"═".repeat(80)}
-        
-        Добавляем решения через addDecisionToWorkingMemory().
-        Это временные решения для ТЕКУЩЕЙ задачи.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            💡 ШАГ 6: ДОБАВЛЕНИЕ РЕШЕНИЙ В РАБОЧУЮ ПАМЯТЬ
+            ${"═".repeat(80)}
+            
+            Добавляем решения через addDecisionToWorkingMemory().
+            Это временные решения для ТЕКУЩЕЙ задачи.
+            """.trimIndent(),
             metadata = "Шаг 6/10"
         )
         delay(3.seconds)
@@ -1078,47 +1020,44 @@ class DemoManager(
         )
         agent.addDecisionToWorkingMemory(
             topic = "Управление состоянием",
-            decision = "MVI с использованием StateFlow и SharedFlow. События через SharedFlow, состояние через StateFlow",
+            decision = "MVI с использованием StateFlow и SharedFlow",
             context = "Выбрали после сравнения с MVVM"
         )
         agent.addDecisionToWorkingMemory(
             topic = "Хранение данных",
-            decision = "SQLDelight для кроссплатформенного хранения истории диалогов",
+            decision = "SQLDelight для кроссплатформенного хранения",
             context = "Room не работает на iOS, SQLDelight - лучший выбор для KMP"
         )
 
         addMessage(
             role = "assistant",
             content = """
-        ✅ РЕШЕНИЯ ДОБАВЛЕНЫ В РАБОЧУЮ ПАМЯТЬ (${agent.getWorkingMemory().decisions.size} решений):
-        
-        ${
+            ✅ РЕШЕНИЯ ДОБАВЛЕНЫ В РАБОЧУЮ ПАМЯТЬ (${agent.getWorkingMemory().decisions.size} решений):
+            
+            ${
                 agent.getWorkingMemory().decisions.joinToString("\n\n") {
                     "   📌 ${it.topic}:\n      Решение: ${it.decision.take(80)}...\n      Контекст: ${it.context}"
                 }
             }
-        
-        ⚠️ Эти решения временные! Они будут потеряны при создании новой задачи.
-        Для постоянного хранения используйте saveDecisionToLongTerm().
-        """.trimIndent(),
+            
+            ⚠️ Эти решения временные! Они будут потеряны при создании новой задачи.
+            Для постоянного хранения используйте saveDecisionToLongTerm().
+            """.trimIndent(),
             metadata = "Решения добавлены"
         )
         delay(6.seconds)
 
-        // ========== ШАГ 7: ДИАЛОГ ПО ПРОЕКТУ ==========
+        // ========== ШАГ 7: ДИАЛОГ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        💬 ШАГ 7: ДИАЛОГ С АГЕНТОМ ПО ПРОЕКТУ
-        ${"═".repeat(80)}
-        
-        Теперь зададим агенту 8 вопросов по проекту.
-        Агент будет использовать ВСЕ три слоя памяти:
-        • Долговременную (профиль, ограничения, знания)
-        • Рабочую (задача, контекст, решения)
-        • Краткосрочную (текущий диалог)
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            💬 ШАГ 7: ДИАЛОГ С АГЕНТОМ ПО ПРОЕКТУ
+            ${"═".repeat(80)}
+            
+            Теперь зададим агенту 8 вопросов по проекту.
+            Агент будет использовать ВСЕ три слоя памяти.
+            """.trimIndent(),
             metadata = "Шаг 7/10"
         )
         delay(4.seconds)
@@ -1143,7 +1082,8 @@ class DemoManager(
 
             try {
                 val response = agent.processRequest(question)
-                updateStats()
+
+                updateStats(agent)
 
                 val usedMemoryLayers = buildString {
                     val layers = mutableListOf<String>()
@@ -1175,17 +1115,17 @@ class DemoManager(
             delay(2.seconds)
         }
 
-        // ========== ШАГ 8: СОХРАНЕНИЕ РЕШЕНИЙ В LTM ==========
+        // ========== ШАГ 8: СОХРАНЕНИЕ РЕШЕНИЙ ==========
         addMessage(
             role = "assistant",
             content = """
-        ${"═".repeat(80)}
-        💾 ШАГ 8: СОХРАНЕНИЕ РЕШЕНИЙ В ДОЛГОВРЕМЕННУЮ ПАМЯТЬ
-        ${"═".repeat(80)}
-        
-        Сохраняем важные решения через saveDecisionToLongTerm().
-        Эти решения сохранятся НАВСЕГДА и будут доступны в следующих сессиях.
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            💾 ШАГ 8: СОХРАНЕНИЕ РЕШЕНИЙ В ДОЛГОВРЕМЕННУЮ ПАМЯТЬ
+            ${"═".repeat(80)}
+            
+            Сохраняем важные решения через saveDecisionToLongTerm().
+            Эти решения сохранятся НАВСЕГДА и будут доступны в следующих сессиях.
+            """.trimIndent(),
             metadata = "Шаг 8/10"
         )
         delay(3.seconds)
@@ -1202,68 +1142,52 @@ class DemoManager(
         )
         agent.saveDecisionToLongTerm(
             topic = "Тестирование стратегия",
-            decision = "Unit тесты на UseCases и ViewModels + Integration тесты на репозитории с TestCoroutineDispatcher",
+            decision = "Unit тесты на UseCases и ViewModels + Integration тесты на репозитории",
             context = "Для обеспечения качества"
         )
 
-        val allDecisions = agent.getAllDecisions()
         addMessage(
             role = "assistant",
             content = """
-        ✅ РЕШЕНИЯ СОХРАНЕНЫ В LTM (${allDecisions.size} всего):
-        
-        Новые решения:
-        ${
-                allDecisions.takeLast(3)
+            ✅ РЕШЕНИЯ СОХРАНЕНЫ В LTM (${agent.getAllDecisions().size} всего):
+            
+            Новые решения:
+            ${
+                agent.getAllDecisions().takeLast(3)
                     .joinToString("\n") { "   • ${it.topic}: ${it.decision.take(80)}..." }
             }
-        
-        📁 Эти решения сохранены в ~/.llm_memory/knowledge.md
-        и будут доступны при следующем запуске!
-        """.trimIndent(),
+            
+            📁 Эти решения сохранены в ~/.llm_memory/knowledge.md
+            и будут доступны при следующем запуске!
+            """.trimIndent(),
             metadata = "Решения сохранены"
         )
         delay(5.seconds)
 
-        // ========== ШАГ 9: СРАВНЕНИЕ С АГЕНТОМ БЕЗ ПАМЯТИ ==========
+        // ========== ШАГ 9: СРАВНЕНИЕ ==========
         addMessage(
             role = "assistant",
             content = """
-    ${"═".repeat(80)}
-    ⚖️ ШАГ 9: СРАВНЕНИЕ - АГЕНТ С ПАМЯТЬЮ VS АГЕНТ БЕЗ ПАМЯТИ
-    ${"═".repeat(80)}
-    
-    Создадим второго агента БЕЗ долговременной памяти и зададим ему тот же вопрос.
-    Вы увидите РАЗНИЦУ в ответах!
-    """.trimIndent(),
+            ${"═".repeat(80)}
+            ⚖️ ШАГ 9: СРАВНЕНИЕ - АГЕНТ С ПАМЯТЬЮ VS АГЕНТ БЕЗ ПАМЯТИ
+            ${"═".repeat(80)}
+            
+            Создадим второго агента БЕЗ долговременной памяти и зададим ему тот же вопрос.
+            Вы увидите РАЗНИЦУ в ответах!
+            """.trimIndent(),
             metadata = "Шаг 9/10"
         )
         delay(4.seconds)
 
-// Создаем агента без памяти
         val agentNoMemory = MemoryAwareAgent(
             apiKey = apiKey,
-            model = primaryModel,
+            model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке."
         )
         agentNoMemory.useLongTerm = false
-        agentNoMemory.useWorkingMemory =
-            false // Отключаем и рабочую память для чистоты эксперимента
+        agentNoMemory.useWorkingMemory = false
 
-        addMessage(
-            role = "assistant",
-            content = """
-    🔴 АГЕНТ БЕЗ ПАМЯТИ СОЗДАН:
-    • Долговременная память: ОТКЛЮЧЕНА
-    • Рабочая память: ОТКЛЮЧЕНА
-    • Только краткосрочная память (текущий диалог)
-    • Нет профиля, нет ограничений, нет знаний
-    """.trimIndent(),
-            metadata = "Агент без памяти"
-        )
-        delay(3.seconds)
-
-// Задаем вопрос агенту С памятью
+        // Задаем вопрос агенту С памятью
         addMessage(
             role = "assistant",
             content = "🔵 ЗАПРОС К АГЕНТУ С ПАМЯТЬЮ:",
@@ -1277,14 +1201,9 @@ class DemoManager(
         onTypingStateChanged(true)
         delay(1.seconds)
 
-// Объявляем переменные ДО try, чтобы они были доступны после
-        var responseWithMemory: com.llmapp.agent.MemoryAwareResponse? = null
-        var responseWithoutMemory: com.llmapp.agent.MemoryAwareResponse? = null
-
         try {
-            responseWithMemory =
+            val responseWithMemory =
                 agent.processRequest("Какой стек технологий я предпочитаю и какие у нас ограничения? Напиши кратко.")
-            updateStats()
             addMessage(
                 role = "assistant",
                 content = "✅ С ПАМЯТЬЮ:\n\n${responseWithMemory.content}",
@@ -1301,7 +1220,7 @@ class DemoManager(
         }
         delay(4.seconds)
 
-// Задаем вопрос агенту БЕЗ памяти
+        // Задаем вопрос агенту БЕЗ памяти
         addMessage(
             role = "assistant",
             content = "🔴 ЗАПРОС К АГЕНТУ БЕЗ ПАМЯТИ:",
@@ -1316,7 +1235,7 @@ class DemoManager(
         delay(1.seconds)
 
         try {
-            responseWithoutMemory =
+            val responseWithoutMemory =
                 agentNoMemory.processRequest("Какой стек технологий я предпочитаю и какие у нас ограничения? Напиши кратко.")
             addMessage(
                 role = "assistant",
@@ -1334,65 +1253,18 @@ class DemoManager(
         }
         delay(4.seconds)
 
-// Анализ различий - теперь переменные доступны
-        val withMemoryContent = responseWithMemory?.content ?: "Ошибка получения ответа"
-        val withoutMemoryContent = responseWithoutMemory?.content ?: "Ошибка получения ответа"
-
+        // ========== ШАГ 10: ОЧИСТКА ==========
         addMessage(
             role = "assistant",
             content = """
-    📊 АНАЛИЗ РАЗНИЦЫ В ОТВЕТАХ:
-    
-    🔵 АГЕНТ С ПАМЯТЬЮ:
-    • ЗНАЕТ, что пользователя зовут ${profile.name}
-    • ЗНАЕТ, что пользователь ${profile.experience}
-    • ЗНАЕТ предпочитаемые технологии: ${profile.preferredTech.take(3).joinToString(", ")}...
-    • ЗНАЕТ запрещенные технологии: ${constraints.forbiddenTech.take(2).joinToString(", ")}...
-    • ЗНАЕТ архитектуру: ${constraints.architecture.take(50)}...
-    • Длина ответа: ${withMemoryContent.length} символов
-    • Ответ начинается с: "${withMemoryContent.take(100)}..."
-    
-    🔴 АГЕНТ БЕЗ ПАМЯТИ:
-    • НЕ ЗНАЕТ пользователя
-    • ДАЕТ общие рекомендации без персонализации
-    • НЕ УЧИТЫВАЕТ запреты (может предложить Java/RxJava)
-    • НЕ ЗНАЕТ ограничения проекта
-    • Длина ответа: ${withoutMemoryContent.length} символов
-    • Ответ начинается с: "${withoutMemoryContent.take(100)}..."
-    
-    💡 ВЫВОД: Без долговременной памяти агент не может персонализировать ответы!
-    Разница в ответах очевидна - агент с памятью знает контекст,
-    а агент без памяти дает общие, неперсонализированные рекомендации.
-    """.trimIndent(),
-            metadata = "Анализ"
-        )
-        delay(6.seconds)
-
-        // ========== ШАГ 10: ОЧИСТКА КОНТЕКСТА ==========
-        addMessage(
-            role = "assistant",
-            content = """
-        ${"═".repeat(80)}
-        🗑️ ШАГ 10: ОЧИСТКА КОНТЕКСТА РАБОЧЕЙ ПАМЯТИ
-        ${"═".repeat(80)}
-        
-        Демонстрация clearWorkingContext() - очистка контекста задачи.
-        Рабочая память очищается, но долговременная остается!
-        """.trimIndent(),
+            ${"═".repeat(80)}
+            🗑️ ШАГ 10: ОЧИСТКА КОНТЕКСТА РАБОЧЕЙ ПАМЯТИ
+            ${"═".repeat(80)}
+            
+            Демонстрация clearWorkingContext() - очистка контекста задачи.
+            Рабочая память очищается, но долговременная остается!
+            """.trimIndent(),
             metadata = "Шаг 10/10"
-        )
-        delay(3.seconds)
-
-        addMessage(
-            role = "assistant",
-            content = """
-        📋 ДО ОЧИСТКИ:
-        • Контекстных данных: ${agent.getWorkingMemory().contextData.size}
-        • Текущий спринт: "${agent.getWorkingContext("текущий_спринт") ?: "не задан"}"
-        • Дедлайн: "${agent.getWorkingContext("дедлайн_спринта") ?: "не задан"}"
-        • Выполнено: "${agent.getWorkingContext("выполнено")?.take(50) ?: "не задано"}..."
-        """.trimIndent(),
-            metadata = "До очистки"
         )
         delay(3.seconds)
 
@@ -1401,16 +1273,14 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        🗑️ ПОСЛЕ ОЧИСТКИ clearWorkingContext():
-        • Контекстных данных: ${agent.getWorkingMemory().contextData.size}
-        • Текущий спринт: "${agent.getWorkingContext("текущий_спринт") ?: "не задан"}"
-        • Дедлайн: "${agent.getWorkingContext("дедлайн_спринта") ?: "не задан"}"
-        
-        ⚠️ Рабочая память очищена, но ДОЛГОВРЕМЕННАЯ ПАМЯТЬ сохранилась!
-        • Профиль: ${agent.getUserProfile().name}
-        • Ограничения: ${if (agent.getProjectConstraints().techStack.isNotEmpty()) "сохранены" else "нет"}
-        • Знаний: ${agent.getAllKnowledge().size}
-        """.trimIndent(),
+            🗑️ ПОСЛЕ ОЧИСТКИ clearWorkingContext():
+            • Контекстных данных: ${agent.getWorkingMemory().contextData.size}
+            
+            ⚠️ Рабочая память очищена, но ДОЛГОВРЕМЕННАЯ ПАМЯТЬ сохранилась!
+            • Профиль: ${agent.getUserProfile().name}
+            • Ограничения: ${if (agent.getProjectConstraints().techStack.isNotEmpty()) "сохранены" else "нет"}
+            • Знаний: ${agent.getAllKnowledge().size}
+            """.trimIndent(),
             metadata = "После очистки"
         )
         delay(5.seconds)
@@ -1419,93 +1289,312 @@ class DemoManager(
         addMessage(
             role = "assistant",
             content = """
-        
-        ${"═".repeat(100)}
-        📊 ФИНАЛЬНЫЙ ОТЧЕТ ПО ДЕМОНСТРАЦИИ
-        ${"═".repeat(100)}
-        
-        💼 РАБОЧАЯ ПАМЯТЬ (Working Memory):
-        • Название задачи: ${agent.getWorkingMemory().taskName}
-        • Состояние: ${agent.getWorkingMemory().currentState.displayName}
-        • Решений в WM: ${agent.getWorkingMemory().decisions.size}
-        • Контекстных данных: ${agent.getWorkingMemory().contextData.size}
-        
-        📚 ДОЛГОВРЕМЕННАЯ ПАМЯТЬ (Long-term Memory):
-        • Профиль: ${agent.getUserProfile().name} (${agent.getUserProfile().experience})
-        • Технологии: ${agent.getUserProfile().preferredTech.joinToString(", ")}
-        • Ограничений: ${if (agent.getProjectConstraints().techStack.isNotEmpty()) "установлены" else "нет"}
-        • Запрещено: ${agent.getProjectConstraints().forbiddenTech.joinToString(", ")}
-        • Сохраненных знаний: ${agent.getAllKnowledge().size}
-        • Сохраненных решений: ${agent.getAllDecisions().size}
-        
-        📊 СТАТИСТИКА ЗАПРОСОВ:
-        • Всего запросов: ${agent.getTokenStats().requestCount}
-        • Всего токенов: ${agent.getTokenStats().totalTokens}
-        • Prompt токенов: ${agent.getTokenStats().totalPromptTokens}
-        • Completion токенов: ${agent.getTokenStats().totalCompletionTokens}
-        
-        📁 ФАЙЛЫ СОХРАНЕНЫ В ~/.llm_memory/:
-        • profile.md - профиль пользователя
-        • constraints.md - ограничения проекта
-        • knowledge.md - база знаний и решений
-        
-        """.trimIndent(),
+            
+            ${"═".repeat(100)}
+            📊 ФИНАЛЬНЫЙ ОТЧЕТ ПО ДЕМОНСТРАЦИИ
+            ${"═".repeat(100)}
+            
+            💼 РАБОЧАЯ ПАМЯТЬ (Working Memory):
+            • Название задачи: ${agent.getWorkingMemory().taskName}
+            • Состояние: ${agent.getWorkingMemory().currentState.displayName}
+            • Решений в WM: ${agent.getWorkingMemory().decisions.size}
+            • Контекстных данных: ${agent.getWorkingMemory().contextData.size}
+            
+            📚 ДОЛГОВРЕМЕННАЯ ПАМЯТЬ (Long-term Memory):
+            • Профиль: ${agent.getUserProfile().name} (${agent.getUserProfile().experience})
+            • Технологии: ${agent.getUserProfile().preferredTech.joinToString(", ")}
+            • Сохраненных знаний: ${agent.getAllKnowledge().size}
+            • Сохраненных решений: ${agent.getAllDecisions().size}
+            
+            📊 СТАТИСТИКА ЗАПРОСОВ:
+            • Всего запросов: ${agent.getTokenStats().requestCount}
+            • Всего токенов: ${agent.getTokenStats().totalTokens}
+            
+            📁 ФАЙЛЫ СОХРАНЕНЫ В ~/.llm_memory/:
+            • profile.md - профиль пользователя
+            • constraints.md - ограничения проекта
+            • knowledge.md - база знаний и решений
+            
+            """.trimIndent(),
             metadata = "Финальный отчет"
         )
         delay(6.seconds)
 
-        // ========== ИТОГОВЫЕ ВЫВОДЫ ==========
         addMessage(
             role = "assistant",
             content = """
-        
-        ${"═".repeat(100)}
-        🎯 ИТОГОВЫЕ ВЫВОДЫ ПО ТРЕХСЛОЙНОЙ МОДЕЛИ ПАМЯТИ
-        ${"═".repeat(100)}
-        
-        1️⃣ КРАТКОСРОЧНАЯ ПАМЯТЬ (Short-term)
-           📍 Хранит: текущий диалог (${projectQuestions.size} вопросов)
-           🎯 Роль: связность разговора, контекст последних сообщений
-           ⏰ Время жизни: до очистки истории чата
-        
-        2️⃣ РАБОЧАЯ ПАМЯТЬ (Working Memory)
-           📍 Хранит: задачу, состояние, контекст, временные решения
-           🎯 Роль: агент знает этап работы и текущий контекст
-           ⏰ Время жизни: до создания новой задачи или clearWorkingMemory()
-           🔧 API: addDecisionToWorkingMemory(), updateWorkingContext(), 
-                  getWorkingContext(), clearWorkingContext()
-        
-        3️⃣ ДОЛГОВРЕМЕННАЯ ПАМЯТЬ (Long-term)
-           📍 Хранит: профиль, ограничения, знания, постоянные решения
-           🎯 Роль: персонализация ответов, соблюдение правил
-           ⏰ Время жизни: ПЕРМАНЕНТНО (между сессиями!)
-           🔧 API: saveDecisionToLongTerm(), addKnowledge(), 
-                  getKnowledge(), getAllKnowledge(), getAllDecisions()
-        
-        💡 ГЛАВНЫЙ ВЫВОД:
-        
-        Без долговременной памяти агент НЕ ЗНАЕТ:
-        • Кто вы (имя, опыт, предпочтения)
-        • Какие технологии МОЖНО использовать
-        • Какие технологии ЗАПРЕЩЕНЫ
-        • Какая архитектура выбрана
-        • Сохраненные решения и знания
-        
-        С полной трехслойной памятью агент дает:
-        • ПЕРСОНАЛИЗИРОВАННЫЕ ответы
-        • Учитывает ОГРАНИЧЕНИЯ проекта
-        • Использует НАКОПЛЕННЫЕ знания
-        • Знает КОНТЕКСТ текущей задачи
-        
-        ✨ ДЕМОНСТРАЦИЯ УСПЕШНО ЗАВЕРШЕНА!
-        
-        """.trimIndent(),
+            
+            ${"═".repeat(100)}
+            🎯 ИТОГОВЫЕ ВЫВОДЫ
+            ${"═".repeat(100)}
+            
+            1️⃣ КРАТКОСРОЧНАЯ ПАМЯТЬ - связность разговора
+            2️⃣ РАБОЧАЯ ПАМЯТЬ - контекст текущей задачи
+            3️⃣ ДОЛГОВРЕМЕННАЯ ПАМЯТЬ - персонализация и правила
+            
+            ✨ ДЕМОНСТРАЦИЯ УСПЕШНО ЗАВЕРШЕНА!
+            
+            """.trimIndent(),
             metadata = "Итоговые выводы"
         )
-
-        // Финальное обновление статистики
-        updateStats()
     }
+
+    // ============================================================
+    // 5. ДЕМОНСТРАЦИЯ ПЕРСОНАЛИЗАЦИИ
+    // ============================================================
+    private suspend fun runPersonalizationDemo() {
+        addMessage(
+            role = "assistant",
+            content = """
+            👤 ЗАПУСК ДЕМОНСТРАЦИИ ПЕРСОНАЛИЗАЦИИ
+            
+            Схема работы:
+            1. Создаются профили разных пользователей
+            2. Задаются одинаковые вопросы
+            3. Собираются ответы и метаданные
+            4. LLM анализирует различия и делает выводы
+            
+            Начинаем сбор данных...
+            """.trimIndent(),
+            metadata = "ПЕРСОНАЛИЗАЦИЯ"
+        )
+        delay(2.seconds)
+
+        val apiKey = ApiConfig.getApiKey()
+        val model = "nvidia/nemotron-3-super-120b-a12b:free"
+
+        val profiles = listOf(
+            "Алексей (Android)" to UserProfile(
+                name = "Алексей",
+                experience = "Middle Android разработчик",
+                preferredStyle = ResponseStyle.TECHNICAL,
+                preferredTech = listOf("Kotlin", "Jetpack Compose", "Coroutines"),
+                customNotes = "Предпочитаю примеры кода"
+            ),
+            "Екатерина (Fullstack)" to UserProfile(
+                name = "Екатерина",
+                experience = "Senior Fullstack разработчик",
+                preferredStyle = ResponseStyle.DETAILED,
+                preferredTech = listOf("TypeScript", "React", "Node.js"),
+                customNotes = "Нужны объяснения на высоком уровне"
+            ),
+            "Михаил (Junior)" to UserProfile(
+                name = "Михаил",
+                experience = "Junior разработчик",
+                preferredStyle = ResponseStyle.CONCISE,
+                preferredTech = listOf("Python", "JavaScript"),
+                customNotes = "Нужны простые объяснения"
+            )
+        )
+
+        val questions = listOf(
+            "Как организовать хранение данных в приложении?",
+            "Какую архитектуру вы посоветуете?",
+            "Как организовать работу с сетью?"
+        )
+
+        val allResults = mutableListOf<ProfileTestResult>()
+
+        for ((profileName, profile) in profiles) {
+            addMessage(
+                role = "assistant",
+                content = "👤 Тестируем профиль: $profileName\n📝 Стек: ${
+                    profile.preferredTech.joinToString(
+                        ", "
+                    )
+                }",
+                metadata = "Сбор данных"
+            )
+            delay(1.seconds)
+
+            val agent = MemoryAwareAgent(
+                apiKey = apiKey,
+                model = model,
+                systemPrompt = "Ты полезный ассистент. Отвечай на русском языке."
+            )
+            agent.updateProfile(profile)
+
+            val results = mutableListOf<AnswerRecord>()
+
+            for ((qIndex, question) in questions.withIndex()) {
+                addMessage(role = "user", content = question)
+                delay(500.milliseconds)
+
+                onTypingStateChanged(true)
+                delay(500.milliseconds)
+
+                try {
+                    val startTime = System.currentTimeMillis()
+                    val response = agent.processRequest(question)
+
+                    updateStats(agent)
+
+                    val responseTime = System.currentTimeMillis() - startTime
+
+                    val lowerContent = response.content.lowercase()
+                    val techMentioned = profile.preferredTech.any { tech ->
+                        lowerContent.contains(tech.lowercase())
+                    }
+
+                    results.add(
+                        AnswerRecord(
+                            question = question,
+                            answer = response.content,
+                            promptTokens = response.promptTokens ?: 0,
+                            completionTokens = response.completionTokens ?: 0,
+                            totalTokens = response.totalTokens ?: 0,
+                            responseTimeMs = responseTime,
+                            answerLength = response.content.length,
+                            techMentioned = techMentioned,
+                            styleMatch = true,
+                            questionAnswered = response.content.length > 50
+                        )
+                    )
+
+                    val metadata = buildString {
+                        append("📊 [${qIndex + 1}/${questions.size}]")
+                        append(" Токены: ↑${response.promptTokens}/↓${response.completionTokens}/Σ${response.totalTokens}")
+                        if (techMentioned) append(" | ✅ Учтены технологии")
+                    }
+
+                    addMessage(
+                        role = "assistant",
+                        content = response.content,
+                        metadata = metadata,
+                        promptTokens = response.promptTokens,
+                        completionTokens = response.completionTokens,
+                        totalTokens = response.totalTokens,
+                        responseTimeMs = response.responseTimeMs
+                    )
+
+                } catch (e: Exception) {
+                    addMessage(
+                        role = "assistant",
+                        content = "❌ Ошибка: ${e.message}",
+                        metadata = "Ошибка"
+                    )
+                } finally {
+                    onTypingStateChanged(false)
+                }
+
+                delay(300.milliseconds)
+            }
+
+            val totalTokens = results.sumOf { it.totalTokens }
+            val avgLength = results.map { it.answerLength }.average()
+            val techMatchRate = results.count { it.techMentioned }.toDouble() / results.size * 100
+
+            allResults.add(
+                ProfileTestResult(
+                    profileName = profileName,
+                    profile = profile,
+                    answers = results,
+                    totalTokens = totalTokens,
+                    avgAnswerLength = avgLength,
+                    avgResponseTime = results.map { it.responseTimeMs }.average(),
+                    techMatchRate = techMatchRate
+                )
+            )
+
+            delay(1.seconds)
+        }
+
+        addMessage(
+            role = "assistant",
+            content = """
+            📊 СБОР ДАННЫХ ЗАВЕРШЕН!
+            
+            Статистика:
+            • Протестировано профилей: ${allResults.size}
+            • Всего ответов: ${allResults.sumOf { it.answers.size }}
+            
+            Теперь LLM проанализирует данные и сделает выводы...
+            """.trimIndent(),
+            metadata = "Анализ"
+        )
+        delay(2.seconds)
+
+        // LLM анализ
+        val analysisPrompt = buildAnalysisPrompt(allResults, questions)
+
+        addMessage(
+            role = "assistant",
+            content = "📝 Отправляем данные на анализ...",
+            metadata = "Анализ"
+        )
+        delay(1.seconds)
+
+        val analysisAgent = MemoryAwareAgent(
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = """Ты эксперт по анализу данных и AI-агентов.
+                Твоя задача - проанализировать результаты тестирования
+                и сделать объективные выводы.
+                Отвечай на русском языке, структурированно.
+            """.trimIndent()
+        )
+
+        onTypingStateChanged(true)
+        delay(1.seconds)
+
+        try {
+            val analysis = analysisAgent.processRequest(analysisPrompt)
+
+            addMessage(
+                role = "assistant",
+                content = """
+                🧠 АНАЛИЗ ОТ LLM:
+                
+                ${analysis.content}
+                """.trimIndent(),
+                metadata = "Итоговый анализ",
+                promptTokens = analysis.promptTokens,
+                completionTokens = analysis.completionTokens,
+                totalTokens = analysis.totalTokens,
+                responseTimeMs = analysis.responseTimeMs
+            )
+
+            // Добавляем финальные выводы от LLM
+            val conclusionsPrompt = """
+            На основе проведенного анализа персонализации, сделай краткие выводы:
+            1. Что работает хорошо?
+            2. Что можно улучшить?
+            3. Где применять такую систему?
+            
+            Ответ должен быть кратким (3-5 предложений).
+            """
+
+            val conclusions = analysisAgent.processRequest(conclusionsPrompt)
+            addMessage(
+                role = "assistant",
+                content = """
+                💡 КРАТКИЕ ВЫВОДЫ:
+                
+                ${conclusions.content}
+                """.trimIndent(),
+                metadata = "Финальные выводы",
+                promptTokens = conclusions.promptTokens,
+                completionTokens = conclusions.completionTokens,
+                totalTokens = conclusions.totalTokens,
+                responseTimeMs = conclusions.responseTimeMs
+            )
+
+        } catch (e: Exception) {
+            addMessage(
+                role = "assistant",
+                content = "❌ Ошибка при анализе: ${e.message}",
+                metadata = "Ошибка"
+            )
+        } finally {
+            onTypingStateChanged(false)
+        }
+    }
+
+    // ============================================================
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    // ============================================================
+
+    // src/main/kotlin/com/llmapp/ui/DemoManager.kt
 
     private suspend fun addMessage(
         role: String,
@@ -1524,9 +1613,180 @@ class DemoManager(
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             totalTokens = totalTokens,
-            responseTimeMs = responseTimeMs
+            responseTimeMs = responseTimeMs,
+            isDemoMessage = true
         )
         onMessageAdded(message)
         delay(300.milliseconds)
     }
+
+    private fun buildAnalysisPrompt(
+        results: List<ProfileTestResult>,
+        questions: List<String>
+    ): String {
+        return """
+        📊 ДАННЫЕ ДЛЯ АНАЛИЗА ПЕРСОНАЛИЗАЦИИ АГЕНТА
+        
+        === ОБЩАЯ ИНФОРМАЦИЯ ===
+        • Количество протестированных профилей: ${results.size}
+        • Количество вопросов: ${questions.size}
+        • Всего ответов: ${results.sumOf { it.answers.size }}
+        
+        === ВОПРОСЫ ===
+        ${questions.joinToString("\n") { "  ${questions.indexOf(it) + 1}. $it" }}
+        
+        === РЕЗУЛЬТАТЫ ПО ПРОФИЛЯМ ===
+        
+        ${
+            results.joinToString("\n\n") { result ->
+                """
+            ПРОФИЛЬ: ${result.profileName}
+            • Опыт: ${result.profile.experience}
+            • Технологии: ${result.profile.preferredTech.joinToString(", ")}
+            • Стиль: ${result.profile.preferredStyle.name.lowercase()}
+            • Заметки: ${result.profile.customNotes}
+            
+            МЕТРИКИ:
+            • Всего токенов: ${result.totalTokens}
+            • Средняя длина ответа: ${"%.0f".format(result.avgAnswerLength)} символов
+            • Среднее время ответа: ${"%.0f".format(result.avgResponseTime)} мс
+            • Совпадение с технологиями профиля: ${"%.1f".format(result.techMatchRate)}%
+            
+            ОТВЕТЫ:
+            ${
+                    result.answers.joinToString("\n") { answer ->
+                        """
+                Вопрос: ${answer.question}
+                Длина ответа: ${answer.answerLength} символов
+                Токены: ↑${answer.promptTokens}/↓${answer.completionTokens}/Σ${answer.totalTokens}
+                Технологии упомянуты: ${if (answer.techMentioned) "✅" else "❌"}
+                ${"─".repeat(40)}
+                Фрагмент ответа:
+                ${answer.answer.take(300)}${if (answer.answer.length > 300) "..." else ""}
+                """
+                    }
+                }
+            """
+            }
+        }
+        
+        === ЗАДАНИЕ ДЛЯ АНАЛИЗА ===
+        
+        Проанализируй предоставленные данные и сделай структурированные выводы.
+        Включи в анализ:
+        
+        1. Ключевые наблюдения:
+           - Как влияет профиль пользователя на ответы?
+           - Какие метрики лучше всего отражают персонализацию?
+           - Есть ли корреляции между типом профиля и стилем ответов?
+        
+        2. Сравнительный анализ:
+           - Сравни ответы для разных профилей на одинаковые вопросы
+           - Какие профили дают наиболее персонализированные ответы?
+           - Где персонализация работает лучше всего?
+        
+        3. Сильные стороны текущей реализации:
+           - Что работает хорошо?
+           - Какие аспекты персонализации наиболее эффективны?
+        
+        4. Слабые стороны и предложения по улучшению:
+           - Что можно улучшить?
+           - Какие дополнительные данные могли бы усилить персонализацию?
+        
+        5. Выводы и рекомендации:
+           - Общая оценка персонализации
+           - Рекомендации по улучшению
+           - Где использовать такую систему?
+        
+        Формат ответа:
+        - Структурированный, с заголовками
+        - На русском языке
+        - С конкретными примерами из данных
+        - Объективный анализ, без общих фраз
+        """.trimIndent()
+    }
+
+    private fun updateStats(agent: Any) {
+        when (agent) {
+            is LLMAgent -> {
+                onStatsUpdated?.invoke(agent.getTokenStats())
+                onTokenHistoryUpdated?.invoke(agent.getTokenHistory())
+                onContextWarningUpdated?.invoke(agent.getContextWarning())
+            }
+
+            is CompressedLLMAgent -> {
+                onStatsUpdated?.invoke(agent.getTokenStats())
+                onTokenHistoryUpdated?.invoke(agent.getTokenHistory())
+                onContextWarningUpdated?.invoke(agent.getContextWarning())
+            }
+
+            is StrategicLLMAgent -> {
+                onStatsUpdated?.invoke(agent.getTokenStats())
+                onTokenHistoryUpdated?.invoke(agent.getTokenHistory())
+                val stats = agent.getStrategyStats()
+                val contextSize = stats.contextSizeTokens
+                val warning = when {
+                    contextSize > 100000 -> "🔴 КРИТИЧЕСКИ: Контекст $contextSize токенов"
+                    contextSize > 70000 -> "⚠️ ВНИМАНИЕ: Контекст $contextSize токенов"
+                    else -> "✅ Контекст в порядке: $contextSize токенов"
+                }
+                onContextWarningUpdated?.invoke(warning)
+            }
+
+            is MemoryAwareAgent -> {
+                onStatsUpdated?.invoke(agent.getTokenStats())
+                val stats = agent.getTokenStats()
+                val contextSize = stats.totalTokens
+                val warning = when {
+                    contextSize > 100000 -> "🔴 КРИТИЧЕСКИ: $contextSize токенов"
+                    contextSize > 70000 -> "⚠️ ВНИМАНИЕ: $contextSize токенов"
+                    else -> "✅ Контекст в порядке: $contextSize токенов"
+                }
+                onContextWarningUpdated?.invoke(warning)
+                val snapshot = TokenSnapshot(
+                    requestNumber = stats.requestCount,
+                    promptTokens = stats.totalPromptTokens,
+                    completionTokens = stats.totalCompletionTokens,
+                    totalTokens = stats.totalTokens,
+                    cumulativeTokens = stats.totalTokens,
+                    cumulativeCost = stats.estimatedCostUsd,
+                    contextUsagePercent = 0.0,
+                    timestamp = System.currentTimeMillis(),
+                    contextWindowSize = 131072
+                )
+                onTokenHistoryUpdated?.invoke(listOf(snapshot))
+            }
+
+            else -> {
+                // fallback
+            }
+        }
+    }
+
+    // ============================================================
+    // DATA CLASSES
+    // ============================================================
+
+    data class AnswerRecord(
+        val question: String,
+        val answer: String,
+        val promptTokens: Int,
+        val completionTokens: Int,
+        val totalTokens: Int,
+        val responseTimeMs: Long,
+        val answerLength: Int,
+        val techMentioned: Boolean,
+        val styleMatch: Boolean,
+        val questionAnswered: Boolean
+    )
+
+    data class ProfileTestResult(
+        val profileName: String,
+        val profile: UserProfile,
+        val answers: List<AnswerRecord>,
+        val totalTokens: Int,
+        val avgAnswerLength: Double,
+        val avgResponseTime: Double,
+        val techMatchRate: Double
+    )
 }

@@ -30,7 +30,6 @@ class ChatViewModel : ViewModel() {
     private var _keepLastMessages = 8
     private var _summarizeEvery = 6
 
-    // Сначала инициализируем все Compose State поля
     val messages = mutableStateListOf<ChatMessageUI>()
     val isTyping = mutableStateOf(false)
     val currentModel = mutableStateOf("")
@@ -77,7 +76,6 @@ class ChatViewModel : ViewModel() {
     private var demoManager: DemoManager? = null
 
     init {
-        // Инициализируем сессию после того, как все поля созданы
         initChatSession()
     }
 
@@ -99,6 +97,10 @@ class ChatViewModel : ViewModel() {
             chatSession.getCurrentModel(),
             "Ты полезный ассистент. Отвечай на русском языке."
         )
+    }
+
+    fun startPersonalizationDemo() {
+        demoManager?.startPersonalizationDemo()
     }
 
     private fun recreateChatSession() {
@@ -156,6 +158,7 @@ class ChatViewModel : ViewModel() {
         chatMemoryService?.markAsDemoMode()
 
         demoManager = DemoManager(
+            chatSession = chatSession,
             onMessageAdded = { message ->
                 onMessageAdded(message)
             },
@@ -179,48 +182,17 @@ class ChatViewModel : ViewModel() {
             },
             onStatsUpdated = { stats ->
                 if (isDemoRunning.value) {
-                    val newStats = TokenStats(
-                        totalPromptTokens = stats.totalPromptTokens,
-                        totalCompletionTokens = stats.totalCompletionTokens,
-                        totalTokens = stats.totalTokens,
-                        estimatedCostUsd = stats.estimatedCostUsd,
-                        requestCount = stats.requestCount
-                    )
-
-                    _tokenStatsFlow.value = newStats
-
-                    val contextWindowSize = 131072
-                    val contextPercent = (newStats.totalTokens.toDouble() / contextWindowSize) * 100
-
-                    val snapshot = TokenSnapshot(
-                        requestNumber = stats.requestCount,
-                        promptTokens = stats.totalPromptTokens,
-                        completionTokens = stats.totalCompletionTokens,
-                        totalTokens = stats.totalTokens,
-                        cumulativeTokens = stats.totalTokens,
-                        cumulativeCost = stats.estimatedCostUsd,
-                        contextUsagePercent = contextPercent,
-                        timestamp = System.currentTimeMillis(),
-                        contextWindowSize = contextWindowSize
-                    )
-
-                    val currentHistory = _tokenHistoryFlow.value.toMutableList()
-                    currentHistory.add(snapshot)
-                    _tokenHistoryFlow.value = currentHistory.toList()
-
-                    _contextWarningFlow.value = when {
-                        contextPercent > 90 -> "🔴 КРИТИЧЕСКИ: ${newStats.totalTokens}/131072 (${
-                            "%.1f".format(contextPercent)
-                        }%)"
-
-                        contextPercent > 70 -> "⚠️ ВНИМАНИЕ: ${newStats.totalTokens}/131072 (${
-                            "%.1f".format(contextPercent)
-                        }%)"
-
-                        else -> "✅ Контекст в порядке: ${newStats.totalTokens}/131072 (${
-                            "%.1f".format(contextPercent)
-                        }%)"
-                    }
+                    _tokenStatsFlow.value = stats
+                }
+            },
+            onTokenHistoryUpdated = { history ->
+                if (isDemoRunning.value) {
+                    _tokenHistoryFlow.value = history
+                }
+            },
+            onContextWarningUpdated = { warning ->
+                if (isDemoRunning.value) {
+                    _contextWarningFlow.value = warning
                 }
             }
         )
@@ -304,11 +276,14 @@ class ChatViewModel : ViewModel() {
                         promptTokens = response.promptTokens,
                         completionTokens = response.completionTokens,
                         totalTokens = response.totalTokens,
-                        responseTimeMs = response.responseTimeMs
+                        responseTimeMs = response.responseTimeMs,
+                        isDemoMessage = false
                     )
                 )
 
+                saveCurrentChatIfNeeded()
                 updateTokenStats()
+
             } catch (e: Exception) {
                 messages.add(
                     ChatMessageUI(
@@ -382,9 +357,30 @@ class ChatViewModel : ViewModel() {
 
     fun clearHistory() {
         if (isDemoRunning.value) return
-        chatSession.clearHistory()
+
+        val demoMessages = messages.filter { it.isDemoMessage }
         messages.clear()
+        messages.addAll(demoMessages)
+
+        chatSession.clearHistory()
         updateTokenStats()
+
+        chatMemoryService?.saveCurrentChat(emptyList(), currentModel.value)
+    }
+
+    private fun saveCurrentChatIfNeeded() {
+        if (isDemoRunning.value) {
+            println("📝 Демо-режим: пропускаем сохранение")
+            return
+        }
+
+        val nonDemoMessages = messages.filter { !it.isDemoMessage }
+        if (nonDemoMessages.isEmpty()) {
+            println("📝 Нет обычных сообщений для сохранения")
+            return
+        }
+
+        chatMemoryService?.saveCurrentChatDebounced(nonDemoMessages, currentModel.value)
     }
 
     fun clearTokenStats() {
@@ -474,10 +470,6 @@ class ChatViewModel : ViewModel() {
     fun getChatSession(): ChatSession = chatSession
 
     private fun updateTokenStats() {
-        if (isDemoRunning.value) {
-            return
-        }
-
         val newStats = chatSession.getTokenStats()
         val newHistory = chatSession.getTokenHistory()
         val newWarning = chatSession.getContextWarning()

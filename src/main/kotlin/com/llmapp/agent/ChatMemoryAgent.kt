@@ -72,7 +72,8 @@ class ChatMemoryAgent(
                     promptTokens = msg.promptTokens,
                     completionTokens = msg.completionTokens,
                     totalTokens = msg.totalTokens,
-                    responseTimeMs = msg.responseTimeMs
+                    responseTimeMs = msg.responseTimeMs,
+                    isDemoMessage = false
                 )
             }
         }
@@ -88,10 +89,14 @@ class ChatMemoryAgent(
             return
         }
 
-        if (messages.isEmpty()) return
+        val nonDemoMessages = messages.filter { !it.isDemoMessage }
+        if (nonDemoMessages.isEmpty()) {
+            println("📝 Нет обычных сообщений для сохранения")
+            return
+        }
 
         val chatId = _currentChatId.value
-        val savedMessages = messages.map { msg ->
+        val savedMessages = nonDemoMessages.map { msg ->
             SavedChatMessage(
                 id = msg.id,
                 role = msg.role,
@@ -130,10 +135,13 @@ class ChatMemoryAgent(
     fun saveCurrentChatDebounced(messages: List<ChatMessageUI>, modelUsed: String) {
         if (isDemoMode) return
 
+        val nonDemoMessages = messages.filter { !it.isDemoMessage }
+        if (nonDemoMessages.isEmpty()) return
+
         saveDebounceJob?.cancel()
         saveDebounceJob = CoroutineScope(Dispatchers.Main).launch {
             delay(500.milliseconds)
-            saveCurrentChat(messages, modelUsed)
+            saveCurrentChat(nonDemoMessages, modelUsed)
         }
     }
 

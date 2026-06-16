@@ -107,11 +107,14 @@ fun main() = application {
 
         val (lastChatId, lastMessages) = chatMemoryService.loadLastChat()
         if (lastChatId != null && lastMessages.isNotEmpty()) {
-            viewModel.messages.clear()
-            viewModel.messages.addAll(lastMessages)
+            val nonDemoMessages = lastMessages.filter { !it.isDemoMessage }
+            if (nonDemoMessages.isNotEmpty()) {
+                viewModel.messages.clear()
+                viewModel.messages.addAll(nonDemoMessages)
 
-            val uiMessages = lastMessages.map { it.role to it.content }
-            viewModel.getChatSession().rebuildHistoryFromUiMessages(uiMessages)
+                val uiMessages = nonDemoMessages.map { it.role to it.content }
+                viewModel.getChatSession().rebuildHistoryFromUiMessages(uiMessages)
+            }
         }
     }
 
@@ -183,13 +186,18 @@ fun MainScreen(
 
     val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
 
+    val isDemoRunning by viewModel.isDemoRunning
+
     LaunchedEffect(Unit) {
         viewModel.setChatMemoryService(chatMemoryService)
     }
 
     LaunchedEffect(messages.size, isTyping) {
-        if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping) {
-            chatMemoryService.saveCurrentChatDebounced(messages.toList(), currentModel)
+        if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping && !isDemoRunning) {
+            val nonDemoMessages = messages.filter { !it.isDemoMessage }.toList()
+            if (nonDemoMessages.isNotEmpty()) {
+                chatMemoryService.saveCurrentChatDebounced(nonDemoMessages, currentModel)
+            }
         }
     }
 
@@ -225,8 +233,12 @@ fun MainScreen(
                 }
             },
             onClearHistory = {
+                val demoMessages = viewModel.messages.filter { it.isDemoMessage }
+                viewModel.messages.clear()
+                viewModel.messages.addAll(demoMessages)
                 viewModel.clearHistory()
-                if (messages.isNotEmpty()) {
+
+                if (viewModel.messages.isEmpty()) {
                     chatMemoryService.saveCurrentChat(emptyList(), currentModel)
                 }
                 selectedChatId = null
@@ -314,12 +326,20 @@ fun MainScreen(
                     viewModel.startStrategyDemo()
                     currentScreen = Screen.Chat
                 },
-                onStartMemoryDemo = {  // НОВЫЙ обработчик
+                onStartMemoryDemo = {
                     viewModel.clearHistory()
                     viewModel.initDemoManager { message ->
                         viewModel.addDemoMessage(message)
                     }
                     viewModel.startMemoryDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartPersonalizationDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startPersonalizationDemo()
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,

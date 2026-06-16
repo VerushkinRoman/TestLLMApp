@@ -8,7 +8,8 @@ data class ChatMessageUI(
     val promptTokens: Int? = null,
     val completionTokens: Int? = null,
     val totalTokens: Int? = null,
-    val responseTimeMs: Long? = null
+    val responseTimeMs: Long? = null,
+    val isDemoMessage: Boolean = false
 ) {
     fun getFormattedResponseTime(): String? {
         return responseTimeMs?.let { ms ->
