@@ -557,7 +557,7 @@ class DemoManager(
         val apiKey = ApiConfig.getApiKey()
         val model = "openai/gpt-oss-20b:free"
 
-        // Тест 1: Sliding Window
+        // Тест 1: Sliding Window - НОВЫЙ агент для каждой стратегии
         addMessage(
             role = "assistant",
             content = "\n" + "━".repeat(60) + "\n🔵 ТЕСТ 1: Sliding Window Strategy\n" + "━".repeat(
@@ -577,7 +577,7 @@ class DemoManager(
 
         delay(2.seconds)
 
-        // Тест 2: Sticky Facts
+        // Тест 2: Sticky Facts - НОВЫЙ агент
         addMessage(
             role = "assistant",
             content = "\n" + "━".repeat(60) + "\n🟢 ТЕСТ 2: Sticky Facts Strategy\n" + "━".repeat(60),
@@ -595,7 +595,6 @@ class DemoManager(
 
         delay(2.seconds)
 
-        // Тест 3: Branching
         addMessage(
             role = "assistant",
             content = "\n" + "━".repeat(60) + "\n🟣 ТЕСТ 3: Branching Strategy\n" + "━".repeat(60),
@@ -644,7 +643,6 @@ class DemoManager(
             model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай кратко, по делу, на русском языке."
         )
-
         agent.setStrategy(strategy)
 
         addMessage(
@@ -701,8 +699,9 @@ class DemoManager(
                 if (strategy == ContextStrategyType.STICKY_FACTS && index % 3 == 0 && index > 0) {
                     val facts = agent.getFacts()
                     if (facts.isNotEmpty()) {
-                        val factsText =
-                            facts.entries.joinToString("\n") { "• ${it.key}: ${it.value.take(80)}" }
+                        val factsText = facts.entries.joinToString("\n") {
+                            "• ${it.key}: ${it.value.take(80)}"
+                        }
                         addMessage(
                             role = "assistant",
                             content = "📝 Извлеченные факты из диалога:\n$factsText",
@@ -774,7 +773,8 @@ class DemoManager(
         val agent = MemoryAwareAgent(
             apiKey = apiKey,
             model = model,
-            systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке, по делу, с примерами кода если нужно."
+            systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке, по делу, с примерами кода если нужно.",
+            persistToDisk = false
         )
 
         // ========== ШАГ 1: ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ==========
@@ -1396,23 +1396,27 @@ class DemoManager(
         val allResults = mutableListOf<ProfileTestResult>()
 
         for ((profileName, profile) in profiles) {
-            addMessage(
-                role = "assistant",
-                content = "👤 Тестируем профиль: $profileName\n📝 Стек: ${
-                    profile.preferredTech.joinToString(
-                        ", "
-                    )
-                }",
-                metadata = "Сбор данных"
-            )
-            delay(1.seconds)
-
             val agent = MemoryAwareAgent(
                 apiKey = apiKey,
                 model = model,
-                systemPrompt = "Ты полезный ассистент. Отвечай на русском языке."
+                systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
+                persistToDisk = false
             )
+
             agent.updateProfile(profile)
+
+            addMessage(
+                role = "assistant",
+                content = """
+            ─────────────────────────────────────────────────────────────
+            👤 ТЕСТ ПРОФИЛЯ: $profileName
+            📝 Стек: ${profile.preferredTech.joinToString(", ")}
+            🎯 Стиль: ${profile.preferredStyle.name.lowercase()}
+            ─────────────────────────────────────────────────────────────
+            """.trimIndent(),
+                metadata = "Новый профиль"
+            )
+            delay(1.seconds)
 
             val results = mutableListOf<AnswerRecord>()
 
@@ -1496,25 +1500,15 @@ class DemoManager(
                 )
             )
 
+            addMessage(
+                role = "assistant",
+                content = "─".repeat(60),
+                metadata = "Разделитель"
+            )
+
             delay(1.seconds)
         }
 
-        addMessage(
-            role = "assistant",
-            content = """
-            📊 СБОР ДАННЫХ ЗАВЕРШЕН!
-            
-            Статистика:
-            • Протестировано профилей: ${allResults.size}
-            • Всего ответов: ${allResults.sumOf { it.answers.size }}
-            
-            Теперь LLM проанализирует данные и сделает выводы...
-            """.trimIndent(),
-            metadata = "Анализ"
-        )
-        delay(2.seconds)
-
-        // LLM анализ
         val analysisPrompt = buildAnalysisPrompt(allResults, questions)
 
         addMessage(

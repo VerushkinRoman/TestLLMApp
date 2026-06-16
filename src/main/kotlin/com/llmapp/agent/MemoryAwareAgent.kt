@@ -38,7 +38,8 @@ class MemoryAwareAgent(
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
-    userHome: String = System.getProperty("user.home")
+    userHome: String = System.getProperty("user.home"),
+    private val persistToDisk: Boolean = true
 ) {
     private val apiClient = OpenRouterClient(apiKey)
     private val tokenTracker = TokenTracker()
@@ -55,7 +56,12 @@ class MemoryAwareAgent(
 
     init {
         tokenTracker.updateModel(model)
-        loadLongTermMemory()
+        if (persistToDisk) {
+            loadLongTermMemory()
+        } else {
+            longTermMemory = LongTermMemory()
+            println("🧠 Демо-режим: временная память (без сохранения)")
+        }
     }
 
     private fun loadLongTermMemory() {
@@ -97,9 +103,10 @@ class MemoryAwareAgent(
     fun saveDecisionToLongTerm(topic: String, decision: String, context: String = "") {
         val decisionObj = Decision(topic, decision, context = context)
         longTermMemory = longTermMemory.saveDecision(decisionObj)
-        // Также сохраняем в knowledge base для быстрого доступа
-        longTermManager.saveKnowledge("decision_$topic", decision)
-        println("💾 Решение сохранено в долговременную память: $topic")
+        if (persistToDisk) {
+            longTermManager.saveKnowledge("decision_$topic", decision)
+        }
+        println("💾 Решение сохранено: $topic${if (!persistToDisk) " (временно)" else ""}")
     }
 
     /**
@@ -107,8 +114,10 @@ class MemoryAwareAgent(
      */
     fun addKnowledge(key: String, value: String) {
         longTermMemory = longTermMemory.addToKnowledge(key, value)
-        longTermManager.saveKnowledge(key, value)
-        println("📚 Знание добавлено: $key")
+        if (persistToDisk) {
+            longTermManager.saveKnowledge(key, value)
+        }
+        println("📚 Знание добавлено: $key${if (!persistToDisk) " (временно)" else ""}")
     }
 
     /**
@@ -165,14 +174,18 @@ class MemoryAwareAgent(
 
     fun updateProfile(profile: UserProfile) {
         longTermMemory = longTermMemory.updateProfile(profile)
-        longTermManager.saveProfile(profile)
-        println("👤 Профиль обновлен: ${profile.name}")
+        if (persistToDisk) {
+            longTermManager.saveProfile(profile)
+        }
+        println("👤 Профиль обновлен: ${profile.name}${if (!persistToDisk) " (временно)" else ""}")
     }
 
     fun updateConstraints(constraints: ProjectConstraints) {
         longTermMemory = longTermMemory.updateConstraints(constraints)
-        longTermManager.saveConstraints(constraints)
-        println("🔧 Ограничения обновлены")
+        if (persistToDisk) {
+            longTermManager.saveConstraints(constraints)
+        }
+        println("🔧 Ограничения обновлены${if (!persistToDisk) " (временно)" else ""}")
     }
 
     fun clearWorkingMemory() {

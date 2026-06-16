@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.llmapp.agent.TokenSnapshot
@@ -290,15 +289,14 @@ fun StatusIndicator(warning: String) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.2f),
-        modifier = Modifier.widthIn(max = 200.dp)
+        modifier = Modifier.widthIn(max = 400.dp)
     ) {
         Text(
             text = warning,
             fontSize = 10.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            softWrap = true,
         )
     }
 }

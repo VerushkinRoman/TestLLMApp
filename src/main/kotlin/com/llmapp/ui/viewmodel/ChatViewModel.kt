@@ -631,7 +631,8 @@ class ChatViewModel : ViewModel() {
         memoryAwareAgent = MemoryAwareAgent(
             apiKey = apiKey,
             model = model,
-            systemPrompt = systemPrompt
+            systemPrompt = systemPrompt,
+            persistToDisk = true
         )
 
         _userProfile.value = memoryAwareAgent!!.getUserProfile()

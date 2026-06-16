@@ -91,6 +91,12 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(isTyping) {
+        if (isTyping) {
+            listState.animateScrollToItem(messages.size)
+        }
+    }
+
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }

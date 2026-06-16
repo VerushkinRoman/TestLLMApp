@@ -80,6 +80,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -226,9 +227,11 @@ fun ChatTopBar(
             }
 
             Text(
-                text = currentModel.take(20),
+                text = currentModel,
                 fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = Modifier.padding(horizontal = 8.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     )
@@ -434,7 +437,7 @@ fun MessageBubble(
             else
                 MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 1.dp,
-            modifier = Modifier.widthIn(max = 680.dp)
+            modifier = Modifier.widthIn(max = 1200.dp)
         ) {
             Column(
                 modifier = Modifier.padding(12.dp)
