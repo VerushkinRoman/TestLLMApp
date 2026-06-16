@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import com.llmapp.memory.UserProfile
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -102,7 +103,9 @@ fun ChatTopBar(
     memorySettings: MemorySettings = MemorySettings(),
     onMemorySettingChanged: (MemorySettings) -> Unit = {},
     onEditProfile: () -> Unit = {},
-    onEditConstraints: () -> Unit = {}
+    onEditConstraints: () -> Unit = {},
+    activeProfile: UserProfile = UserProfile(),
+    onShowProfileManager: () -> Unit = {}
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -150,6 +153,27 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            IconButton(
+                onClick = onShowProfileManager,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box {
+                    Text(
+                        text = if (activeProfile.name.isNotEmpty()) "👤" else "👤",
+                        fontSize = 20.sp
+                    )
+                    if (activeProfile.name.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .align(Alignment.BottomEnd),
+                            shape = MaterialTheme.shapes.small,
+                            color = Color(0xFF4CAF50)
+                        ) {}
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .size(36.dp)

@@ -24,11 +24,14 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.controller.ChatStorageManager
+import com.llmapp.memory.UserProfile
 import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ConstraintsEditDialog
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.ModelsPanel
 import com.llmapp.ui.components.ProfileEditDialog
+import com.llmapp.ui.components.ProfileManagerDialog
+import com.llmapp.ui.components.ProfileWelcomeDialog
 import com.llmapp.ui.components.SavedChatsPanel
 import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.models.Screen
@@ -188,6 +191,13 @@ fun MainScreen(
 
     val isDemoRunning by viewModel.isDemoRunning
 
+    val activeProfile by viewModel.activeProfile.collectAsState()
+    val showProfileManager by viewModel.showProfileManager.collectAsState()
+    val showWelcomeDialog by viewModel.showWelcomeDialog.collectAsState()
+    val allProfiles by viewModel.allProfiles.collectAsState()
+
+    var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
+
     LaunchedEffect(Unit) {
         viewModel.setChatMemoryService(chatMemoryService)
     }
@@ -203,11 +213,24 @@ fun MainScreen(
 
     if (showProfileDialog) {
         ProfileEditDialog(
-            profile = userProfile,
-            onDismiss = { showProfileDialog = false },
-            onSave = { profile ->
-                viewModel.updateUserProfile(profile)
+            profile = editingProfile ?: userProfile,
+            onDismiss = {
                 showProfileDialog = false
+                editingProfile = null
+            },
+            onSave = { profile ->
+                if (editingProfile != null && profile.name.isNotEmpty()) {
+                    val existing = allProfiles.find { it.name == profile.name }
+                    if (existing != null) {
+                        viewModel.updateExistingProfile(profile)
+                    } else {
+                        viewModel.switchToProfile(profile)
+                    }
+                } else if (profile.name.isNotEmpty()) {
+                    viewModel.switchToProfile(profile)
+                }
+                showProfileDialog = false
+                editingProfile = null
             }
         )
     }
@@ -220,6 +243,47 @@ fun MainScreen(
                 viewModel.updateProjectConstraints(constraints)
                 showConstraintsDialog = false
             }
+        )
+    }
+
+    if (showWelcomeDialog) {
+        ProfileWelcomeDialog(
+            onSetupProfile = {
+                viewModel.dismissWelcomeDialog()
+                viewModel.toggleProfileManager()
+            },
+            onSkip = {
+                viewModel.dismissWelcomeDialog()
+            }
+        )
+    }
+
+    if (showProfileManager) {
+        ProfileManagerDialog(
+            profiles = allProfiles,
+            activeProfile = activeProfile,
+            onSelectProfile = { profile ->
+                viewModel.switchToProfile(profile)
+                viewModel.dismissProfileManager()
+            },
+            onDeleteProfile = { name ->
+                viewModel.deleteProfile(name)
+            },
+            onEditProfile = { profile ->
+                editingProfile = profile
+                viewModel.dismissProfileManager()
+                showProfileDialog = true
+            },
+            onCreateProfile = {
+                editingProfile = UserProfile()
+                viewModel.dismissProfileManager()
+                showProfileDialog = true
+            },
+            onLoadPreset = { preset ->
+                viewModel.loadPresetProfile(preset)
+                viewModel.dismissProfileManager()
+            },
+            onDismiss = { viewModel.dismissProfileManager() }
         )
     }
 
@@ -298,7 +362,9 @@ fun MainScreen(
                 },
                 onResetWorkingMemory = {
                     viewModel.resetWorkingMemory()
-                }
+                },
+                activeProfile = activeProfile,
+                onShowProfileManager = { viewModel.toggleProfileManager() }
             )
 
             Screen.Demo -> DemoScreen(

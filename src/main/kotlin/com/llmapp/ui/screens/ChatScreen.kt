@@ -76,7 +76,9 @@ fun ChatScreen(
     projectConstraints: ProjectConstraints = ProjectConstraints(),
     onUpdateProfile: (UserProfile) -> Unit = {},
     onUpdateConstraints: (ProjectConstraints) -> Unit = {},
-    onResetWorkingMemory: () -> Unit = {}
+    onResetWorkingMemory: () -> Unit = {},
+    activeProfile: UserProfile = UserProfile(),
+    onShowProfileManager: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -107,7 +109,9 @@ fun ChatScreen(
                 }
             },
             onEditProfile = { showProfileDialog = true },
-            onEditConstraints = { showConstraintsDialog = true }
+            onEditConstraints = { showConstraintsDialog = true },
+            activeProfile = activeProfile,
+            onShowProfileManager = onShowProfileManager
         )
 
         TokenStatsPanel(

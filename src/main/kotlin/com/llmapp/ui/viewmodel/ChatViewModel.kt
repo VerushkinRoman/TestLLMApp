@@ -10,17 +10,22 @@ import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.controller.PresetManager
+import com.llmapp.memory.LongTermMemoryManager
 import com.llmapp.memory.ProjectConstraints
+import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.UserProfile
 import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
 import com.llmapp.ui.DemoManager
 import com.llmapp.ui.components.MemorySettings
+import com.llmapp.ui.components.NamedProfile
+import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 
 class ChatViewModel : ViewModel() {
@@ -69,6 +74,23 @@ class ChatViewModel : ViewModel() {
     private val _projectConstraints = MutableStateFlow(ProjectConstraints())
     val projectConstraints: StateFlow<ProjectConstraints> = _projectConstraints.asStateFlow()
 
+    // StateFlow для профиля
+    private lateinit var profileManager: ProfileManager
+    private val _activeProfile = MutableStateFlow(UserProfile())
+    val activeProfile: StateFlow<UserProfile> = _activeProfile.asStateFlow()
+
+    private val _showProfileManager = MutableStateFlow(false)
+    val showProfileManager: StateFlow<Boolean> = _showProfileManager.asStateFlow()
+
+    private val _showWelcomeDialog = MutableStateFlow(false)
+    val showWelcomeDialog: StateFlow<Boolean> = _showWelcomeDialog.asStateFlow()
+
+    // Добавляем StateFlow для списка профилей
+    private val _allProfiles = MutableStateFlow<List<UserProfile>>(emptyList())
+    val allProfiles: StateFlow<List<UserProfile>> = _allProfiles.asStateFlow()
+
+    private var isFirstLaunch = true
+
     // Поздняя инициализация для остальных полей
     private lateinit var chatSession: ChatSession
     private var memoryAwareAgent: MemoryAwareAgent? = null
@@ -77,6 +99,8 @@ class ChatViewModel : ViewModel() {
 
     init {
         initChatSession()
+        initProfileManager()
+        checkFirstLaunch()
     }
 
     private fun initChatSession() {
@@ -87,7 +111,6 @@ class ChatViewModel : ViewModel() {
             summarizeEvery = _summarizeEvery
         )
 
-        // Теперь можно безопасно устанавливать значения
         currentModel.value = chatSession.getCurrentModel()
         responseControl.value = chatSession.getResponseControl()
         controlEnabled.value = responseControl.value.enabled
@@ -97,6 +120,102 @@ class ChatViewModel : ViewModel() {
             chatSession.getCurrentModel(),
             "Ты полезный ассистент. Отвечай на русском языке."
         )
+    }
+
+    private fun initProfileManager() {
+        val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
+        val longTermManager = LongTermMemoryManager(storageDir)
+        profileManager = ProfileManager(storageDir, longTermManager)
+        loadAllProfiles()
+    }
+
+    private fun loadAllProfiles() {
+        _allProfiles.value = profileManager.getAllProfiles()
+    }
+
+    private fun loadActiveProfile() {
+        val profile = profileManager.getActiveProfile()
+        _activeProfile.value = profile
+        memoryAwareAgent?.updateProfile(profile)
+        println("👤 Загружен активный профиль: ${profile.name}")
+    }
+
+    fun loadPresetProfile(preset: NamedProfile) {
+        val profile = profileManager.createProfileFromPreset(preset)
+        _activeProfile.value = profile
+        memoryAwareAgent?.updateProfile(profile)
+        profileManager.setActiveProfile(profile)
+        loadAllProfiles()
+        println("📋 Загружен пресет: ${preset.name}")
+    }
+
+    fun updateExistingProfile(profile: UserProfile) {
+        if (profile.name.isEmpty()) return
+
+        if (profileManager.updateProfile(profile)) {
+            _activeProfile.value = profile
+            memoryAwareAgent?.updateProfile(profile)
+            profileManager.setActiveProfile(profile)
+            loadAllProfiles()
+            println("🔄 Обновлен профиль: ${profile.name}")
+        } else {
+            println("⚠️ Не удалось обновить профиль: ${profile.name}")
+        }
+    }
+
+    fun switchToProfile(profile: UserProfile) {
+        _activeProfile.value = profile
+        memoryAwareAgent?.updateProfile(profile)
+        profileManager.setActiveProfile(profile)
+        loadAllProfiles()
+        println("🔄 Переключен на профиль: ${profile.name}")
+    }
+
+    fun deleteProfile(name: String) {
+        if (name == _activeProfile.value.name) {
+            val emptyProfile = UserProfile()
+            _activeProfile.value = emptyProfile
+            memoryAwareAgent?.updateProfile(emptyProfile)
+            profileManager.setActiveProfile(emptyProfile)
+        }
+        profileManager.deleteProfile(name)
+        loadAllProfiles()
+        println("🗑️ Удален профиль: $name")
+    }
+
+    fun toggleProfileManager() {
+        _showProfileManager.value = !_showProfileManager.value
+        if (_showProfileManager.value) {
+            loadAllProfiles()
+        }
+    }
+
+    fun dismissProfileManager() {
+        _showProfileManager.value = false
+    }
+
+    fun dismissWelcomeDialog() {
+        _showWelcomeDialog.value = false
+        profileManager.setFirstLaunchCompleted()
+        val defaultProfile = UserProfile(
+            name = "Пользователь",
+            experience = "Разработчик",
+            preferredStyle = ResponseStyle.BALANCED
+        )
+        _activeProfile.value = defaultProfile
+        memoryAwareAgent?.updateProfile(defaultProfile)
+        profileManager.setActiveProfile(defaultProfile)
+        loadAllProfiles()
+    }
+
+    private fun checkFirstLaunch() {
+        if (profileManager.isFirstLaunch()) {
+            _showWelcomeDialog.value = true
+            isFirstLaunch = true
+        } else {
+            loadActiveProfile()
+            isFirstLaunch = false
+        }
     }
 
     fun startPersonalizationDemo() {
@@ -240,6 +359,10 @@ class ChatViewModel : ViewModel() {
 
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
         if (isGenerating.value || isDemoRunning.value) return
+
+        if (_activeProfile.value.name.isEmpty()) {
+            loadActiveProfile()
+        }
 
         if (addToHistory) {
             messages.add(
