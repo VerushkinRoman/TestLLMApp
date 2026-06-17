@@ -44,7 +44,9 @@ class DemoManager(
     private val onTypingStateChanged: (Boolean) -> Unit,
     private val onStatsUpdated: ((TokenStats) -> Unit)? = null,
     private val onTokenHistoryUpdated: ((List<TokenSnapshot>) -> Unit)? = null,
-    private val onContextWarningUpdated: ((String) -> Unit)? = null
+    private val onContextWarningUpdated: ((String) -> Unit)? = null,
+    private val onTaskStateUpdated: (() -> Unit)? = null,
+    private val statefulAgent: StatefulMemoryAgent
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
 
@@ -236,7 +238,7 @@ class DemoManager(
         )
         delay(3.seconds)
 
-        val agent = StatefulMemoryAgent()
+        val agent = statefulAgent
 
         // ============================================================
         // ШАГ 1: Настройка профиля
@@ -246,6 +248,9 @@ class DemoManager(
             content = "📌 ШАГ 1/12: Настройка профиля и ограничений",
             metadata = "⚙️ Настройка"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(1.seconds)
 
         val profile = UserProfile(
@@ -279,6 +284,9 @@ class DemoManager(
         """.trimIndent(),
             metadata = "✅ Шаг 1/12"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(2.seconds)
 
         // ============================================================
@@ -313,6 +321,9 @@ class DemoManager(
         """.trimIndent(),
             metadata = "✅ Шаг 2/12"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(2.seconds)
 
         // ============================================================
@@ -358,6 +369,9 @@ class DemoManager(
             content = "📌 Шаг обновлен: ${agent.getStep()}\n🎯 Ожидается: ${agent.getExpectedAction()}",
             metadata = "📝 Обновление"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(3.seconds)
 
         // ============================================================
@@ -376,6 +390,9 @@ class DemoManager(
             content = "🔄 ${transition1.message}",
             metadata = "✅ Шаг 4/12"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(1.seconds)
 
         // ============================================================
@@ -422,6 +439,9 @@ class DemoManager(
             content = "💾 Решение сохранено в LTM: Модули\n📚 Всего решений: ${agent.getAllDecisions().size}",
             metadata = "💾 Сохранено"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(3.seconds)
 
         // ============================================================
@@ -480,6 +500,9 @@ class DemoManager(
             content = responsePaused.content,
             metadata = "⏸️ Ответ на паузе"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(3.seconds)
 
         // ============================================================
@@ -510,6 +533,9 @@ class DemoManager(
         """.trimIndent(),
             metadata = "▶️ Состояние"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(2.seconds)
 
         // ============================================================
@@ -528,6 +554,9 @@ class DemoManager(
             content = "🔄 ${transition2.message}",
             metadata = "✅ Шаг 8/12"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(1.seconds)
 
         // ============================================================
@@ -573,6 +602,9 @@ class DemoManager(
             content = "📚 Знание добавлено: use_case_pattern\n📚 Всего знаний: ${agent.getAllKnowledge().size}",
             metadata = "📚 Знание"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(3.seconds)
 
         // ============================================================
@@ -591,6 +623,9 @@ class DemoManager(
             content = "🔄 ${transition3.message}",
             metadata = "✅ Шаг 10/12"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(1.seconds)
 
         // ============================================================
@@ -625,6 +660,9 @@ class DemoManager(
             content = response5.content,
             metadata = "📊 Токены: ${response5.totalTokens ?: 0} | ⏱️ ${response5.responseTimeMs}мс"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(3.seconds)
 
         // ============================================================
@@ -673,6 +711,9 @@ class DemoManager(
             content = "✅ Задача завершена: ${agent.isTaskComplete()}",
             metadata = "✅ Статус"
         )
+
+        onTaskStateUpdated?.invoke()
+
         delay(2.seconds)
 
         // ============================================================
@@ -738,6 +779,9 @@ class DemoManager(
             content = "✅ Демонстрация успешно завершена! Можете продолжать общение с агентом.",
             metadata = "✨ Готово!"
         )
+
+        onTaskStateUpdated?.invoke()
+
     }
 
     // ============================================================

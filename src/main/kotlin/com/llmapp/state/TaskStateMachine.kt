@@ -148,10 +148,20 @@ class TaskStateMachine(
     fun getCurrentState(): TaskState = currentState
 
     fun getPhase(): TaskPhase = currentState.phase
+    fun canTransitionTo(targetPhase: TaskPhase): Boolean {
+        if (isPaused && targetPhase != TaskPhase.PAUSED) {
+            return false
+        }
+        return transitions.any { it.from == currentState.phase && it.to == targetPhase }
+    }
     fun getStep(): String = currentState.step
     fun getExpectedAction(): String = currentState.expectedAction
     fun isPaused(): Boolean = isPaused
     fun getPauseReason(): String = pauseReason
+
+    fun hasSnapshot(snapshotId: String): Boolean {
+        return snapshots.containsKey(snapshotId) || loadSnapshotFromFile(snapshotId) != null
+    }
 
     fun createTask(
         taskName: String,
@@ -175,6 +185,13 @@ class TaskStateMachine(
         saveCurrentState()
         createSnapshot("initial_${newState.taskId}")
         return newState
+    }
+
+    fun getAvailableTransitions(): List<TaskPhase> {
+        return transitions
+            .filter { it.from == currentState.phase }
+            .map { it.to }
+            .distinct()
     }
 
     // ============================================================

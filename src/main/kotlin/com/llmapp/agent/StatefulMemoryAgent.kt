@@ -1,3 +1,5 @@
+// src/main/kotlin/com/llmapp/agent/StatefulMemoryAgent.kt
+
 package com.llmapp.agent
 
 import com.llmapp.api.ApiConfig
@@ -7,6 +9,7 @@ import com.llmapp.memory.WorkingMemory
 import com.llmapp.state.TaskPhase
 import com.llmapp.state.TaskStateMachine
 import com.llmapp.state.TransitionResult
+import com.llmapp.state.StateTransition
 import java.io.File
 import com.llmapp.state.TaskState as StateTaskState
 
@@ -21,9 +24,6 @@ data class StatefulResponse(
     val memoryUsed: MemoryUsageInfo? = null
 )
 
-/**
- * StatefulMemoryAgent - объединяет MemoryAwareAgent и TaskStateMachine
- */
 class StatefulMemoryAgent(
     apiKey: String = ApiConfig.getApiKey(),
     private var model: String = "nvidia/nemotron-3-super-120b-a12b:free",
@@ -39,7 +39,6 @@ class StatefulMemoryAgent(
 
     private val stateMachine = TaskStateMachine(File(storageDir))
 
-    // Текущая сессия: связь между сообщениями и состоянием
     private var sessionMessages: MutableList<Pair<String, String>> = mutableListOf()
     private var isResumedFromPause: Boolean = false
     private var currentTaskId: String = ""
@@ -64,7 +63,6 @@ class StatefulMemoryAgent(
 
         sessionMessages.add("system" to "Начинаем работу над задачей: $taskName")
 
-        // Сохраняем начальный снимок
         createSnapshot("initial_${state.taskId}")
 
         return state
@@ -78,12 +76,26 @@ class StatefulMemoryAgent(
     fun getProgress(): Float = stateMachine.getProgress()
     fun isTaskComplete(): Boolean = stateMachine.isTaskComplete()
     fun getPauseReason(): String = stateMachine.getPauseReason()
+    fun canTransitionTo(phase: TaskPhase): Boolean = stateMachine.canTransitionTo(phase)
+    fun getAvailableTransitions(): List<TaskPhase> = stateMachine.getAvailableTransitions()
+    fun getTaskHistory(): List<StateTransition> = stateMachine.getCurrentState().history
+    fun getTaskDescription(): String = stateMachine.getCurrentState().description
+    fun getCurrentUserProfile(): UserProfile = memoryAgent.getUserProfile()
+    fun getCurrentConstraints(): ProjectConstraints = memoryAgent.getProjectConstraints()
 
     // ============================================================
     // ПЕРЕХОДЫ
     // ============================================================
 
     fun transitionTo(phase: TaskPhase, reason: String = ""): TransitionResult {
+        if (!canTransitionTo(phase)) {
+            return TransitionResult(
+                success = false,
+                message = "🚫 Переход в ${phase.displayName} не разрешен из текущей фазы",
+                state = stateMachine.getCurrentState()
+            )
+        }
+
         val result = stateMachine.transitionTo(phase, reason, "user")
         if (result.success) {
             syncWithMemory(phase)
@@ -150,7 +162,6 @@ class StatefulMemoryAgent(
     }
 
     fun getContext(key: String): String? = stateMachine.getContext(key)
-
     fun getAllContext(): Map<String, String> = stateMachine.getCurrentState().context
 
     // ============================================================
@@ -158,7 +169,6 @@ class StatefulMemoryAgent(
     // ============================================================
 
     suspend fun processRequest(userInput: String): StatefulResponse {
-        // Проверяем паузу
         if (stateMachine.isPaused()) {
             return StatefulResponse(
                 content = "⏸️ Задача на паузе. Используйте resume() для продолжения.\n\nПричина: ${stateMachine.getPauseReason()}",
@@ -180,6 +190,7 @@ class StatefulMemoryAgent(
 
         sessionMessages.add("assistant" to response.content)
 
+        // ✅ АВТОМАТИЧЕСКИЙ ПЕРЕХОД
         val transitionResult = autoTransitionBasedOnResponse(response.content)
 
         if (transitionResult?.success == true) {
@@ -203,6 +214,11 @@ class StatefulMemoryAgent(
     // ============================================================
 
     fun restoreFromSnapshot(snapshotId: String): Boolean {
+        if (!stateMachine.hasSnapshot(snapshotId)) {
+            println("⚠️ Снимок $snapshotId не найден")
+            return false
+        }
+
         val success = stateMachine.restoreFromSnapshot(snapshotId)
         if (success) {
             val snapshot = stateMachine.loadSnapshot(snapshotId)
@@ -212,9 +228,17 @@ class StatefulMemoryAgent(
                 isResumedFromPause = true
                 currentTaskId = it.state.taskId
                 syncWithMemory(it.state.phase)
+
+                // Восстанавливаем контекст в memory agent
+                it.state.context.forEach { (key, value) ->
+                    memoryAgent.updateWorkingContext(key, value)
+                }
+
+                println("✅ Восстановлен снимок: $snapshotId")
             }
+            return true
         }
-        return success
+        return false
     }
 
     fun getSnapshots(): List<Pair<String, String>> {
@@ -308,7 +332,6 @@ class StatefulMemoryAgent(
         appendLine("=".repeat(60))
         appendLine()
 
-        // Состояние задачи
         val state = stateMachine.getCurrentState()
         appendLine("📌 ЗАДАЧА:")
         appendLine("  • Название: ${state.taskName}")
@@ -324,7 +347,8 @@ class StatefulMemoryAgent(
             appendLine("  • Контекст: ${state.context.size} ключей")
         }
 
-        // Память
+        appendLine("  • Доступные переходы: ${getAvailableTransitions().joinToString { it.displayName }}")
+
         appendLine()
         appendLine("🧠 ПАМЯТЬ:")
         appendLine("  • Профиль: ${getUserProfile().name.ifEmpty { "не настроен" }}")
@@ -333,11 +357,9 @@ class StatefulMemoryAgent(
         appendLine("  • Решений в LTM: ${getAllDecisions().size}")
         appendLine("  • Токенов: ${getTokenStats().totalTokens}")
 
-        // Снимки
         appendLine()
         appendLine("📸 СНИМКИ: ${getSnapshots().size}")
 
-        // Модель
         appendLine()
         appendLine("🤖 МОДЕЛЬ: $model")
 
@@ -388,10 +410,11 @@ class StatefulMemoryAgent(
         }
     }
 
-    private suspend fun autoTransitionBasedOnResponse(content: String): TransitionResult? {
+    private fun autoTransitionBasedOnResponse(content: String): TransitionResult? {
         val lower = content.lowercase()
 
         return when {
+            // Завершение
             lower.contains("завершено") || lower.contains("готово") || lower.contains("выполнено") -> {
                 if (stateMachine.getPhase() == TaskPhase.EXECUTION) {
                     stateMachine.transitionTo(
@@ -400,17 +423,8 @@ class StatefulMemoryAgent(
                     )
                 } else null
             }
-
-            lower.contains("план утвержден") || lower.contains("план готов") -> {
-                if (stateMachine.getPhase() == TaskPhase.PLANNING) {
-                    stateMachine.transitionTo(
-                        TaskPhase.EXECUTION,
-                        "Автоматический переход: план утвержден"
-                    )
-                } else null
-            }
-
-            lower.contains("проверка пройдена") || lower.contains("все работает") -> {
+            // Проверка пройдена → Done
+            lower.contains("проверка пройдена") || lower.contains("все работает") || lower.contains("успешно") -> {
                 if (stateMachine.getPhase() == TaskPhase.VALIDATION) {
                     stateMachine.transitionTo(
                         TaskPhase.DONE,
@@ -418,8 +432,17 @@ class StatefulMemoryAgent(
                     )
                 } else null
             }
-
-            lower.contains("надо переделать") || lower.contains("не работает") -> {
+            // План утвержден → Execution
+            lower.contains("план утвержден") || lower.contains("план готов") || lower.contains("утверждаю") -> {
+                if (stateMachine.getPhase() == TaskPhase.PLANNING) {
+                    stateMachine.transitionTo(
+                        TaskPhase.EXECUTION,
+                        "Автоматический переход: план утвержден"
+                    )
+                } else null
+            }
+            // Требуется доработка → Execution
+            lower.contains("надо переделать") || lower.contains("не работает") || lower.contains("ошибка") -> {
                 if (stateMachine.getPhase() == TaskPhase.VALIDATION) {
                     stateMachine.transitionTo(
                         TaskPhase.EXECUTION,
@@ -427,16 +450,15 @@ class StatefulMemoryAgent(
                     )
                 } else null
             }
-
-            lower.contains("нужны уточнения") || lower.contains("непонятно") -> {
-                if (stateMachine.getPhase() == TaskPhase.PLANNING) {
+            // Нужны уточнения → Init
+            lower.contains("нужны уточнения") || lower.contains("непонятно") || lower.contains("уточните") -> {
+                if (stateMachine.getPhase() == TaskPhase.PLANNING || stateMachine.getPhase() == TaskPhase.EXECUTION) {
                     stateMachine.transitionTo(
                         TaskPhase.INIT,
                         "Автоматический переход: нужны уточнения"
                     )
                 } else null
             }
-
             else -> null
         }
     }

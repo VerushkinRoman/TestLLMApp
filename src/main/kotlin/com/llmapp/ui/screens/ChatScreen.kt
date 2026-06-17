@@ -38,15 +38,19 @@ import com.llmapp.agent.TokenSnapshot
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.UserProfile
 import com.llmapp.model.TokenStats
+import com.llmapp.state.TaskPhase
 import com.llmapp.ui.components.ChatTopBar
 import com.llmapp.ui.components.ConstraintsEditDialog
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.MessageBubble
 import com.llmapp.ui.components.MessageInput
 import com.llmapp.ui.components.ProfileEditDialog
+import com.llmapp.ui.components.SnapshotDialog
+import com.llmapp.ui.components.TaskStatePanel
 import com.llmapp.ui.components.TokenStatsPanel
 import com.llmapp.ui.components.TypingIndicator
 import com.llmapp.ui.models.ChatMessageUI
+import com.llmapp.ui.models.TaskStateUI
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +82,21 @@ fun ChatScreen(
     onUpdateConstraints: (ProjectConstraints) -> Unit = {},
     onResetWorkingMemory: () -> Unit = {},
     activeProfile: UserProfile = UserProfile(),
-    onShowProfileManager: () -> Unit = {}
+    onShowProfileManager: () -> Unit = {},
+    taskState: TaskStateUI? = null,
+    onTransition: (TaskPhase) -> Unit = {},
+    onPauseTask: () -> Unit = {},
+    onResumeTask: () -> Unit = {},
+    onBlockTask: () -> Unit = {},
+    onUnblockTask: () -> Unit = {},
+    onShowSnapshots: () -> Unit = {},
+    onCreateSnapshot: (String) -> Unit = {},
+    onRestoreSnapshot: (String) -> Unit = {},
+    showSnapshotDialog: Boolean = false,
+    snapshots: List<Pair<String, String>> = emptyList(),
+    onDismissSnapshotDialog: () -> Unit = {},
+    onGetSnapshotDetails: ((String) -> String)? = null,
+    onCreateTask: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -117,8 +135,22 @@ fun ChatScreen(
             onEditProfile = { showProfileDialog = true },
             onEditConstraints = { showConstraintsDialog = true },
             activeProfile = activeProfile,
-            onShowProfileManager = onShowProfileManager
+            onShowProfileManager = onShowProfileManager,
+            onCreateTask = onCreateTask
         )
+
+        if (taskState != null) {
+            TaskStatePanel(
+                state = taskState,
+                onTransition = onTransition,
+                onPause = onPauseTask,
+                onResume = onResumeTask,
+                onBlock = onBlockTask,
+                onUnblock = onUnblockTask,
+                onShowSnapshots = onShowSnapshots,
+                isDemoRunning = isDemoRunning
+            )
+        }
 
         TokenStatsPanel(
             stats = tokenStats,
@@ -221,6 +253,16 @@ fun ChatScreen(
                 onUpdateConstraints(constraints)
                 showConstraintsDialog = false
             }
+        )
+    }
+
+    if (showSnapshotDialog) {
+        SnapshotDialog(
+            snapshots = snapshots,
+            onRestore = onRestoreSnapshot,
+            onCreate = onCreateSnapshot,
+            onDismiss = onDismissSnapshotDialog,
+            onGetDetails = onGetSnapshotDetails,
         )
     }
 }

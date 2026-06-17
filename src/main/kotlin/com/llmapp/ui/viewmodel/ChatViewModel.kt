@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.agent.MemoryAwareAgent
+import com.llmapp.agent.StatefulMemoryAgent
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
@@ -16,11 +17,13 @@ import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.UserProfile
 import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
+import com.llmapp.state.TaskPhase
 import com.llmapp.ui.DemoManager
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.NamedProfile
 import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
+import com.llmapp.ui.models.TaskStateUI
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,6 +94,20 @@ class ChatViewModel : ViewModel() {
 
     private var isFirstLaunch = true
 
+    // StatefulMemoryAgent
+    private lateinit var statefulAgent: StatefulMemoryAgent
+    private val _taskState = MutableStateFlow<TaskStateUI?>(null)
+    val taskState: StateFlow<TaskStateUI?> = _taskState.asStateFlow()
+
+    private val _showSnapshotDialog = MutableStateFlow(false)
+    val showSnapshotDialog: StateFlow<Boolean> = _showSnapshotDialog.asStateFlow()
+
+    private val _snapshots = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val snapshots: StateFlow<List<Pair<String, String>>> = _snapshots.asStateFlow()
+
+    private val _showCreateTaskDialog = MutableStateFlow(false)
+    val showCreateTaskDialog: StateFlow<Boolean> = _showCreateTaskDialog.asStateFlow()
+
     // Поздняя инициализация для остальных полей
     private lateinit var chatSession: ChatSession
     private var memoryAwareAgent: MemoryAwareAgent? = null
@@ -101,6 +118,38 @@ class ChatViewModel : ViewModel() {
         initChatSession()
         initProfileManager()
         checkFirstLaunch()
+        initStatefulAgent()
+    }
+
+    fun toggleCreateTaskDialog() {
+        _showCreateTaskDialog.value = !_showCreateTaskDialog.value
+    }
+
+    fun createNewTask(name: String, description: String = "") {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        statefulAgent.createTask(name, description)
+        updateTaskStateUI()
+        _showCreateTaskDialog.value = false
+
+        messages.add(
+            ChatMessageUI(
+                id = UUID.randomUUID().toString(),
+                role = "assistant",
+                content = """
+                ✅ Задача '$name' создана!
+                
+                📋 Текущая фаза: Сбор требований
+                🎯 Ожидается: Опишите, что нужно сделать
+                
+                💡 Используйте панель управления для навигации по этапам.
+                📝 Укажите стек технологий и ограничения в описании задачи.
+            """.trimIndent(),
+                isDemoMessage = false
+            )
+        )
     }
 
     private fun initChatSession() {
@@ -299,6 +348,7 @@ class ChatViewModel : ViewModel() {
                 isTyping.value = false
                 chatMemoryService?.createNewChat()
                 updateTokenStats()
+                updateTaskStateUI()
             },
             onTypingStateChanged = { typing ->
                 isTyping.value = typing
@@ -317,7 +367,11 @@ class ChatViewModel : ViewModel() {
                 if (isDemoRunning.value) {
                     _contextWarningFlow.value = warning
                 }
-            }
+            },
+            onTaskStateUpdated = {
+                updateTaskStateUI()
+            },
+            statefulAgent = if (::statefulAgent.isInitialized) statefulAgent else initStatefulAgent(),
         )
     }
 
@@ -364,6 +418,197 @@ class ChatViewModel : ViewModel() {
     fun sendMessage(userMessage: String, addToHistory: Boolean = true) {
         if (isGenerating.value || isDemoRunning.value) return
 
+        // ============================================================
+        // КОМАНДЫ STATEFUL AGENT
+        // ============================================================
+
+        // /task <название> - создать задачу
+        if (userMessage.startsWith("/task ")) {
+            val taskName = userMessage.removePrefix("/task ").trim()
+            if (taskName.isNotEmpty()) {
+                createTask(taskName)
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "✅ Задача '$taskName' создана!\n\n" +
+                                "📋 Текущая фаза: Сбор требований\n" +
+                                "🎯 Ожидается: Опишите, что нужно сделать\n\n" +
+                                "Используйте панель управления для навигации по этапам.\n" +
+                                "Доступные команды:\n" +
+                                "  • /status - показать статус задачи\n" +
+                                "  • /snapshots - открыть диалог снимков\n" +
+                                "  • /pause - поставить задачу на паузу\n" +
+                                "  • /resume - возобновить задачу",
+                        isDemoMessage = false
+                    )
+                )
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ Укажите название задачи: /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /status - показать статус
+        if (userMessage == "/status") {
+            if (::statefulAgent.isInitialized) {
+                val status = statefulAgent.getFullStatus()
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = status,
+                        isDemoMessage = false
+                    )
+                )
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /snapshots - открыть диалог снимков
+        if (userMessage == "/snapshots") {
+            if (::statefulAgent.isInitialized) {
+                toggleSnapshotDialog()
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "📸 Открыт диалог управления снимками",
+                        isDemoMessage = false
+                    )
+                )
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /pause - пауза
+        if (userMessage == "/pause") {
+            if (::statefulAgent.isInitialized) {
+                pauseTask("Пауза по команде /pause")
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /resume - возобновить
+        if (userMessage == "/resume") {
+            if (::statefulAgent.isInitialized) {
+                resumeTask()
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /help - справка по командам
+        if (userMessage == "/help") {
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = """
+            📚 ДОСТУПНЫЕ КОМАНДЫ:
+            
+            🎯 Управление задачами:
+              /task <название> - создать новую задачу
+              /status - показать полный статус задачи
+              /clear-task - очистить состояние задачи
+              
+            ⏸️ Управление состоянием:
+              /pause - поставить задачу на паузу
+              /resume - возобновить задачу
+              
+            📸 Снимки:
+              /snapshots - открыть диалог управления снимками
+              
+            📊 Токены:
+              /tokens - показать статистику токенов
+              
+            ℹ️ Справка:
+              /help - показать эту справку
+            
+            💡 Также используйте панель управления в интерфейсе чата!
+        """.trimIndent(),
+                    isDemoMessage = false
+                )
+            )
+            return
+        }
+
+        // /clear-task - очистить задачу
+        if (userMessage == "/clear-task") {
+            clearTask()
+            return
+        }
+
+        // /tokens - статистика токенов
+        if (userMessage == "/tokens") {
+            val stats = chatSession.getTokenStats()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = """
+                    📊 СТАТИСТИКА ТОКЕНОВ:
+                    
+                    • Запросов: ${stats.requestCount}
+                    • Всего токенов: ${stats.totalTokens}
+                    • Prompt токенов: ${stats.totalPromptTokens}
+                    • Completion токенов: ${stats.totalCompletionTokens}
+                    • Стоимость: ${stats.getFormattedCost()}
+                    
+                    ${chatSession.getContextWarning()}
+                """.trimIndent(),
+                    isDemoMessage = false
+                )
+            )
+            return
+        }
+
+        // ============================================================
+        // ОБЫЧНЫЙ ЧАТ
+        // ============================================================
+
         if (_activeProfile.value.name.isEmpty()) {
             loadActiveProfile()
         }
@@ -407,6 +652,28 @@ class ChatViewModel : ViewModel() {
                         isDemoMessage = false
                     )
                 )
+
+                // Автоматический переход на основе ответа (если StatefulAgent инициализирован)
+                if (::statefulAgent.isInitialized) {
+                    val state = statefulAgent.getCurrentTaskState()
+                    if (state.taskName.isNotEmpty()) {
+                        // Проверяем, не содержит ли ответ признаков завершения этапа
+                        val lowerContent = response.content.lowercase()
+                        when {
+                            lowerContent.contains("план утвержден") || lowerContent.contains("утверждаю план") -> {
+                                transitionTo(TaskPhase.EXECUTION)
+                            }
+
+                            lowerContent.contains("код написан") || lowerContent.contains("готово") -> {
+                                transitionTo(TaskPhase.VALIDATION)
+                            }
+
+                            lowerContent.contains("проверка пройдена") || lowerContent.contains("все работает") -> {
+                                transitionTo(TaskPhase.DONE)
+                            }
+                        }
+                    }
+                }
 
                 saveCurrentChatIfNeeded()
                 updateTokenStats()
@@ -629,6 +896,249 @@ class ChatViewModel : ViewModel() {
     fun forceRotateToNextKey() {
         ApiConfig.rotateToNextKey()
         chatSession.refreshApiKeys()
+    }
+
+    fun initStatefulAgent(apiKey: String = ApiConfig.getApiKey()): StatefulMemoryAgent {
+        if (!::statefulAgent.isInitialized) {
+            statefulAgent = StatefulMemoryAgent(apiKey = apiKey)
+            println("🧠 StatefulMemoryAgent инициализирован")
+        }
+        updateTaskStateUI()
+        return statefulAgent
+    }
+
+    fun createTask(taskName: String, description: String = "") {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        statefulAgent.createTask(taskName, description)
+        updateTaskStateUI()
+    }
+
+    fun transitionTo(phase: TaskPhase) {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        val result = statefulAgent.transitionTo(phase)
+        if (result.success) {
+            updateTaskStateUI()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "🔄 ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+    }
+
+    fun pauseTask(reason: String = "Пауза по запросу пользователя") {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        val result = statefulAgent.pause(reason)
+        if (result.success) {
+            updateTaskStateUI()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "⏸️ ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+    }
+
+    fun resumeTask() {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        val result = statefulAgent.resume()
+        if (result.success) {
+            updateTaskStateUI()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "▶️ ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+    }
+
+    fun blockTask(reason: String = "Блокировка") {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        val result = statefulAgent.block(reason)
+        if (result.success) {
+            updateTaskStateUI()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "🚫 ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+    }
+
+    fun unblockTask() {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        val result = statefulAgent.unblock()
+        if (result.success) {
+            updateTaskStateUI()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "🔓 ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+    }
+
+    private fun updateTaskStateUI() {
+        if (!::statefulAgent.isInitialized) {
+            _taskState.value = null
+            return
+        }
+        val state = statefulAgent.getCurrentTaskState()
+        _taskState.value = TaskStateUI(
+            phase = state.phase,
+            step = state.step,
+            expectedAction = state.expectedAction,
+            isPaused = statefulAgent.isPaused(),
+            isBlocked = state.phase == TaskPhase.BLOCKED,
+            progress = statefulAgent.getProgress(),
+            taskName = state.taskName,
+            elapsedTime = state.getElapsedTime(),
+            availableTransitions = statefulAgent.getAvailableTransitions()
+        )
+    }
+
+// ============================================================
+// МЕТОДЫ ДЛЯ РАБОТЫ СО СНИМКАМИ
+// ============================================================
+
+    fun toggleSnapshotDialog() {
+        _showSnapshotDialog.value = !_showSnapshotDialog.value
+        if (_showSnapshotDialog.value) {
+            updateSnapshots()
+        }
+    }
+
+    fun dismissSnapshotDialog() {
+        _showSnapshotDialog.value = false
+    }
+
+    fun createSnapshot(name: String) {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "⚠️ StatefulAgent не инициализирован. Сначала создайте задачу командой /task <название>",
+                    isDemoMessage = false
+                )
+            )
+            return
+        }
+        val id = statefulAgent.createSnapshot(name)
+        updateSnapshots()
+        messages.add(
+            ChatMessageUI(
+                id = UUID.randomUUID().toString(),
+                role = "assistant",
+                content = "📸 Снимок '$name' создан (ID: ${id.take(8)})",
+                isDemoMessage = false
+            )
+        )
+    }
+
+    fun restoreSnapshot(id: String) {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "⚠️ StatefulAgent не инициализирован",
+                    isDemoMessage = false
+                )
+            )
+            return
+        }
+        if (statefulAgent.restoreFromSnapshot(id)) {
+            updateTaskStateUI()
+            updateSnapshots()
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "📸 Восстановлен снимок: $id",
+                    isDemoMessage = false
+                )
+            )
+        } else {
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "❌ Не удалось восстановить снимок: $id",
+                    isDemoMessage = false
+                )
+            )
+        }
+        _showSnapshotDialog.value = false
+    }
+
+    fun getSnapshotDetails(id: String): String {
+        if (!::statefulAgent.isInitialized) {
+            return "⚠️ StatefulAgent не инициализирован"
+        }
+        return statefulAgent.getSnapshotDetails(id)
+    }
+
+    private fun updateSnapshots() {
+        if (!::statefulAgent.isInitialized) {
+            _snapshots.value = emptyList()
+            return
+        }
+        _snapshots.value = statefulAgent.getSnapshots()
+    }
+
+    fun clearTask() {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        // Создаем новую пустую задачу
+        statefulAgent.createTask("", "")
+        updateTaskStateUI()
+        _snapshots.value = emptyList()
+        messages.add(
+            ChatMessageUI(
+                id = UUID.randomUUID().toString(),
+                role = "assistant",
+                content = "🗑️ Состояние задачи очищено",
+                isDemoMessage = false
+            )
+        )
     }
 
     private fun initMemoryAgent(apiKey: String, model: String, systemPrompt: String) {

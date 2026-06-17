@@ -70,6 +70,13 @@ class StatefulDemo {
 
         delay(2.seconds)
 
+        println("\n📌 Проверка доступных переходов:")
+        val available = agent.getAvailableTransitions()
+        println("   Доступные переходы из ${agent.getPhase().displayName}:")
+        available.forEach { phase ->
+            println("      → ${phase.displayName}")
+        }
+
         // ============================================================
         // ШАГ 3: РАБОТА В ФАЗЕ INIT
         // ============================================================
@@ -90,6 +97,10 @@ class StatefulDemo {
         println("\n📌 Обновлен шаг: ${agent.getStep()}")
 
         delay(2.seconds)
+
+        println("\n📌 Проверка возможности перехода:")
+        val canTransition = agent.canTransitionTo(TaskPhase.EXECUTION)
+        println("   Можно перейти в EXECUTION? ${if (canTransition) "✅ Да" else "❌ Нет"}")
 
         // ============================================================
         // ШАГ 4: ПЕРЕХОД В PLANNING
@@ -138,6 +149,32 @@ class StatefulDemo {
         val responsePaused = agent.processRequest("Продолжим планирование")
         println("\n👤: Продолжим планирование")
         println("🤖: ${responsePaused.content.take(100)}...")
+
+        delay(2.seconds)
+
+        // ============================================================
+        // ШАГ 5.5: БЛОКИРОВКА
+        // ============================================================
+        println("\n📌 ШАГ 5.5: Демонстрация блокировки")
+        println("-".repeat(60))
+
+        val blockResult = agent.block("Нужно согласовать API ключи с командой")
+        println("🚫 ${blockResult.message}")
+        println("📊 Текущая фаза: ${agent.getPhase().displayName}")
+
+        // Пытаемся отправить запрос в заблокированном состоянии
+        println("\n👤: Заблокировано?")
+        val blockedResponse = agent.processRequest("Можем ли мы продолжить?")
+        println("🤖: ${blockedResponse.content.take(100)}...")
+        println("📊 Фаза: ${blockedResponse.taskState.phase.displayName}")
+
+        delay(2.seconds)
+
+        // Разблокировка
+        println("\n🔓 Разблокировка...")
+        val unblockResult = agent.unblock()
+        println("🔓 ${unblockResult.message}")
+        println("📊 Текущая фаза: ${agent.getPhase().displayName}")
 
         delay(2.seconds)
 

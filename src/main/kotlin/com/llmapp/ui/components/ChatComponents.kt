@@ -106,7 +106,8 @@ fun ChatTopBar(
     onEditProfile: () -> Unit = {},
     onEditConstraints: () -> Unit = {},
     activeProfile: UserProfile = UserProfile(),
-    onShowProfileManager: () -> Unit = {}
+    onShowProfileManager: () -> Unit = {},
+    onCreateTask: () -> Unit = {}
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -154,6 +155,13 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            IconButton(
+                onClick = onCreateTask,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text("📋", fontSize = 20.sp)
+            }
+
             IconButton(
                 onClick = onShowProfileManager,
                 modifier = Modifier.size(36.dp)

@@ -27,6 +27,7 @@ import com.llmapp.controller.ChatStorageManager
 import com.llmapp.memory.UserProfile
 import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ConstraintsEditDialog
+import com.llmapp.ui.components.CreateTaskDialog
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.ModelsPanel
 import com.llmapp.ui.components.ProfileEditDialog
@@ -196,6 +197,8 @@ fun MainScreen(
     val showWelcomeDialog by viewModel.showWelcomeDialog.collectAsState()
     val allProfiles by viewModel.allProfiles.collectAsState()
 
+    val showCreateTaskDialog by viewModel.showCreateTaskDialog.collectAsState()
+
     var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
 
     LaunchedEffect(Unit) {
@@ -287,6 +290,15 @@ fun MainScreen(
         )
     }
 
+    if (showCreateTaskDialog) {
+        CreateTaskDialog(
+            onDismiss = { viewModel.toggleCreateTaskDialog() },
+            onCreate = { name, description ->
+                viewModel.createNewTask(name, description)
+            }
+        )
+    }
+
     Row(modifier = Modifier.fillMaxSize()) {
         AppNavigationRail(
             currentScreen = currentScreen,
@@ -364,7 +376,21 @@ fun MainScreen(
                     viewModel.resetWorkingMemory()
                 },
                 activeProfile = activeProfile,
-                onShowProfileManager = { viewModel.toggleProfileManager() }
+                onShowProfileManager = { viewModel.toggleProfileManager() },
+                taskState = viewModel.taskState.value,
+                onTransition = { viewModel.transitionTo(it) },
+                onPauseTask = { viewModel.pauseTask() },
+                onResumeTask = { viewModel.resumeTask() },
+                onBlockTask = { viewModel.blockTask() },
+                onUnblockTask = { viewModel.unblockTask() },
+                onShowSnapshots = { viewModel.toggleSnapshotDialog() },
+                onCreateSnapshot = { viewModel.createSnapshot(it) },
+                onRestoreSnapshot = { viewModel.restoreSnapshot(it) },
+                showSnapshotDialog = viewModel.showSnapshotDialog.value,
+                snapshots = viewModel.snapshots.value,
+                onDismissSnapshotDialog = { viewModel.dismissSnapshotDialog() },
+                onGetSnapshotDetails = { viewModel.getSnapshotDetails(it) },
+                onCreateTask = { viewModel.toggleCreateTaskDialog() }
             )
 
             Screen.Demo -> DemoScreen(
