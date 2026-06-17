@@ -129,6 +129,10 @@ class ChatViewModel : ViewModel() {
         loadAllProfiles()
     }
 
+    fun startStatefulDemo() {
+        demoManager?.startStatefulDemo()
+    }
+
     private fun loadAllProfiles() {
         _allProfiles.value = profileManager.getAllProfiles()
     }

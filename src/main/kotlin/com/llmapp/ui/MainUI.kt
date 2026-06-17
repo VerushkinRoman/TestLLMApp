@@ -408,6 +408,14 @@ fun MainScreen(
                     viewModel.startPersonalizationDemo()
                     currentScreen = Screen.Chat
                 },
+                onStartStatefulDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startStatefulDemo()
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = viewModel.isDemoRunning.value,
                 onClearHistory = {
                     viewModel.clearHistory()

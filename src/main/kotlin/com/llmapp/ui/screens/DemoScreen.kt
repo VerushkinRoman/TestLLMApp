@@ -48,6 +48,7 @@ fun DemoScreen(
     onStartStrategyDemo: () -> Unit,
     onStartMemoryDemo: () -> Unit,
     onStartPersonalizationDemo: () -> Unit,
+    onStartStatefulDemo: () -> Unit,
     isDemoRunning: Boolean,
     onClearHistory: () -> Unit = {}
 ) {
@@ -96,6 +97,15 @@ fun DemoScreen(
             features = listOf("Профили", "Стили", "Ограничения"),
             color = Color(0xFFE91E63),
             onStart = onStartPersonalizationDemo
+        ),
+        DemoItem(
+            id = "stateful",
+            title = "🧠 Stateful Agent",
+            icon = Icons.Default.Memory,
+            description = "Полная демонстрация агента с конечным автоматом",
+            features = listOf("Task State", "Пауза", "Снимки"),
+            color = Color(0xFF673AB7),
+            onStart = onStartStatefulDemo
         )
     )
 
