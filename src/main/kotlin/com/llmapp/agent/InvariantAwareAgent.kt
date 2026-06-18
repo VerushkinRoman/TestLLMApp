@@ -32,7 +32,8 @@ class InvariantAwareAgent(
     private val invariantSetName: String? = null,
     private val invariantSet: InvariantSet? = null,
     maxHistorySize: Int = 50,
-    private val maxRetries: Int = 3
+    val maxRetries: Int = 3,
+    private val onAgentMessage: (suspend (String, String?) -> Unit)? = null
 ) {
     private val apiClient = OpenRouterClient(apiKey)
 
@@ -114,6 +115,9 @@ class InvariantAwareAgent(
             val enhancedPrompt = enhancePrompt(userInput)
             history.addUserMessage(enhancedPrompt)
 
+            // Отправляем сообщение о начале обработки
+            onAgentMessage?.invoke("🤔 Анализирую запрос...", "⏳ ОБРАБОТКА")
+
             val (response, responseTime) = sendToLLM()
 
             if (response.error != null) {
@@ -123,12 +127,6 @@ class InvariantAwareAgent(
             val answer = response.choices?.firstOrNull()?.message?.content
                 ?: throw Exception("Empty API response")
 
-            // Выводим полный ответ для отладки
-            println("📝 ПОЛНЫЙ ОТВЕТ АГЕНТА:")
-            println("=".repeat(60))
-            println(answer)
-            println("=".repeat(60))
-
             // Проверяем инварианты
             val currentInvariantSet = activeInvariantSet
             val invariantResults = currentInvariantSet?.check(answer) ?: emptyList()
@@ -136,18 +134,32 @@ class InvariantAwareAgent(
 
             // Если есть нарушения
             if (violations.isNotEmpty()) {
-                println("\n⚠️ ОБНАРУЖЕНЫ НАРУШЕНИЯ (${violations.size}):")
-                violations.forEach { result ->
-                    println("   ❌ ${result.invariant.name}: ${result.invariant.description}")
-                    println("      Строгость: ${result.invariant.severity}")
-                    if (result.suggestions.isNotEmpty()) {
-                        println("      💡 ${result.suggestions.joinToString("; ")}")
-                    }
-                }
-                println()
+                val errorViolations =
+                    violations.filter { it.invariant.severity == Invariant.Severity.ERROR }
 
-                // Если это последняя попытка или превышен лимит
+                // Показываем, что ответ нарушает инварианты (только если есть ERROR)
+                if (errorViolations.isNotEmpty()) {
+                    onAgentMessage?.invoke(
+                        buildString {
+                            append("⚠️ МОЙ ОТВЕТ НАРУШАЕТ ИНВАРИАНТЫ!\n\n")
+                            append("Нарушения (${errorViolations.size}):\n")
+                            errorViolations.forEach { result ->
+                                append("🚫 ${result.invariant.name}: ${result.invariant.description}\n")
+                                if (result.suggestions.isNotEmpty()) {
+                                    append("   💡 ${result.suggestions.joinToString("; ")}\n")
+                                }
+                            }
+                        },
+                        "🚫 НАРУШЕНИЯ"
+                    )
+                }
+
+                // Если это последняя попытка
                 if (retryCount >= maxRetries) {
+                    onAgentMessage?.invoke(
+                        "❌ Я не смог исправить ответ за $maxRetries попыток. Попробуйте изменить запрос.",
+                        "❌ ОШИБКА"
+                    )
                     val violationMessage = buildViolationMessage(violations, answer)
                     return InvariantAwareResponse(
                         content = violationMessage,
@@ -163,12 +175,12 @@ class InvariantAwareAgent(
                     )
                 }
 
-                // Пробуем исправить, но только если нарушение серьезное (ERROR, не WARNING)
-                val seriousViolations =
-                    violations.filter { it.invariant.severity == Invariant.Severity.ERROR }
-                if (seriousViolations.isEmpty()) {
-                    // Если только WARNING - пропускаем
-                    println("ℹ️ Только предупреждения (WARNING), пропускаем")
+                // Если только WARNING - пропускаем
+                if (errorViolations.isEmpty()) {
+                    onAgentMessage?.invoke(
+                        "ℹ️ Только предупреждения (WARNING), пропускаю...",
+                        "ℹ️ ПРОПУСКАЮ"
+                    )
                     history.addAssistantMessage(answer)
                     requestCounter++
                     return InvariantAwareResponse(
@@ -185,25 +197,29 @@ class InvariantAwareAgent(
                     )
                 }
 
-                println("⚠️ Обнаружены серьезные нарушения (${seriousViolations.size}), попытка ${retryCount + 1}/$maxRetries")
-                seriousViolations.forEach { result ->
-                    println("   ❌ ${result.message}")
-                    println("      Содержимое ответа: ${answer.take(200)}...")
-                }
+                // Пробуем исправить
+                onAgentMessage?.invoke(
+                    "🔄 Пытаюсь исправить ответ (попытка ${retryCount + 1}/$maxRetries)...\n" +
+                            "Исправляю нарушения: ${errorViolations.joinToString { it.invariant.name }}",
+                    "🔄 ИСПРАВЛЕНИЕ"
+                )
 
                 // Откатываем последнее сообщение
                 history.removeLastMessage() // ассистент
                 history.removeLastMessage() // пользователь
 
-                // Отправляем запрос на исправление с более строгими инструкциями
-                val correctionPrompt = buildStrictCorrectionPrompt(userInput, seriousViolations)
+                // Отправляем запрос на исправление
+                val correctionPrompt = buildStrictCorrectionPrompt(userInput, errorViolations)
                 history.addUserMessage(correctionPrompt)
 
                 return processRequestWithRetry(correctionPrompt, retryCount + 1)
             }
 
             // Все хорошо
-            println("✅ Все инварианты соблюдены!")
+            onAgentMessage?.invoke(
+                "✅ Все инварианты соблюдены! Ответ готов.",
+                "✅ УСПЕШНО"
+            )
             history.addAssistantMessage(answer)
             requestCounter++
 
@@ -230,6 +246,7 @@ class InvariantAwareAgent(
             )
 
         } catch (e: Exception) {
+            onAgentMessage?.invoke("❌ Ошибка: ${e.message}", "❌ ОШИБКА")
             println("❌ Ошибка в InvariantAwareAgent: ${e.message}")
             throw e
         }
