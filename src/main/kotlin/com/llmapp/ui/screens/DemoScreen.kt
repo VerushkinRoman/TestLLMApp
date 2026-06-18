@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,6 +50,7 @@ fun DemoScreen(
     onStartMemoryDemo: () -> Unit,
     onStartPersonalizationDemo: () -> Unit,
     onStartStatefulDemo: () -> Unit,
+    onStartInvariantDemo: () -> Unit,
     isDemoRunning: Boolean,
     onClearHistory: () -> Unit = {}
 ) {
@@ -106,6 +108,15 @@ fun DemoScreen(
             features = listOf("Task State", "Пауза", "Снимки"),
             color = Color(0xFF673AB7),
             onStart = onStartStatefulDemo
+        ),
+        DemoItem(
+            id = "invariants",
+            title = "🔒 Инварианты",
+            icon = Icons.Default.Security,
+            description = "Контроль поведения агента через инварианты",
+            features = listOf("Архитектура", "Стек", "Бизнес-правила"),
+            color = Color(0xFF673AB7),
+            onStart = onStartInvariantDemo
         )
     )
 

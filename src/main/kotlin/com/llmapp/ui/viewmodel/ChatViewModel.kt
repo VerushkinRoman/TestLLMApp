@@ -5,12 +5,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
+import com.llmapp.agent.InvariantAwareAgent
 import com.llmapp.agent.MemoryAwareAgent
 import com.llmapp.agent.StatefulMemoryAgent
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.controller.PresetManager
+import com.llmapp.invariants.InvariantManager
+import com.llmapp.invariants.InvariantPresets
+import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.LongTermMemoryManager
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.ResponseStyle
@@ -30,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 
 class ChatViewModel : ViewModel() {
     private val apiKey = ApiConfig.getApiKey()
@@ -88,7 +93,6 @@ class ChatViewModel : ViewModel() {
     private val _showWelcomeDialog = MutableStateFlow(false)
     val showWelcomeDialog: StateFlow<Boolean> = _showWelcomeDialog.asStateFlow()
 
-    // Добавляем StateFlow для списка профилей
     private val _allProfiles = MutableStateFlow<List<UserProfile>>(emptyList())
     val allProfiles: StateFlow<List<UserProfile>> = _allProfiles.asStateFlow()
 
@@ -108,6 +112,13 @@ class ChatViewModel : ViewModel() {
     private val _showCreateTaskDialog = MutableStateFlow(false)
     val showCreateTaskDialog: StateFlow<Boolean> = _showCreateTaskDialog.asStateFlow()
 
+    // Инварианты
+    private val _activeInvariantSetName = MutableStateFlow<String?>(null)
+    val activeInvariantSetName: StateFlow<String?> = _activeInvariantSetName.asStateFlow()
+
+    private val invariantManager = InvariantManager()
+    private var invariantAwareAgent: InvariantAwareAgent? = null
+
     // Поздняя инициализация для остальных полей
     private lateinit var chatSession: ChatSession
     private var memoryAwareAgent: MemoryAwareAgent? = null
@@ -119,7 +130,96 @@ class ChatViewModel : ViewModel() {
         initProfileManager()
         checkFirstLaunch()
         initStatefulAgent()
+        loadSelectedInvariantSet()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(100.milliseconds)
+            loadSelectedInvariantSet()
+            if (_activeInvariantSetName.value == null) {
+                val set = InvariantPresets.getBaseInvariants()
+                invariantManager.saveInvariantSet(set)
+                selectInvariantSet(set)
+            }
+        }
     }
+
+    // ============================================================
+    // МЕТОДЫ ДЛЯ РАБОТЫ С ИНВАРИАНТАМИ
+    // ============================================================
+
+    fun selectInvariantSet(set: InvariantSet) {
+        _activeInvariantSetName.value = set.name
+        saveSelectedInvariantSet(set.name)
+        recreateChatSessionWithInvariants(set)
+    }
+
+    fun clearActiveInvariantSet() {
+        _activeInvariantSetName.value = null
+        val prefs = java.util.prefs.Preferences.userRoot().node("com.llmapp.invariants")
+        prefs.remove("active_set")
+        println("🔒 Активный набор инвариантов сброшен")
+    }
+
+    private fun recreateChatSessionWithInvariants(set: InvariantSet) {
+        // Создаем агента с инвариантами
+        invariantAwareAgent = InvariantAwareAgent(
+            apiKey = apiKey,
+            model = currentModel.value,
+            systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
+            invariantSet = set
+        )
+
+        println("🔒 Агент обновлен с инвариантами: ${set.name}")
+        println("   • Инвариантов: ${set.invariants.size}")
+
+        // Обновляем статистику
+        updateTokenStats()
+    }
+
+    private fun saveSelectedInvariantSet(name: String) {
+        val prefs = java.util.prefs.Preferences.userRoot().node("com.llmapp.invariants")
+        prefs.put("active_set", name)
+    }
+
+    private fun loadSelectedInvariantSet() {
+        val prefs = java.util.prefs.Preferences.userRoot().node("com.llmapp.invariants")
+        val name = prefs.get("active_set", null)
+        if (name != null) {
+            val set = invariantManager.loadInvariantSet(name)
+            if (set != null) {
+                _activeInvariantSetName.value = name
+                recreateChatSessionWithInvariants(set)
+            }
+        }
+    }
+
+    fun refreshInvariantSets() {
+        val allSets = invariantManager.getAllInvariantSets()
+        println("📁 Доступные наборы инвариантов: ${allSets.map { it.name }}")
+    }
+
+    fun createInvariantSetFromPreset(presetName: String): Boolean {
+        // Используем saveInvariantSet напрямую
+        val set = when (presetName.lowercase()) {
+            "android" -> InvariantPresets.getAndroidKMPInvariants()
+            "web" -> InvariantPresets.getWebInvariants()
+            else -> InvariantPresets.getBaseInvariants()
+        }
+
+        // Сохраняем набор
+        val success = invariantManager.saveInvariantSet(set)
+        if (success) {
+            refreshInvariantSets()
+            selectInvariantSet(set)
+            println("✅ Набор инвариантов '$presetName' создан")
+        } else {
+            println("❌ Не удалось создать набор инвариантов '$presetName'")
+        }
+        return success
+    }
+
+    // ============================================================
+    // ОСТАЛЬНЫЕ МЕТОДЫ
+    // ============================================================
 
     fun toggleCreateTaskDialog() {
         _showCreateTaskDialog.value = !_showCreateTaskDialog.value
@@ -166,8 +266,7 @@ class ChatViewModel : ViewModel() {
 
         initMemoryAgent(
             apiKey,
-            chatSession.getCurrentModel(),
-            "Ты полезный ассистент. Отвечай на русском языке."
+            chatSession.getCurrentModel()
         )
     }
 
@@ -269,6 +368,10 @@ class ChatViewModel : ViewModel() {
             loadActiveProfile()
             isFirstLaunch = false
         }
+    }
+
+    fun startInvariantDemo() {
+        demoManager?.startInvariantDemo()
     }
 
     fun startPersonalizationDemo() {
@@ -456,6 +559,36 @@ class ChatViewModel : ViewModel() {
             return
         }
 
+        // /invariant-preset - создать набор инвариантов из пресета
+        if (userMessage.startsWith("/invariant-preset ")) {
+            val presetName = userMessage.removePrefix("/invariant-preset ").trim()
+            if (presetName.isNotEmpty()) {
+                val success = createInvariantSetFromPreset(presetName)
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = if (success) {
+                            "✅ Набор инвариантов '$presetName' создан и активирован!"
+                        } else {
+                            "❌ Не удалось создать набор инвариантов '$presetName'"
+                        },
+                        isDemoMessage = false
+                    )
+                )
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ Укажите название пресета: /invariant-preset <android|web|base>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
         // /status - показать статус
         if (userMessage == "/status") {
             if (::statefulAgent.isInitialized) {
@@ -553,6 +686,9 @@ class ChatViewModel : ViewModel() {
               /task <название> - создать новую задачу
               /status - показать полный статус задачи
               /clear-task - очистить состояние задачи
+              
+            🔒 Инварианты:
+              /invariant-preset <android|web|base> - создать набор инвариантов из пресета
               
             ⏸️ Управление состоянием:
               /pause - поставить задачу на паузу
@@ -657,7 +793,6 @@ class ChatViewModel : ViewModel() {
                 if (::statefulAgent.isInitialized) {
                     val state = statefulAgent.getCurrentTaskState()
                     if (state.taskName.isNotEmpty()) {
-                        // Проверяем, не содержит ли ответ признаков завершения этапа
                         val lowerContent = response.content.lowercase()
                         when {
                             lowerContent.contains("план утвержден") || lowerContent.contains("утверждаю план") -> {
@@ -1141,11 +1276,11 @@ class ChatViewModel : ViewModel() {
         )
     }
 
-    private fun initMemoryAgent(apiKey: String, model: String, systemPrompt: String) {
+    private fun initMemoryAgent(apiKey: String, model: String) {
         memoryAwareAgent = MemoryAwareAgent(
             apiKey = apiKey,
             model = model,
-            systemPrompt = systemPrompt,
+            systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
             persistToDisk = true
         )
 

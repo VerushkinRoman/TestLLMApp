@@ -24,10 +24,12 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.controller.ChatStorageManager
+import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.UserProfile
 import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ConstraintsEditDialog
 import com.llmapp.ui.components.CreateTaskDialog
+import com.llmapp.ui.components.InvariantManagerDialog
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.ModelsPanel
 import com.llmapp.ui.components.ProfileEditDialog
@@ -199,10 +201,20 @@ fun MainScreen(
 
     val showCreateTaskDialog by viewModel.showCreateTaskDialog.collectAsState()
 
+    var showInvariantManager by remember { mutableStateOf(false) }
+    var invariantSets by remember { mutableStateOf(emptyList<InvariantSet>()) }
+    val invariantManager = remember { com.llmapp.invariants.InvariantManager() }
+
     var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.setChatMemoryService(chatMemoryService)
+    }
+
+    LaunchedEffect(showInvariantManager) {
+        if (showInvariantManager) {
+            invariantSets = invariantManager.getAllInvariantSets()
+        }
     }
 
     LaunchedEffect(messages.size, isTyping) {
@@ -299,6 +311,41 @@ fun MainScreen(
         )
     }
 
+    if (showInvariantManager) {
+        InvariantManagerDialog(
+            invariantSets = invariantSets,
+            activeSetName = viewModel.activeInvariantSetName.value,
+            onSelect = { set ->
+                viewModel.selectInvariantSet(set)
+                showInvariantManager = false
+            },
+            onDelete = { name ->
+                if (invariantManager.deleteInvariantSet(name)) {
+                    if (viewModel.activeInvariantSetName.value == name) {
+                        viewModel.clearActiveInvariantSet()
+                    }
+                    invariantSets = invariantManager.getAllInvariantSets()
+                    viewModel.refreshInvariantSets()
+                }
+            },
+            onCreatePreset = { presetName ->
+                val set = when (presetName.lowercase()) {
+                    "android" -> com.llmapp.invariants.InvariantPresets.getAndroidKMPInvariants()
+                    "web" -> com.llmapp.invariants.InvariantPresets.getWebInvariants()
+                    else -> com.llmapp.invariants.InvariantPresets.getBaseInvariants()
+                }
+
+                invariantManager.deleteInvariantSet(set.name)
+                invariantManager.saveInvariantSet(set)
+
+                invariantSets = invariantManager.getAllInvariantSets()
+                viewModel.refreshInvariantSets()
+                viewModel.selectInvariantSet(set)
+            },
+            onDismiss = { showInvariantManager = false }
+        )
+    }
+
     Row(modifier = Modifier.fillMaxSize()) {
         AppNavigationRail(
             currentScreen = currentScreen,
@@ -390,7 +437,8 @@ fun MainScreen(
                 snapshots = viewModel.snapshots.value,
                 onDismissSnapshotDialog = { viewModel.dismissSnapshotDialog() },
                 onGetSnapshotDetails = { viewModel.getSnapshotDetails(it) },
-                onCreateTask = { viewModel.toggleCreateTaskDialog() }
+                onCreateTask = { viewModel.toggleCreateTaskDialog() },
+                onShowInvariantManager = { showInvariantManager = true }
             )
 
             Screen.Demo -> DemoScreen(
@@ -440,6 +488,14 @@ fun MainScreen(
                         viewModel.addDemoMessage(message)
                     }
                     viewModel.startStatefulDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartInvariantDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startInvariantDemo()
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,

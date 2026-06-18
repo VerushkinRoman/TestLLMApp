@@ -2,6 +2,7 @@ package com.llmapp.ui
 
 import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.ContextStrategyType
+import com.llmapp.agent.InvariantAwareAgent
 import com.llmapp.agent.LLMAgent
 import com.llmapp.agent.MemoryAwareAgent
 import com.llmapp.agent.StatefulMemoryAgent
@@ -11,6 +12,8 @@ import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.demo.DemoData
 import com.llmapp.demo.StrategyTestScenario
+import com.llmapp.invariants.InvariantManager
+import com.llmapp.invariants.InvariantPresets
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.TaskState
@@ -34,6 +37,7 @@ sealed class DemoType {
     object MemoryComparison : DemoType()
     object Personalization : DemoType()
     object StatefulAgent : DemoType()
+    object InvariantDemo : DemoType()
 }
 
 class DemoManager(
@@ -2368,6 +2372,568 @@ class DemoManager(
             else -> {
                 // fallback
             }
+        }
+    }
+
+    fun startInvariantDemo() {
+        if (_isRunning.value) return
+        _isRunning.value = true
+        _currentDemo.value = DemoType.InvariantDemo
+        onDemoStarted()
+
+        scope.launch {
+            try {
+                chatSession.clearHistory()
+                runInvariantDemonstration()
+            } catch (e: Exception) {
+                addMessage(
+                    role = "assistant",
+                    content = "❌ Ошибка: ${e.message}",
+                    metadata = "Ошибка"
+                )
+            } finally {
+                _isRunning.value = false
+                _currentDemo.value = null
+                onDemoFinished()
+            }
+        }
+    }
+
+    private suspend fun runInvariantDemonstration() {
+        val apiKey = ApiConfig.getApiKey()
+        val model = "nvidia/nemotron-3-super-120b-a12b:free"
+
+        // ============================================================
+        // ШАГ 1: ВВЕДЕНИЕ
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"=".repeat(80)}
+            🔒 ДЕМОНСТРАЦИЯ РАБОТЫ ИНВАРИАНТОВ
+            ${"=".repeat(80)}
+            
+            Инварианты - это правила, которые ассистент НЕ ИМЕЕТ ПРАВА нарушать.
+            
+            В этой демонстрации мы увидим:
+            
+            1️⃣ Настройку инвариантов для Android/KMP проекта
+            2️⃣ Корректный запрос (инварианты соблюдены)
+            3️⃣ Запрос, нарушающий инварианты (агент откажется и объяснит почему)
+            4️⃣ Исправленный запрос с учетом инвариантов
+            5️⃣ Тест бизнес-правила (кроссплатформенность)
+            6️⃣ Финальные выводы
+            
+            Начинаем...
+        """.trimIndent(),
+            metadata = "🔒 ДЕМОНСТРАЦИЯ ИНВАРИАНТОВ"
+        )
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 2: НАСТРОЙКА ИНВАРИАНТОВ
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 1/6: Настройка инвариантов для проекта
+            ${"─".repeat(80)}
+            
+            Загружаем инварианты для Android/KMP проекта.
+            Эти правила будут действовать ВЕСЬ диалог и агент не сможет их нарушить.
+        """.trimIndent(),
+            metadata = "📌 ШАГ 1/6"
+        )
+        delay(2.seconds)
+
+        val invariantManager = InvariantManager()
+        val invariantSet = InvariantPresets.getAndroidKMPInvariants()
+        invariantManager.saveInvariantSet(invariantSet)
+
+        // Показываем все инварианты по группам
+        addMessage(
+            role = "assistant",
+            content = """
+            ✅ Набор инвариантов загружен: ${invariantSet.name}
+            
+            ${
+                invariantSet.invariants.groupBy { it.type }.map { (type, invariants) ->
+                    buildString {
+                        append("${getInvariantTypeEmoji(type)} ${type.name}:\n")
+                        invariants.forEach { invariant ->
+                            append("   • ${invariant.name}: ${invariant.description}\n")
+                            if (invariant.allowedValues.isNotEmpty()) {
+                                append("     ✅ Разрешено: ${invariant.allowedValues.joinToString(", ")}\n")
+                            }
+                            if (invariant.forbiddenValues.isNotEmpty()) {
+                                append("     ❌ Запрещено: ${invariant.forbiddenValues.joinToString(", ")}\n")
+                            }
+                        }
+                    }
+                }.joinToString("\n")
+            }
+            
+            💡 Всего инвариантов: ${invariantSet.invariants.size}
+            ⚠️ Нарушение любого инварианта = отказ от ответа
+        """.trimIndent(),
+            metadata = "✅ ИНВАРИАНТЫ ЗАГРУЖЕНЫ"
+        )
+        delay(4.seconds)
+
+        // ============================================================
+        // ШАГ 3: СОЗДАНИЕ АГЕНТА
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 2/6: Создание агента с инвариантами
+            ${"─".repeat(80)}
+            
+            Создаем агента, который будет строго соблюдать инварианты.
+            Агент будет проверять каждый ответ на соответствие правилам.
+            При нарушении - будет пытаться исправить ответ (до 3 попыток).
+        """.trimIndent(),
+            metadata = "📌 ШАГ 2/6"
+        )
+        delay(2.seconds)
+
+        val agent = InvariantAwareAgent(
+            apiKey = apiKey,
+            model = model,
+            systemPrompt = "Ты опытный разработчик на Kotlin. Отвечай кратко и по делу.",
+            invariantSetName = "Android/KMP",
+            maxHistorySize = 20,
+            maxRetries = 3
+        )
+
+        addMessage(
+            role = "assistant",
+            content = """
+            ✅ Агент создан!
+            
+            🤖 Модель: ${model.take(40)}...
+            🔒 Инварианты: ${invariantSet.invariants.size} правил
+            🔄 Максимум попыток исправления: 3
+            
+            Теперь агент будет отвечать ТОЛЬКО в рамках инвариантов.
+        """.trimIndent(),
+            metadata = "✅ АГЕНТ СОЗДАН"
+        )
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 4: КОРРЕКТНЫЙ ЗАПРОС
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 3/6: Корректный запрос (инварианты соблюдены)
+            ${"─".repeat(80)}
+            
+            Сначала зададим запрос, который НЕ нарушает инварианты.
+            Агент должен ответить без проблем.
+        """.trimIndent(),
+            metadata = "📌 ШАГ 3/6"
+        )
+        delay(2.seconds)
+
+        val correctRequest = """
+        Как организовать хранение данных в KMP приложении с использованием Kotlin и SQLDelight?
+        Нужно сделать кроссплатформенное решение.
+    """.trimIndent()
+
+        addMessage(
+            role = "user",
+            content = correctRequest,
+            metadata = "👤 КОРРЕКТНЫЙ ЗАПРОС"
+        )
+        delay(1.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = "⏳ Агент обрабатывает запрос... Проверка инвариантов...",
+            metadata = "⏳ ОБРАБОТКА"
+        )
+        onTypingStateChanged(true)
+        delay(2.seconds)
+
+        val response1 = agent.processRequest(correctRequest)
+        onTypingStateChanged(false)
+
+        if (response1.violationsFound) {
+            addMessage(
+                role = "assistant",
+                content = """
+                ❌ НЕОЖИДАННО: Ответ содержит нарушения инвариантов!
+                
+                Нарушенные правила:
+                ${
+                    response1.invariantResults.filter { !it.passed }.joinToString("\n") {
+                        "   • ${it.invariant.name}: ${it.invariant.description}"
+                    }
+                }
+                
+                Это ошибка в демонстрации. Так не должно быть.
+            """.trimIndent(),
+                metadata = "❌ ОШИБКА"
+            )
+        } else {
+            addMessage(
+                role = "assistant",
+                content = """
+                ✅ ИНВАРИАНТЫ СОБЛЮДЕНЫ!
+                
+                Все ${response1.invariantResults.size} инвариантов пройдены успешно.
+                
+                🤖 ОТВЕТ АГЕНТА:
+                
+                ${response1.content}
+            """.trimIndent(),
+                metadata = "✅ КОРРЕКТНЫЙ ОТВЕТ"
+            )
+        }
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 5: ЗАПРОС, НАРУШАЮЩИЙ ИНВАРИАНТЫ
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 4/6: Запрос, нарушающий инварианты
+            ${"─".repeat(80)}
+            
+            Теперь зададим запрос, который НАРУШАЕТ инварианты.
+            Агент должен:
+            1️⃣ Обнаружить нарушения
+            2️⃣ Попытаться исправить ответ
+            3️⃣ Если не получается - объяснить почему отказывается
+        """.trimIndent(),
+            metadata = "📌 ШАГ 4/6"
+        )
+        delay(2.seconds)
+
+        val violatingRequest = """
+        Давай сделаем простой Android проект на Java с использованием RxJava.
+        Я хочу использовать SharedPreferences для хранения данных.
+        Архитектуру сделаем MVP.
+    """.trimIndent()
+
+        addMessage(
+            role = "user",
+            content = violatingRequest,
+            metadata = "👤 НАРУШАЮЩИЙ ЗАПРОС"
+        )
+        delay(1.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            ⚠️ АГЕНТ ОБНАРУЖИЛ ПОТЕНЦИАЛЬНЫЕ НАРУШЕНИЯ!
+            
+            Агент анализирует запрос и проверяет его на соответствие инвариантам...
+            
+            🔍 Проверяемые инварианты:
+            • Архитектура MVI
+            • Технологический стек
+            • Кодинг стандарты
+            • Бизнес-правило кроссплатформенности
+            • Безопасность данных
+        """.trimIndent(),
+            metadata = "⏳ ПРОВЕРКА"
+        )
+        onTypingStateChanged(true)
+        delay(3.seconds)
+
+        val response2 = agent.processRequest(violatingRequest)
+        onTypingStateChanged(false)
+
+        if (response2.violationsFound) {
+            val violations = response2.invariantResults.filter { !it.passed }
+
+            // Показываем детально каждое нарушение
+            addMessage(
+                role = "assistant",
+                content = """
+                🚫 ОБНАРУЖЕНЫ НАРУШЕНИЯ ИНВАРИАНТОВ!
+                
+                Агент обнаружил ${violations.size} нарушений правил проекта.
+                
+                ${
+                    violations.joinToString("\n\n") { result ->
+                        buildString {
+                            append("❌ ${result.invariant.name}\n")
+                            append("   Описание: ${result.invariant.description}\n")
+                            if (result.suggestions.isNotEmpty()) {
+                                append("   💡 Как исправить:\n")
+                                result.suggestions.forEach { suggestion ->
+                                    append("      • $suggestion\n")
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                📊 Агент совершил ${response2.retryCount} попыток исправить ответ.
+            """.trimIndent(),
+                metadata = "🚫 НАРУШЕНИЯ ОБНАРУЖЕНЫ"
+            )
+            delay(2.seconds)
+
+            // Показываем финальный ответ агента
+            addMessage(
+                role = "assistant",
+                content = """
+                📄 ОТВЕТ АГЕНТА ПОСЛЕ ПРОВЕРКИ ИНВАРИАНТОВ:
+                
+                ${response2.content}
+            """.trimIndent(),
+                metadata = "📄 ОТВЕТ АГЕНТА"
+            )
+        } else {
+            addMessage(
+                role = "assistant",
+                content = "⚠️ Агент не обнаружил нарушений (это странно, возможно инварианты не загружены)",
+                metadata = "⚠️ СТРАННО"
+            )
+        }
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 6: ИСПРАВЛЕННЫЙ ЗАПРОС
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 5/6: Исправленный запрос (с учетом инвариантов)
+            ${"─".repeat(80)}
+            
+            Теперь зададим запрос, который УЧИТЫВАЕТ все инварианты.
+            Агент должен ответить без нарушений.
+        """.trimIndent(),
+            metadata = "📌 ШАГ 5/6"
+        )
+        delay(2.seconds)
+
+        val fixedRequest = """
+        Как организовать хранение данных в KMP проекте с использованием Kotlin и SQLDelight?
+        Нужно использовать MVI архитектуру и корутины.
+        Данные должны храниться безопасно.
+        Решение должно быть кроссплатформенным.
+    """.trimIndent()
+
+        addMessage(
+            role = "user",
+            content = fixedRequest,
+            metadata = "👤 ИСПРАВЛЕННЫЙ ЗАПРОС"
+        )
+        delay(1.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = "⏳ Агент проверяет запрос на соответствие инвариантам...",
+            metadata = "⏳ ПРОВЕРКА"
+        )
+        onTypingStateChanged(true)
+        delay(2.seconds)
+
+        val response3 = agent.processRequest(fixedRequest)
+        onTypingStateChanged(false)
+
+        if (response3.violationsFound) {
+            addMessage(
+                role = "assistant",
+                content = """
+                ❌ Ответ все еще содержит нарушения:
+                
+                ${
+                    response3.invariantResults.filter { !it.passed }.joinToString("\n") {
+                        "   • ${it.invariant.name}: ${it.invariant.description}"
+                    }
+                }
+            """.trimIndent(),
+                metadata = "❌ НАРУШЕНИЯ"
+            )
+        } else {
+            addMessage(
+                role = "assistant",
+                content = """
+                ✅ ВСЕ ИНВАРИАНТЫ СОБЛЮДЕНЫ!
+                
+                Все ${response3.invariantResults.size} инвариантов пройдены успешно.
+                
+                🤖 ОТВЕТ АГЕНТА:
+                
+                ${response3.content}
+            """.trimIndent(),
+                metadata = "✅ УСПЕШНО"
+            )
+        }
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 7: ТЕСТ БИЗНЕС-ПРАВИЛА
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"─".repeat(80)}
+            📌 ШАГ 6/6: Тест бизнес-правила (кроссплатформенность)
+            ${"─".repeat(80)}
+            
+            Проверим бизнес-правило: код должен быть кроссплатформенным.
+            Запросим Android-only решение - агент должен отказаться.
+        """.trimIndent(),
+            metadata = "📌 ШАГ 6/6"
+        )
+        delay(2.seconds)
+
+        val businessRuleRequest = """
+        Напиши код для хранения данных только для Android платформы.
+        iOS не нужен, делаем только под Android.
+    """.trimIndent()
+
+        addMessage(
+            role = "user",
+            content = businessRuleRequest,
+            metadata = "👤 БИЗНЕС-ПРАВИЛО"
+        )
+        delay(1.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            🔍 Агент проверяет бизнес-правило...
+            
+            📋 Бизнес-правило: "Код должен быть кроссплатформенным"
+            ❌ Запрещено: Android only, iOS only
+            
+            Проверяем запрос на соответствие...
+        """.trimIndent(),
+            metadata = "⏳ ПРОВЕРКА БИЗНЕС-ПРАВИЛА"
+        )
+        onTypingStateChanged(true)
+        delay(2.seconds)
+
+        val response4 = agent.processRequest(businessRuleRequest)
+        onTypingStateChanged(false)
+
+        val businessViolations = response4.invariantResults.filter {
+            !it.passed && it.invariant.type == com.llmapp.invariants.InvariantType.BUSINESS_RULE
+        }
+
+        if (businessViolations.isNotEmpty()) {
+            addMessage(
+                role = "assistant",
+                content = """
+                🚫 БИЗНЕС-ПРАВИЛО НАРУШЕНО!
+                
+                Агент ОТКАЗАЛСЯ от Android-only решения.
+                
+                ${
+                    businessViolations.joinToString("\n") { result ->
+                        buildString {
+                            append("❌ ${result.invariant.name}\n")
+                            append("   ${result.invariant.description}\n")
+                            result.suggestions.forEach { suggestion ->
+                                append("   💡 $suggestion\n")
+                            }
+                        }
+                    }
+                }
+                
+                📄 ОТВЕТ АГЕНТА:
+                
+                ${response4.content}
+            """.trimIndent(),
+                metadata = "🚫 БИЗНЕС-ПРАВИЛО"
+            )
+        } else {
+            addMessage(
+                role = "assistant",
+                content = "⚠️ Агент не обнаружил нарушения бизнес-правила",
+                metadata = "⚠️ СТРАННО"
+            )
+        }
+        delay(3.seconds)
+
+        // ============================================================
+        // ШАГ 8: ФИНАЛЬНЫЕ ВЫВОДЫ
+        // ============================================================
+        addMessage(
+            role = "assistant",
+            content = """
+            ${"=".repeat(80)}
+            🏁 ИТОГИ ДЕМОНСТРАЦИИ ИНВАРИАНТОВ
+            ${"=".repeat(80)}
+            
+            ${"📊 СТАТИСТИКА:"}
+            • Всего запросов: ${agent.getTokenStats().requestCount}
+            • Всего токенов: ${agent.getTokenStats().totalTokens}
+            • Стоимость: ${agent.getTokenStats().getFormattedCost()}
+            
+            ${"💡 КЛЮЧЕВЫЕ ВЫВОДЫ:"}
+            
+            1️⃣ ИНВАРИАНТЫ РАБОТАЮТ
+               • Агент не может нарушить заданные правила
+               • Все инварианты проверяются автоматически
+            
+            2️⃣ АГЕНТ ОТКАЗЫВАЕТСЯ ОТ НАРУШЕНИЙ
+               • При обнаружении нарушений агент пытается исправить ответ
+               • Если исправить нельзя - агент объясняет причину отказа
+            
+            3️⃣ БИЗНЕС-ПРАВИЛА ЗАЩИЩЕНЫ
+               • Агент не предлагает Android-only решения
+               • Кроссплатформенность строго соблюдается
+            
+            4️⃣ ОБЪЯСНЕНИЕ ОТКАЗА
+               • Агент показывает, какие правила нарушены
+               • Дает рекомендации по исправлению
+            
+            ${"─".repeat(80)}
+            
+            ✅ Инварианты - мощный инструмент контроля агентов!
+            
+            🔒 Демонстрация успешно завершена!
+        """.trimIndent(),
+            metadata = "🏁 ДЕМОНСТРАЦИЯ ЗАВЕРШЕНА"
+        )
+
+        delay(2.seconds)
+
+        addMessage(
+            role = "assistant",
+            content = """
+            💡 ЧТО ДАЛЬШЕ?
+            
+            Вы можете:
+            1️⃣ Создать свои инварианты в папке ~/.llm_invariants/
+            2️⃣ Использовать агента с инвариантами в своих проектах
+            3️⃣ Настроить инварианты под свой стек технологий
+            4️⃣ Добавить бизнес-правила для своего домена
+            
+            📁 Инварианты сохраняются в: ~/.llm_invariants/
+            
+            🚀 Теперь ваш агент работает в рамках заданных правил!
+        """.trimIndent(),
+            metadata = "💡 РЕКОМЕНДАЦИИ"
+        )
+    }
+
+    private fun getInvariantTypeEmoji(type: com.llmapp.invariants.InvariantType): String {
+        return when (type) {
+            com.llmapp.invariants.InvariantType.ARCHITECTURE -> "🏗️"
+            com.llmapp.invariants.InvariantType.TECH_STACK -> "⚙️"
+            com.llmapp.invariants.InvariantType.CODING_STANDARD -> "📝"
+            com.llmapp.invariants.InvariantType.BUSINESS_RULE -> "📋"
+            com.llmapp.invariants.InvariantType.SECURITY -> "🔒"
+            com.llmapp.invariants.InvariantType.PERFORMANCE -> "⚡"
+            com.llmapp.invariants.InvariantType.CUSTOM -> "📌"
         }
     }
 

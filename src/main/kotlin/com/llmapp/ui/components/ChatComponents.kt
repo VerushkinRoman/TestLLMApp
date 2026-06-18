@@ -99,15 +99,16 @@ import kotlin.time.Duration.Companion.seconds
 fun ChatTopBar(
     controlEnabled: Boolean,
     currentModel: String,
-    currentAgentName: String? = null,
-    currentAgentIcon: String? = null,
-    memorySettings: MemorySettings = MemorySettings(),
-    onMemorySettingChanged: (MemorySettings) -> Unit = {},
-    onEditProfile: () -> Unit = {},
-    onEditConstraints: () -> Unit = {},
-    activeProfile: UserProfile = UserProfile(),
-    onShowProfileManager: () -> Unit = {},
-    onCreateTask: () -> Unit = {}
+    currentAgentName: String?,
+    currentAgentIcon: String?,
+    memorySettings: MemorySettings,
+    onMemorySettingChanged: (MemorySettings) -> Unit,
+    onEditProfile: () -> Unit,
+    onEditConstraints: () -> Unit,
+    activeProfile: UserProfile,
+    onShowProfileManager: () -> Unit,
+    onShowInvariantManager: () -> Unit,
+    onCreateTask: () -> Unit
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -155,6 +156,13 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            IconButton(
+                onClick = onShowInvariantManager,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text("🔒", fontSize = 20.sp)
+            }
+
             IconButton(
                 onClick = onCreateTask,
                 modifier = Modifier.size(36.dp)
