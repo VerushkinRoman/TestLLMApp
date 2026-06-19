@@ -23,6 +23,7 @@ import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
 import com.llmapp.state.TaskPhase
 import com.llmapp.ui.DemoManager
+import com.llmapp.ui.DemoType
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.NamedProfile
 import com.llmapp.ui.components.ProfileManager
@@ -125,6 +126,9 @@ class ChatViewModel : ViewModel() {
     private var chatMemoryService: ChatMemoryAgent? = null
     private var demoManager: DemoManager? = null
 
+    val demoManagerCurrentDemo = mutableStateOf<DemoType?>(null)
+    val demoManagerProgress = mutableStateOf<String?>(null)
+
     init {
         initChatSession()
         initProfileManager()
@@ -160,7 +164,6 @@ class ChatViewModel : ViewModel() {
     }
 
     private fun recreateChatSessionWithInvariants(set: InvariantSet) {
-        // Создаем агента с инвариантами
         invariantAwareAgent = InvariantAwareAgent(
             apiKey = apiKey,
             model = currentModel.value,
@@ -171,7 +174,6 @@ class ChatViewModel : ViewModel() {
         println("🔒 Агент обновлен с инвариантами: ${set.name}")
         println("   • Инвариантов: ${set.invariants.size}")
 
-        // Обновляем статистику
         updateTokenStats()
     }
 
@@ -198,14 +200,12 @@ class ChatViewModel : ViewModel() {
     }
 
     fun createInvariantSetFromPreset(presetName: String): Boolean {
-        // Используем saveInvariantSet напрямую
         val set = when (presetName.lowercase()) {
             "android" -> InvariantPresets.getAndroidKMPInvariants()
             "web" -> InvariantPresets.getWebInvariants()
             else -> InvariantPresets.getBaseInvariants()
         }
 
-        // Сохраняем набор
         val success = invariantManager.saveInvariantSet(set)
         if (success) {
             refreshInvariantSets()
@@ -275,10 +275,6 @@ class ChatViewModel : ViewModel() {
         val longTermManager = LongTermMemoryManager(storageDir)
         profileManager = ProfileManager(storageDir, longTermManager)
         loadAllProfiles()
-    }
-
-    fun startStatefulDemo() {
-        demoManager?.startStatefulDemo()
     }
 
     private fun loadAllProfiles() {
@@ -370,14 +366,6 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun startInvariantDemo() {
-        demoManager?.startInvariantDemo()
-    }
-
-    fun startPersonalizationDemo() {
-        demoManager?.startPersonalizationDemo()
-    }
-
     private fun recreateChatSession() {
         val newSession = ChatSession(
             apiKey = apiKey,
@@ -444,6 +432,8 @@ class ChatViewModel : ViewModel() {
                 _tokenStatsFlow.value = TokenStats()
                 _tokenHistoryFlow.value = emptyList()
                 _contextWarningFlow.value = "✅ Демонстрация запущена..."
+                demoManagerCurrentDemo.value = demoManager?.currentDemo?.value
+                demoManagerProgress.value = demoManager?.progressMessage?.value
             },
             onDemoFinished = {
                 isDemoRunning.value = false
@@ -452,6 +442,10 @@ class ChatViewModel : ViewModel() {
                 chatMemoryService?.createNewChat()
                 updateTokenStats()
                 updateTaskStateUI()
+
+                // Очищаем поля для UI
+                demoManagerCurrentDemo.value = null
+                demoManagerProgress.value = null
             },
             onTypingStateChanged = { typing ->
                 isTyping.value = typing
@@ -476,7 +470,29 @@ class ChatViewModel : ViewModel() {
             },
             statefulAgent = if (::statefulAgent.isInitialized) statefulAgent else initStatefulAgent(),
         )
+
+        viewModelScope.launch {
+            demoManager?.isRunning?.collect { running ->
+                isDemoRunning.value = running
+            }
+        }
+
+        viewModelScope.launch {
+            demoManager?.currentDemo?.collect { demo ->
+                demoManagerCurrentDemo.value = demo
+            }
+        }
+
+        viewModelScope.launch {
+            demoManager?.progressMessage?.collect { progress ->
+                demoManagerProgress.value = progress
+            }
+        }
     }
+
+    // ============================================================
+    // МЕТОДЫ ЗАПУСКА ДЕМОНСТРАЦИЙ (используются в UI)
+    // ============================================================
 
     fun startTokenDemo() {
         demoManager?.startTokenDemo()
@@ -493,6 +509,26 @@ class ChatViewModel : ViewModel() {
     fun startMemoryDemo() {
         demoManager?.startMemoryDemo()
     }
+
+    fun startPersonalizationDemo() {
+        demoManager?.startPersonalizationDemo()
+    }
+
+    fun startStatefulDemo() {
+        demoManager?.startStatefulDemo()
+    }
+
+    fun startInvariantDemo() {
+        demoManager?.startInvariantDemo()
+    }
+
+    fun cancelDemo() {
+        demoManager?.cancelDemo()
+    }
+
+    // ============================================================
+    // ОСТАЛЬНЫЕ МЕТОДЫ (без изменений)
+    // ============================================================
 
     fun updateDraft(message: String, cursorPos: Int = cursorPosition.value) {
         if (isDemoRunning.value) return
@@ -1010,9 +1046,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun refreshTokenStats() {
-        if (isDemoRunning.value) {
-            return
-        }
+        if (isDemoRunning.value) return
         updateTokenStats()
     }
 
@@ -1165,9 +1199,9 @@ class ChatViewModel : ViewModel() {
         )
     }
 
-// ============================================================
-// МЕТОДЫ ДЛЯ РАБОТЫ СО СНИМКАМИ
-// ============================================================
+    // ============================================================
+    // МЕТОДЫ ДЛЯ РАБОТЫ СО СНИМКАМИ
+    // ============================================================
 
     fun toggleSnapshotDialog() {
         _showSnapshotDialog.value = !_showSnapshotDialog.value
@@ -1262,7 +1296,6 @@ class ChatViewModel : ViewModel() {
             println("⚠️ StatefulAgent не инициализирован")
             return
         }
-        // Создаем новую пустую задачу
         statefulAgent.createTask("", "")
         updateTaskStateUI()
         _snapshots.value = emptyList()

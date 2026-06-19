@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -28,10 +29,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +55,10 @@ fun DemoScreen(
     onStartStatefulDemo: () -> Unit,
     onStartInvariantDemo: () -> Unit,
     isDemoRunning: Boolean,
-    onClearHistory: () -> Unit = {}
+    currentDemoName: String?,
+    demoProgress: String?,
+    onCancelDemo: (() -> Unit)?,
+    onClearHistory: () -> Unit
 ) {
     val demos = listOf(
         DemoItem(
@@ -146,6 +152,54 @@ fun DemoScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
+        // ============================================================
+        // ИНДИКАТОР ТЕКУЩЕЙ ДЕМОНСТРАЦИИ
+        // ============================================================
+        if (isDemoRunning && currentDemoName != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "▶ ${demoProgress ?: "Выполняется $currentDemoName..."}",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    if (onCancelDemo != null) {
+                        TextButton(
+                            onClick = onCancelDemo,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Отменить", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 state = gridState,
@@ -193,7 +247,10 @@ fun CompactDemoCard(
             .fillMaxWidth()
             .height(220.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isRunning)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -214,13 +271,19 @@ fun CompactDemoCard(
                     modifier = Modifier
                         .width(36.dp)
                         .height(36.dp),
-                    tint = demo.color
+                    tint = if (isRunning)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    else
+                        demo.color
                 )
                 Text(
                     text = demo.title,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = demo.color,
+                    color = if (isRunning)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    else
+                        demo.color,
                     textAlign = TextAlign.Center
                 )
             }
@@ -228,7 +291,10 @@ fun CompactDemoCard(
             Text(
                 text = demo.description,
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isRunning)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 modifier = Modifier.padding(horizontal = 4.dp)
@@ -240,7 +306,10 @@ fun CompactDemoCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 demo.features.forEach { feature ->
-                    CompactFeatureChip(text = feature.take(12))
+                    CompactFeatureChip(
+                        text = feature.take(12),
+                        isDisabled = isRunning
+                    )
                 }
             }
 
@@ -253,8 +322,14 @@ fun CompactDemoCard(
                     .fillMaxWidth()
                     .height(40.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = demo.color,
-                    contentColor = Color.White
+                    containerColor = if (isRunning)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    else
+                        demo.color,
+                    contentColor = if (isRunning)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    else
+                        Color.White
                 )
             ) {
                 Text(
@@ -269,11 +344,15 @@ fun CompactDemoCard(
 
 @Composable
 fun CompactFeatureChip(
-    text: String
+    text: String,
+    isDisabled: Boolean = false
 ) {
     Surface(
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+        color = if (isDisabled)
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+        else
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -283,7 +362,10 @@ fun CompactFeatureChip(
                 text = text,
                 fontSize = 10.sp,
                 maxLines = 1,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = if (isDisabled)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                else
+                    MaterialTheme.colorScheme.onSecondaryContainer,
                 textAlign = TextAlign.Center
             )
         }

@@ -499,6 +499,11 @@ fun MainScreen(
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,
+                currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
+                demoProgress = viewModel.demoManagerProgress.value,
+                onCancelDemo = {
+                    viewModel.cancelDemo()
+                },
                 onClearHistory = {
                     viewModel.clearHistory()
                 }
