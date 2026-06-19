@@ -1,3 +1,5 @@
+// src/main/kotlin/com/llmapp/ui/screens/ChatScreen.kt
+
 package com.llmapp.ui.screens
 
 import androidx.compose.foundation.ScrollbarStyle
@@ -34,11 +36,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.llmapp.agent.AvailableTransition
-import com.llmapp.agent.TokenSnapshot
-import com.llmapp.memory.ProjectConstraints
-import com.llmapp.memory.UserProfile
-import com.llmapp.model.TokenStats
 import com.llmapp.state.TaskPhase
 import com.llmapp.ui.components.ChatTopBar
 import com.llmapp.ui.components.ConstraintsEditDialog
@@ -51,75 +48,30 @@ import com.llmapp.ui.components.TaskStatePanel
 import com.llmapp.ui.components.TokenStatsPanel
 import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.components.TypingIndicator
-import com.llmapp.ui.models.ChatMessageUI
-import com.llmapp.ui.models.TaskStateUI
+import com.llmapp.ui.viewmodel.ChatViewState
+import com.llmapp.ui.viewmodel.ViewEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    messages: List<ChatMessageUI>,
-    isTyping: Boolean,
-    currentModel: String,
-    controlEnabled: Boolean,
-    currentAgentName: String?,
-    currentAgentIcon: String?,
-    inputText: String,
-    cursorPosition: Int,
-    onInputTextChange: (String, Int) -> Unit,
-    onSendMessage: (String) -> Unit,
-    onRegenerateMessage: ((String) -> Unit)?,
-    onEditMessage: ((String, String) -> Unit)?,
-    onStopGeneration: (() -> Unit)?,
-    isGenerating: Boolean,
-    isDemoRunning: Boolean,
-    tokenStats: TokenStats,
-    tokenHistory: List<TokenSnapshot>,
-    contextWarning: String,
-    onClearTokenStats: () -> Unit,
-    memorySettings: MemorySettings,
-    onMemorySettingChanged: (MemorySettings) -> Unit,
-    userProfile: UserProfile,
-    projectConstraints: ProjectConstraints,
-    onUpdateProfile: (UserProfile) -> Unit,
-    onUpdateConstraints: (ProjectConstraints) -> Unit,
-    onResetWorkingMemory: () -> Unit,
-    activeProfile: UserProfile,
-    onShowProfileManager: () -> Unit,
-    taskState: TaskStateUI?,
-    onTransition: (TaskPhase) -> Unit,
-    onPauseTask: () -> Unit,
-    onResumeTask: () -> Unit,
-    onBlockTask: () -> Unit,
-    onUnblockTask: () -> Unit,
-    onShowSnapshots: () -> Unit,
-    onCreateSnapshot: (String) -> Unit,
-    onRestoreSnapshot: (String) -> Unit,
-    showSnapshotDialog: Boolean,
-    snapshots: List<Pair<String, String>>,
-    onDismissSnapshotDialog: () -> Unit,
-    onGetSnapshotDetails: ((String) -> String)?,
-    onCreateTask: () -> Unit,
-    onShowInvariantManager: () -> Unit,
-    showTransitionsDialog: Boolean,
-    availableTransitions: List<AvailableTransition>,
-    onShowTransitionsDialog: () -> Unit,
-    onDismissTransitionsDialog: () -> Unit,
-    onExecuteTransition: (TaskPhase) -> Unit,
+    viewState: ChatViewState,
+    onEvent: (ViewEvent) -> Unit
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showConstraintsDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Подписка на изменения состояния
+    LaunchedEffect(viewState.messages.size) {
+        if (viewState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(viewState.messages.size - 1)
         }
     }
 
-    LaunchedEffect(isTyping) {
-        if (isTyping) {
-            listState.animateScrollToItem(messages.size)
+    LaunchedEffect(viewState.isTyping) {
+        if (viewState.isTyping) {
+            listState.animateScrollToItem(viewState.messages.size)
         }
     }
 
@@ -129,50 +81,54 @@ fun ChatScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         ChatTopBar(
-            controlEnabled = controlEnabled,
-            currentModel = currentModel,
-            currentAgentName = currentAgentName,
-            currentAgentIcon = currentAgentIcon,
-            memorySettings = memorySettings,
+            controlEnabled = viewState.controlEnabled,
+            currentModel = viewState.currentModel,
+            currentAgentName = "LLM Agent",
+            currentAgentIcon = "🤖",
+            memorySettings = MemorySettings(
+                useShortTerm = true,
+                useWorkingMemory = true,
+                useLongTerm = true
+            ),
             onMemorySettingChanged = { settings ->
-                onMemorySettingChanged(settings)
+                onEvent(ViewEvent.UpdateMemorySettings(settings))
                 if (settings.resetWorkingMemory) {
-                    onResetWorkingMemory()
+                    onEvent(ViewEvent.ResetWorkingMemory)
                 }
             },
             onEditProfile = { showProfileDialog = true },
             onEditConstraints = { showConstraintsDialog = true },
-            activeProfile = activeProfile,
-            onShowProfileManager = onShowProfileManager,
-            onCreateTask = onCreateTask,
-            onShowInvariantManager = onShowInvariantManager,
+            activeProfile = viewState.activeProfile,
+            onShowProfileManager = { onEvent(ViewEvent.ToggleProfileManager) },
+            onCreateTask = { onEvent(ViewEvent.ToggleCreateTaskDialog) },
+            onShowInvariantManager = { /* onEvent(ViewEvent.ShowInvariantManager) */ }
         )
 
-        if (taskState != null) {
+        viewState.taskState?.let { taskState ->
             TaskStatePanel(
                 state = taskState,
-                onTransition = onTransition,
-                onPause = onPauseTask,
-                onResume = onResumeTask,
-                onBlock = onBlockTask,
-                onUnblock = onUnblockTask,
-                onShowSnapshots = onShowSnapshots,
-                onShowTransitions = onShowTransitionsDialog,
-                isDemoRunning = isDemoRunning
+                onTransition = { phase -> onEvent(ViewEvent.TransitionTo(phase)) },
+                onPause = { onEvent(ViewEvent.PauseTask()) },
+                onResume = { onEvent(ViewEvent.ResumeTask) },
+                onBlock = { onEvent(ViewEvent.BlockTask()) },
+                onUnblock = { onEvent(ViewEvent.UnblockTask) },
+                onShowSnapshots = { onEvent(ViewEvent.ToggleSnapshotDialog) },
+                onShowTransitions = { onEvent(ViewEvent.ShowTransitionsDialog) },
+                isDemoRunning = viewState.isDemoRunning
             )
         }
 
         TokenStatsPanel(
-            stats = tokenStats,
-            history = tokenHistory,
-            contextWarning = contextWarning,
-            onClearHistory = onClearTokenStats
+            stats = viewState.tokenStats,
+            history = viewState.tokenHistory,
+            contextWarning = viewState.contextWarning,
+            onClearHistory = { onEvent(ViewEvent.ClearTokenStats) }
         )
 
         MemoryLayersIndicator(
-            useShortTerm = memorySettings.useShortTerm,
-            useWorkingMemory = memorySettings.useWorkingMemory,
-            useLongTerm = memorySettings.useLongTerm
+            useShortTerm = true,
+            useWorkingMemory = true,
+            useLongTerm = true
         )
 
         Row(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -184,24 +140,31 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize().padding(end = 8.dp)
                 ) {
                     items(
-                        items = messages,
+                        items = viewState.messages,
                         key = { it.id }
                     ) { message ->
                         MessageBubble(
                             message = message,
-                            currentModel = currentModel,
-                            onRegenerate = if (message.role == "assistant" && onRegenerateMessage != null) {
-                                { onRegenerateMessage(message.id) }
+                            currentModel = viewState.currentModel,
+                            onRegenerate = if (message.role == "assistant") {
+                                { onEvent(ViewEvent.RegenerateMessage(message.id)) }
                             } else null,
-                            onEdit = if (message.role == "user" && onEditMessage != null) {
-                                { newText -> onEditMessage(message.id, newText) }
+                            onEdit = if (message.role == "user") {
+                                { newText ->
+                                    onEvent(
+                                        ViewEvent.EditUserMessage(
+                                            message.id,
+                                            newText
+                                        )
+                                    )
+                                }
                             } else null,
                             isRegenerating = false,
-                            isDemoRunning = isDemoRunning
+                            isDemoRunning = viewState.isDemoRunning
                         )
                     }
 
-                    if (isTyping) {
+                    if (viewState.isTyping) {
                         item(key = "typing_indicator") {
                             TypingIndicator()
                         }
@@ -226,40 +189,53 @@ fun ChatScreen(
         }
 
         MessageInput(
-            inputText = inputText,
-            cursorPosition = cursorPosition,
-            onInputChange = onInputTextChange,
+            inputText = viewState.draftMessage,
+            cursorPosition = viewState.cursorPosition,
+            onInputChange = { text, cursorPos ->
+                onEvent(ViewEvent.UpdateDraft(text, cursorPos))
+            },
             onSendMessage = {
-                if (inputText.isNotBlank() && !isGenerating && !isDemoRunning) {
-                    onSendMessage(inputText)
+                if (viewState.draftMessage.isNotBlank() && !viewState.isGenerating && !viewState.isDemoRunning) {
+                    onEvent(ViewEvent.SendMessage(viewState.draftMessage))
+                    onEvent(ViewEvent.UpdateDraft("", 0))
                     focusRequester.requestFocus()
                 }
             },
-            onStopGeneration = onStopGeneration,
-            isGenerating = isGenerating,
-            isDemoRunning = isDemoRunning,
+            onStopGeneration = { onEvent(ViewEvent.StopGeneration) },
+            isGenerating = viewState.isGenerating,
+            isDemoRunning = viewState.isDemoRunning,
             modifier = Modifier.imePadding(),
             focusRequester = focusRequester
         )
     }
 
     // Диалог управления переходами
-    if (showTransitionsDialog) {
+    if (viewState.showTransitionsDialog) {
         TransitionsDialog(
-            currentPhase = taskState?.phase ?: TaskPhase.INIT,
-            availableTransitions = availableTransitions,
-            onTransition = onExecuteTransition,
-            onDismiss = onDismissTransitionsDialog
+            currentPhase = viewState.taskState?.phase ?: TaskPhase.INIT,
+            availableTransitions = viewState.availableTransitions,
+            onTransition = { phase -> onEvent(ViewEvent.SafeTransitionTo(phase)) },
+            onDismiss = { onEvent(ViewEvent.DismissTransitionsDialog) }
+        )
+    }
+
+    // Диалог управления снимками
+    if (viewState.showSnapshotDialog) {
+        SnapshotDialog(
+            snapshots = viewState.snapshots,
+            onRestore = { id -> onEvent(ViewEvent.RestoreSnapshot(id)) },
+            onCreate = { name -> onEvent(ViewEvent.CreateSnapshot(name)) },
+            onDismiss = { onEvent(ViewEvent.DismissSnapshotDialog) },
         )
     }
 
     // Диалоги редактирования памяти
     if (showProfileDialog) {
         ProfileEditDialog(
-            profile = userProfile,
+            profile = viewState.userProfile,
             onDismiss = { showProfileDialog = false },
             onSave = { profile ->
-                onUpdateProfile(profile)
+                onEvent(ViewEvent.UpdateUserProfile(profile))
                 showProfileDialog = false
             }
         )
@@ -267,22 +243,12 @@ fun ChatScreen(
 
     if (showConstraintsDialog) {
         ConstraintsEditDialog(
-            constraints = projectConstraints,
+            constraints = viewState.projectConstraints,
             onDismiss = { showConstraintsDialog = false },
             onSave = { constraints ->
-                onUpdateConstraints(constraints)
+                onEvent(ViewEvent.UpdateProjectConstraints(constraints))
                 showConstraintsDialog = false
             }
-        )
-    }
-
-    if (showSnapshotDialog) {
-        SnapshotDialog(
-            snapshots = snapshots,
-            onRestore = onRestoreSnapshot,
-            onCreate = onCreateSnapshot,
-            onDismiss = onDismissSnapshotDialog,
-            onGetDetails = onGetSnapshotDetails,
         )
     }
 }

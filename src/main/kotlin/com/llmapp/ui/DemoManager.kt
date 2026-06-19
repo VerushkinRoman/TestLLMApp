@@ -1,6 +1,7 @@
 package com.llmapp.ui
 
 import com.llmapp.agent.StatefulMemoryAgent
+import com.llmapp.agent.TokenSnapshot
 import com.llmapp.chat.ChatSession
 import com.llmapp.demo.manager.BaseDemoRunner
 import com.llmapp.demo.manager.CompressionDemoRunner
@@ -51,7 +52,7 @@ class DemoManager(
     private val onDemoFinished: () -> Unit,
     private val onTypingStateChanged: (Boolean) -> Unit,
     private val onStatsUpdated: ((TokenStats) -> Unit)?,
-    private val onTokenHistoryUpdated: ((List<com.llmapp.agent.TokenSnapshot>) -> Unit)?,
+    private val onTokenHistoryUpdated: ((List<TokenSnapshot>) -> Unit)?,
     private val onContextWarningUpdated: ((String) -> Unit)?,
     private val onTaskStateUpdated: (() -> Unit),
     private val statefulAgent: StatefulMemoryAgent

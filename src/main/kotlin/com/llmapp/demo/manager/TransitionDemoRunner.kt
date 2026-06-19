@@ -6,9 +6,6 @@ import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Демонстрация управления переходами в UI
- */
 class TransitionDemoRunner(
     onMessageAdded: (ChatMessageUI) -> Unit,
     onTypingStateChanged: (Boolean) -> Unit,
@@ -41,19 +38,16 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "🔄 ДЕМОНСТРАЦИЯ ПЕРЕХОДОВ"
         )
-        delay(3.seconds)
+        delay(6.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 1: Создание задачи
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 1/10: Создание задачи",
             metadata = "📌 ШАГ 1/10"
         )
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -74,18 +68,15 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "✅ ЗАДАЧА СОЗДАНА"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 2: Проверка доступных переходов
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 2/10: Проверка доступных переходов",
             metadata = "📌 ШАГ 2/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         val transitions = statefulAgent.getAvailableTransitionsWithDetails()
@@ -109,18 +100,15 @@ class TransitionDemoRunner(
             content = transitionsText,
             metadata = "📊 ДОСТУПНЫЕ ПЕРЕХОДЫ"
         )
-        delay(3.seconds)
+        delay(6.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 3: Попытка недопустимого перехода
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 3/10: Попытка недопустимого перехода",
             metadata = "📌 ШАГ 3/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         addMessage(
@@ -129,7 +117,7 @@ class TransitionDemoRunner(
             metadata = "⏳ ПОПЫТКА ПЕРЕХОДА"
         )
         onTypingStateChanged(true)
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -147,22 +135,19 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "🚫 ОТКАЗАНО"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 4: Переход в PLANNING
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 4/10: Переход в PLANNING (разрешен)",
             metadata = "📌 ШАГ 4/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -179,22 +164,19 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "✅ ПЕРЕХОД В PLANNING"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 5: Утверждение плана
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 5/10: Утверждение плана",
             metadata = "📌 ШАГ 5/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -210,18 +192,15 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = if (result3.success) "✅ ПЛАН УТВЕРЖДЕН" else "❌ ОШИБКА"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 6: Проверка доступных переходов после утверждения
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 6/10: Проверка доступных переходов после утверждения",
             metadata = "📌 ШАГ 6/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         val transitionsAfter = statefulAgent.getAvailableTransitionsWithDetails()
@@ -242,22 +221,19 @@ class TransitionDemoRunner(
             content = transitionsAfterText,
             metadata = "📊 ДОСТУПНЫЕ ПЕРЕХОДЫ"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 7: Переход в EXECUTION
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 7/10: Переход в EXECUTION (теперь разрешен)",
             metadata = "📌 ШАГ 7/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -274,18 +250,15 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "✅ ПЕРЕХОД В EXECUTION"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 8: Попытка перехода в DONE без валидации
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 8/10: Попытка перехода в DONE без валидации",
             metadata = "📌 ШАГ 8/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         addMessage(
@@ -294,7 +267,7 @@ class TransitionDemoRunner(
             metadata = "⏳ ПОПЫТКА ПЕРЕХОДА"
         )
         onTypingStateChanged(true)
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -312,22 +285,19 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "🚫 ОТКАЗАНО"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 9: Переход в VALIDATION
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 9/10: Переход в VALIDATION",
             metadata = "📌 ШАГ 9/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -344,22 +314,19 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "✅ ПЕРЕХОД В VALIDATION"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ШАГ 10: Подтверждение валидации и завершение
-        // ============================================================
         addMessage(
             role = "assistant",
             content = "📌 ШАГ 10/10: Подтверждение валидации и завершение",
             metadata = "📌 ШАГ 10/10"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -375,12 +342,11 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = if (result7.success) "✅ ВАЛИДАЦИЯ ПОДТВЕРЖДЕНА" else "❌ ОШИБКА"
         )
-        delay(2.seconds)
+        delay(4.seconds)
         checkCancelled()
 
-        // Завершение
         onTypingStateChanged(true)
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
         onTypingStateChanged(false)
 
@@ -397,12 +363,9 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "✅ ЗАВЕРШЕНО"
         )
-        delay(1.seconds)
+        delay(2.seconds)
         checkCancelled()
 
-        // ============================================================
-        // ИТОГИ
-        // ============================================================
         addMessage(
             role = "assistant",
             content = """
@@ -427,24 +390,6 @@ class TransitionDemoRunner(
             """.trimIndent(),
             metadata = "🏁 ДЕМОНСТРАЦИЯ ЗАВЕРШЕНА"
         )
-        delay(1.seconds)
         checkCancelled()
-
-        addMessage(
-            role = "assistant",
-            content = """
-            💡 ЧТО ДАЛЬШЕ?
-            
-            Вы можете:
-            1️⃣ Использовать панель управления для ручных переходов
-            2️⃣ Открыть диалог переходов командой /transitions
-            3️⃣ Использовать команды: /planning, /execution, /validation, /done
-            4️⃣ Утвердить план: /approve-plan
-            5️⃣ Подтвердить валидацию: /validate
-            
-            📚 Для справки используйте /help
-            """.trimIndent(),
-            metadata = "💡 РЕКОМЕНДАЦИИ"
-        )
     }
 }

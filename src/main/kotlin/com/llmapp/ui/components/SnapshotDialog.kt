@@ -8,14 +8,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,12 +30,9 @@ fun SnapshotDialog(
     snapshots: List<Pair<String, String>>,
     onRestore: (String) -> Unit,
     onCreate: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onGetDetails: ((String) -> String)? = null
+    onDismiss: () -> Unit
 ) {
     var newSnapshotName by remember { mutableStateOf("") }
-    var expandedSnapshotId by remember { mutableStateOf<String?>(null) }
-    var snapshotDetails by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -90,21 +82,9 @@ fun SnapshotDialog(
                     ) {
                         items(snapshots) { (id, description) ->
                             SnapshotItem(
-                                snapshotId = id,  // <-- переименовано для ясности
+                                snapshotId = id,
                                 description = description,
-                                onRestore = { onRestore(id) },
-                                onToggleDetails = {
-                                    if (expandedSnapshotId == id) {
-                                        expandedSnapshotId = null
-                                        snapshotDetails = null
-                                    } else {
-                                        expandedSnapshotId = id
-                                        snapshotDetails =
-                                            onGetDetails?.invoke(id) ?: "Детали недоступны"
-                                    }
-                                },
-                                isExpanded = expandedSnapshotId == id,
-                                details = snapshotDetails
+                                onRestore = { onRestore(id) }
                             )
                         }
                     }
@@ -123,81 +103,37 @@ fun SnapshotDialog(
 fun SnapshotItem(
     snapshotId: String,
     description: String,
-    onRestore: () -> Unit,
-    onToggleDetails: () -> Unit,
-    isExpanded: Boolean,
-    details: String?
+    onRestore: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = description,
-                        fontSize = 13.sp
-                    )
-                    // Показываем ID снимка мелким шрифтом
-                    Text(
-                        text = "ID: ${snapshotId.take(8)}...",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Кнопка деталей
-                    IconButton(
-                        onClick = onToggleDetails,
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = if (isExpanded) "Скрыть детали" else "Показать детали",
-                            modifier = Modifier
-                        )
-                    }
-
-                    // Кнопка восстановления
-                    Button(
-                        onClick = onRestore,
-                        modifier = Modifier
-                    ) {
-                        Text("Восст.", fontSize = 11.sp)
-                    }
-                }
+                Text(
+                    text = description,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "ID: ${snapshotId.take(8)}...",
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
             }
 
-            // Детали снимка (разворачиваются)
-            if (isExpanded && details != null) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Text(
-                        text = details,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(12.dp),
-                        lineHeight = 16.sp
-                    )
-                }
+            Button(
+                onClick = onRestore,
+                modifier = Modifier
+            ) {
+                Text("Восст.", fontSize = 11.sp)
             }
         }
     }

@@ -23,6 +23,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.llmapp.agent.ChatMemoryAgent
+import com.llmapp.chat.ChatSession
 import com.llmapp.controller.ChatStorageManager
 import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.UserProfile
@@ -30,17 +31,18 @@ import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ConstraintsEditDialog
 import com.llmapp.ui.components.CreateTaskDialog
 import com.llmapp.ui.components.InvariantManagerDialog
-import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.ModelsPanel
 import com.llmapp.ui.components.ProfileEditDialog
 import com.llmapp.ui.components.ProfileManagerDialog
 import com.llmapp.ui.components.ProfileWelcomeDialog
 import com.llmapp.ui.components.SavedChatsPanel
 import com.llmapp.ui.components.SettingsPanel
+import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
 import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
+import com.llmapp.ui.viewmodel.ViewEvent
 import java.util.prefs.Preferences
 
 class WindowSettings {
@@ -104,22 +106,35 @@ fun main() = application {
     val viewModel = remember { ChatViewModel() }
     val storageManager = remember { ChatStorageManager() }
 
+    var chatSession: ChatSession? = null
+    viewModel.handleEvent(
+        ViewEvent.GetChatSession { session ->
+            chatSession = session
+        }
+    )
+
     val chatMemoryService = remember {
-        ChatMemoryAgent(viewModel.getChatSession(), storageManager)
+        ChatMemoryAgent(
+            chatSession ?: error("ChatSession not initialized"),
+            storageManager
+        )
     }
 
     LaunchedEffect(Unit) {
         chatMemoryService.loadChats()
+        viewModel.handleEvent(ViewEvent.SetChatMemoryService(chatMemoryService))
 
         val (lastChatId, lastMessages) = chatMemoryService.loadLastChat()
         if (lastChatId != null && lastMessages.isNotEmpty()) {
             val nonDemoMessages = lastMessages.filter { !it.isDemoMessage }
             if (nonDemoMessages.isNotEmpty()) {
-                viewModel.messages.clear()
-                viewModel.messages.addAll(nonDemoMessages)
-
+                // Добавляем сообщения в состояние через ViewEvent
+                nonDemoMessages.forEach { message ->
+                    viewModel.handleEvent(ViewEvent.AddMessage(message))
+                }
                 val uiMessages = nonDemoMessages.map { it.role to it.content }
-                viewModel.getChatSession().rebuildHistoryFromUiMessages(uiMessages)
+                // Используем ViewEvent для восстановления истории
+                viewModel.handleEvent(ViewEvent.RebuildHistoryFromUiMessages(uiMessages))
             }
         }
     }
@@ -172,34 +187,13 @@ fun MainScreen(
     var currentScreen by remember { mutableStateOf(Screen.Chat) }
     var selectedChatId by remember { mutableStateOf<String?>(null) }
 
-    var memorySettings by remember { mutableStateOf(MemorySettings()) }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showConstraintsDialog by remember { mutableStateOf(false) }
 
-    val userProfile by viewModel.userProfile.collectAsState()
-    val projectConstraints by viewModel.projectConstraints.collectAsState()
-
-    val messages = viewModel.messages
-    val isTyping by viewModel.isTyping
-    val currentModel by viewModel.currentModel
-    val controlEnabled by viewModel.controlEnabled
-    val responseControl by viewModel.responseControl
-    val availableModels by viewModel.availableModels
-
-    val tokenStats by viewModel.tokenStatsFlow.collectAsState()
-    val tokenHistory by viewModel.tokenHistoryFlow.collectAsState()
-    val contextWarning by viewModel.contextWarningFlow.collectAsState()
+    val state by viewModel.state.collectAsState()
+    val taskState by viewModel.taskState.collectAsState()
 
     val savedChats by chatMemoryService.savedChats.collectAsState(initial = emptyList())
-
-    val isDemoRunning by viewModel.isDemoRunning
-
-    val activeProfile by viewModel.activeProfile.collectAsState()
-    val showProfileManager by viewModel.showProfileManager.collectAsState()
-    val showWelcomeDialog by viewModel.showWelcomeDialog.collectAsState()
-    val allProfiles by viewModel.allProfiles.collectAsState()
-
-    val showCreateTaskDialog by viewModel.showCreateTaskDialog.collectAsState()
 
     var showInvariantManager by remember { mutableStateOf(false) }
     var invariantSets by remember { mutableStateOf(emptyList<InvariantSet>()) }
@@ -207,11 +201,9 @@ fun MainScreen(
 
     var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
 
-    val showTransitionsDialog by viewModel.showTransitionsDialog.collectAsState()
-    val availableTransitions by viewModel.availableTransitions.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.setChatMemoryService(chatMemoryService)
+    // Функция-помощник для отправки событий
+    fun sendEvent(event: ViewEvent) {
+        viewModel.handleEvent(event)
     }
 
     LaunchedEffect(showInvariantManager) {
@@ -220,32 +212,37 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(messages.size, isTyping) {
-        if (messages.isNotEmpty() && currentScreen == Screen.Chat && !isTyping && !isDemoRunning) {
-            val nonDemoMessages = messages.filter { !it.isDemoMessage }.toList()
+    LaunchedEffect(state.messages.size, state.isTyping) {
+        if (state.messages.isNotEmpty() &&
+            currentScreen == Screen.Chat &&
+            !state.isTyping &&
+            !state.isDemoRunning
+        ) {
+            val nonDemoMessages = state.messages.filter { !it.isDemoMessage }.toList()
             if (nonDemoMessages.isNotEmpty()) {
-                chatMemoryService.saveCurrentChatDebounced(nonDemoMessages, currentModel)
+                chatMemoryService.saveCurrentChatDebounced(nonDemoMessages, state.currentModel)
             }
         }
     }
 
+    // Диалоги
     if (showProfileDialog) {
         ProfileEditDialog(
-            profile = editingProfile ?: userProfile,
+            profile = editingProfile ?: state.userProfile,
             onDismiss = {
                 showProfileDialog = false
                 editingProfile = null
             },
             onSave = { profile ->
                 if (editingProfile != null && profile.name.isNotEmpty()) {
-                    val existing = allProfiles.find { it.name == profile.name }
+                    val existing = state.allProfiles.find { it.name == profile.name }
                     if (existing != null) {
-                        viewModel.updateExistingProfile(profile)
+                        sendEvent(ViewEvent.UpdateExistingProfile(profile))
                     } else {
-                        viewModel.switchToProfile(profile)
+                        sendEvent(ViewEvent.SwitchToProfile(profile))
                     }
                 } else if (profile.name.isNotEmpty()) {
-                    viewModel.switchToProfile(profile)
+                    sendEvent(ViewEvent.SwitchToProfile(profile))
                 }
                 showProfileDialog = false
                 editingProfile = null
@@ -255,61 +252,61 @@ fun MainScreen(
 
     if (showConstraintsDialog) {
         ConstraintsEditDialog(
-            constraints = projectConstraints,
+            constraints = state.projectConstraints,
             onDismiss = { showConstraintsDialog = false },
             onSave = { constraints ->
-                viewModel.updateProjectConstraints(constraints)
+                sendEvent(ViewEvent.UpdateProjectConstraints(constraints))
                 showConstraintsDialog = false
             }
         )
     }
 
-    if (showWelcomeDialog) {
+    if (state.showWelcomeDialog) {
         ProfileWelcomeDialog(
             onSetupProfile = {
-                viewModel.dismissWelcomeDialog()
-                viewModel.toggleProfileManager()
+                sendEvent(ViewEvent.DismissWelcomeDialog)
+                sendEvent(ViewEvent.ToggleProfileManager)
             },
             onSkip = {
-                viewModel.dismissWelcomeDialog()
+                sendEvent(ViewEvent.DismissWelcomeDialog)
             }
         )
     }
 
-    if (showProfileManager) {
+    if (state.showProfileManager) {
         ProfileManagerDialog(
-            profiles = allProfiles,
-            activeProfile = activeProfile,
+            profiles = state.allProfiles,
+            activeProfile = state.activeProfile,
             onSelectProfile = { profile ->
-                viewModel.switchToProfile(profile)
-                viewModel.dismissProfileManager()
+                sendEvent(ViewEvent.SwitchToProfile(profile))
+                sendEvent(ViewEvent.DismissProfileManager)
             },
             onDeleteProfile = { name ->
-                viewModel.deleteProfile(name)
+                sendEvent(ViewEvent.DeleteProfile(name))
             },
             onEditProfile = { profile ->
                 editingProfile = profile
-                viewModel.dismissProfileManager()
+                sendEvent(ViewEvent.DismissProfileManager)
                 showProfileDialog = true
             },
             onCreateProfile = {
                 editingProfile = UserProfile()
-                viewModel.dismissProfileManager()
+                sendEvent(ViewEvent.DismissProfileManager)
                 showProfileDialog = true
             },
             onLoadPreset = { preset ->
-                viewModel.loadPresetProfile(preset)
-                viewModel.dismissProfileManager()
+                sendEvent(ViewEvent.LoadPresetProfile(preset))
+                sendEvent(ViewEvent.DismissProfileManager)
             },
-            onDismiss = { viewModel.dismissProfileManager() }
+            onDismiss = { sendEvent(ViewEvent.DismissProfileManager) }
         )
     }
 
-    if (showCreateTaskDialog) {
+    if (state.showCreateTaskDialog) {
         CreateTaskDialog(
-            onDismiss = { viewModel.toggleCreateTaskDialog() },
+            onDismiss = { sendEvent(ViewEvent.ToggleCreateTaskDialog) },
             onCreate = { name, description ->
-                viewModel.createNewTask(name, description)
+                sendEvent(ViewEvent.CreateTask(name, description))
             }
         )
     }
@@ -317,18 +314,18 @@ fun MainScreen(
     if (showInvariantManager) {
         InvariantManagerDialog(
             invariantSets = invariantSets,
-            activeSetName = viewModel.activeInvariantSetName.value,
+            activeSetName = state.activeInvariantSetName,
             onSelect = { set ->
-                viewModel.selectInvariantSet(set)
+                sendEvent(ViewEvent.SelectInvariantSet(set))
                 showInvariantManager = false
             },
             onDelete = { name ->
                 if (invariantManager.deleteInvariantSet(name)) {
-                    if (viewModel.activeInvariantSetName.value == name) {
-                        viewModel.clearActiveInvariantSet()
+                    if (state.activeInvariantSetName == name) {
+                        sendEvent(ViewEvent.ClearActiveInvariantSet)
                     }
                     invariantSets = invariantManager.getAllInvariantSets()
-                    viewModel.refreshInvariantSets()
+                    // Удаляем: sendEvent(ViewEvent.RefreshInvariantSets)
                 }
             },
             onCreatePreset = { presetName ->
@@ -342,10 +339,21 @@ fun MainScreen(
                 invariantManager.saveInvariantSet(set)
 
                 invariantSets = invariantManager.getAllInvariantSets()
-                viewModel.refreshInvariantSets()
-                viewModel.selectInvariantSet(set)
+                // Удаляем: sendEvent(ViewEvent.RefreshInvariantSets)
+                sendEvent(ViewEvent.SelectInvariantSet(set))
             },
             onDismiss = { showInvariantManager = false }
+        )
+    }
+
+    if (state.showTransitionsDialog) {
+        TransitionsDialog(
+            currentPhase = taskState?.phase ?: com.llmapp.state.TaskPhase.INIT,
+            availableTransitions = state.availableTransitions,
+            onTransition = { phase ->
+                sendEvent(ViewEvent.SafeTransitionTo(phase))
+            },
+            onDismiss = { sendEvent(ViewEvent.DismissTransitionsDialog) }
         )
     }
 
@@ -359,13 +367,15 @@ fun MainScreen(
                 }
             },
             onClearHistory = {
-                val demoMessages = viewModel.messages.filter { it.isDemoMessage }
-                viewModel.messages.clear()
-                viewModel.messages.addAll(demoMessages)
-                viewModel.clearHistory()
-
-                if (viewModel.messages.isEmpty()) {
-                    chatMemoryService.saveCurrentChat(emptyList(), currentModel)
+                val demoMessages = state.messages.filter { it.isDemoMessage }
+                // Очищаем через ViewEvent
+                sendEvent(ViewEvent.ClearHistory)
+                // Добавляем демо-сообщения обратно
+                demoMessages.forEach { message ->
+                    sendEvent(ViewEvent.AddDemoMessage(message))
+                }
+                if (state.messages.isEmpty()) {
+                    chatMemoryService.saveCurrentChat(emptyList(), state.currentModel)
                 }
                 selectedChatId = null
             }
@@ -373,155 +383,85 @@ fun MainScreen(
 
         when (currentScreen) {
             Screen.Chat -> ChatScreen(
-                messages = messages,
-                isTyping = isTyping,
-                currentModel = currentModel,
-                controlEnabled = controlEnabled,
-                currentAgentName = "LLM Agent",
-                currentAgentIcon = "🤖",
-                inputText = viewModel.draftMessage.value,
-                cursorPosition = viewModel.cursorPosition.value,
-                onInputTextChange = { text, cursorPos ->
-                    viewModel.updateDraft(text, cursorPos)
-                },
-                onSendMessage = { message ->
-                    if (message.isNotBlank() && !viewModel.isGenerating.value && !viewModel.isDemoRunning.value) {
-                        viewModel.sendMessage(message)
-                        viewModel.updateDraft("", 0)
-                    }
-                },
-                onRegenerateMessage = { assistantMessageId ->
-                    viewModel.regenerateMessage(assistantMessageId)
-                },
-                onEditMessage = { messageId, newContent ->
-                    viewModel.editUserMessage(messageId, newContent)
-                },
-                onStopGeneration = {
-                    viewModel.stopGeneration()
-                },
-                isGenerating = viewModel.isGenerating.value,
-                isDemoRunning = viewModel.isDemoRunning.value,
-                tokenStats = tokenStats,
-                tokenHistory = tokenHistory,
-                contextWarning = contextWarning,
-                onClearTokenStats = { viewModel.clearTokenStats() },
-                memorySettings = memorySettings,
-                onMemorySettingChanged = { settings ->
-                    memorySettings = settings
-                    viewModel.updateMemorySettings(settings)
-                    if (settings.resetWorkingMemory) {
-                        viewModel.resetWorkingMemory()
-                        memorySettings = settings.copy(resetWorkingMemory = false)
-                    }
-                },
-                userProfile = userProfile,
-                projectConstraints = projectConstraints,
-                onUpdateProfile = { profile ->
-                    viewModel.updateUserProfile(profile)
-                },
-                onUpdateConstraints = { constraints ->
-                    viewModel.updateProjectConstraints(constraints)
-                },
-                onResetWorkingMemory = {
-                    viewModel.resetWorkingMemory()
-                },
-                activeProfile = activeProfile,
-                onShowProfileManager = { viewModel.toggleProfileManager() },
-                taskState = viewModel.taskState.value,
-                onTransition = { viewModel.transitionTo(it) },
-                onPauseTask = { viewModel.pauseTask() },
-                onResumeTask = { viewModel.resumeTask() },
-                onBlockTask = { viewModel.blockTask() },
-                onUnblockTask = { viewModel.unblockTask() },
-                onShowSnapshots = { viewModel.toggleSnapshotDialog() },
-                onCreateSnapshot = { viewModel.createSnapshot(it) },
-                onRestoreSnapshot = { viewModel.restoreSnapshot(it) },
-                showSnapshotDialog = viewModel.showSnapshotDialog.value,
-                snapshots = viewModel.snapshots.value,
-                onDismissSnapshotDialog = { viewModel.dismissSnapshotDialog() },
-                onGetSnapshotDetails = { viewModel.getSnapshotDetails(it) },
-                onCreateTask = { viewModel.toggleCreateTaskDialog() },
-                onShowInvariantManager = { showInvariantManager = true },
-                showTransitionsDialog = showTransitionsDialog,
-                availableTransitions = availableTransitions,
-                onShowTransitionsDialog = { viewModel.showTransitionsDialog() },
-                onDismissTransitionsDialog = { viewModel.dismissTransitionsDialog() },
-                onExecuteTransition = { viewModel.executeTransitionFromDialog(it) },
+                viewState = state,
+                onEvent = { event -> viewModel.handleEvent(event) }
             )
 
             Screen.Demo -> DemoScreen(
                 onStartTokenDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startTokenDemo()
+                    // Очищаем историю через ViewEvent
+                    sendEvent(ViewEvent.ClearHistory)
+                    // Инициализируем DemoManager
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartTokenDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartCompressionDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startCompressionDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartCompressionDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartStrategyDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startStrategyDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartStrategyDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartMemoryDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startMemoryDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartMemoryDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartPersonalizationDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startPersonalizationDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartPersonalizationDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartStatefulDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startStatefulDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartStatefulDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartInvariantDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startInvariantDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartInvariantDemo)
                     currentScreen = Screen.Chat
                 },
                 onStartTransitionDemo = {
-                    viewModel.clearHistory()
-                    viewModel.initDemoManager { message ->
-                        viewModel.addDemoMessage(message)
-                    }
-                    viewModel.startTransitionDemo()
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartTransitionDemo)
                     currentScreen = Screen.Chat
                 },
-                isDemoRunning = viewModel.isDemoRunning.value,
+                isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,
                 onCancelDemo = {
-                    viewModel.cancelDemo()
+                    sendEvent(ViewEvent.CancelDemo)
                 },
                 onClearHistory = {
-                    viewModel.clearHistory()
+                    sendEvent(ViewEvent.ClearHistory)
                 }
             )
 
@@ -531,17 +471,20 @@ fun MainScreen(
                 onChatSelected = { chat ->
                     selectedChatId = chat.id
                     val loadedMessages = chatMemoryService.loadChat(chat.id)
-                    viewModel.messages.clear()
-                    viewModel.messages.addAll(loadedMessages)
-                    viewModel.refreshTokenStats()
+                    // Очищаем и добавляем загруженные сообщения
+                    sendEvent(ViewEvent.ClearHistory)
+                    loadedMessages.forEach { message ->
+                        sendEvent(ViewEvent.AddMessage(message))
+                    }
+                    sendEvent(ViewEvent.RefreshTokenStats)
                     currentScreen = Screen.Chat
                 },
                 onDeleteChat = { chatId ->
                     chatMemoryService.deleteChat(chatId)
                     if (selectedChatId == chatId) {
                         selectedChatId = null
-                        if (viewModel.messages.isEmpty()) {
-                            viewModel.clearHistory()
+                        if (state.messages.isEmpty()) {
+                            sendEvent(ViewEvent.ClearHistory)
                         }
                     }
                 },
@@ -550,51 +493,45 @@ fun MainScreen(
                 },
                 onNewChat = {
                     chatMemoryService.createNewChat()
-                    viewModel.clearHistory()
+                    sendEvent(ViewEvent.ClearHistory)
                     selectedChatId = null
                     currentScreen = Screen.Chat
                 }
             )
 
             Screen.Models -> ModelsPanel(
-                models = availableModels,
-                currentModel = currentModel,
+                models = state.availableModels,
+                currentModel = state.currentModel,
                 onModelSelected = {
-                    viewModel.changeModel(it)
-                    viewModel.refreshTokenStats()
+                    sendEvent(ViewEvent.ChangeModel(it))
+                    sendEvent(ViewEvent.RefreshTokenStats)
                 }
             )
 
             Screen.Settings -> SettingsPanel(
-                control = responseControl,
-                onEnableChanged = { viewModel.setControlEnabled(it) },
-                onFormatChanged = { viewModel.setFormatDescription(it) },
-                onMaxTokensChanged = { viewModel.setMaxTokens(it) },
-                onStopSequencesChanged = { viewModel.setStopSequences(it) },
-                onTemperatureChanged = { viewModel.setTemperature(it) },
-                onPresetLoaded = { viewModel.loadPreset(it) },
-                onResetToDefault = { viewModel.resetToDefault() },
-                compressionEnabled = viewModel.compressionEnabled.value,
-                keepLastMessages = viewModel.keepLastMessages.value,
-                summarizeEvery = viewModel.summarizeEvery.value,
-                compressionStats = viewModel.compressionStats.value,
-                onCompressionToggle = { viewModel.toggleCompression(it) },
+                control = state.responseControl,
+                onEnableChanged = { sendEvent(ViewEvent.SetControlEnabled(it)) },
+                onFormatChanged = { sendEvent(ViewEvent.SetFormatDescription(it)) },
+                onMaxTokensChanged = { sendEvent(ViewEvent.SetMaxTokens(it)) },
+                onStopSequencesChanged = { sendEvent(ViewEvent.SetStopSequences(it)) },
+                onTemperatureChanged = { sendEvent(ViewEvent.SetTemperature(it)) },
+                onPresetLoaded = { sendEvent(ViewEvent.LoadPreset(it)) },
+                onResetToDefault = { sendEvent(ViewEvent.ResetToDefault) },
+                compressionEnabled = state.compressionEnabled,
+                keepLastMessages = state.keepLastMessages,
+                summarizeEvery = state.summarizeEvery,
+                compressionStats = state.compressionStats,
+                onCompressionToggle = { sendEvent(ViewEvent.ToggleCompression(it)) },
                 onKeepLastMessagesChange = {
-                    viewModel.updateCompressionParams(
-                        it,
-                        viewModel.summarizeEvery.value
-                    )
+                    sendEvent(ViewEvent.UpdateCompressionParams(it, state.summarizeEvery))
                 },
                 onSummarizeEveryChange = {
-                    viewModel.updateCompressionParams(
-                        viewModel.keepLastMessages.value,
-                        it
-                    )
+                    sendEvent(ViewEvent.UpdateCompressionParams(state.keepLastMessages, it))
                 },
-                onRotateToNextKey = { viewModel.forceRotateToNextKey() },
+                onRotateToNextKey = { sendEvent(ViewEvent.ForceRotateToNextKey) },
                 onResetKeyRotation = {
                     com.llmapp.api.ApiConfig.resetKeyRotation()
-                    viewModel.refreshApiKeys()
+                    sendEvent(ViewEvent.RefreshApiKeys)
                 },
                 onShowKeyStats = { println(com.llmapp.api.KeyUsageMonitor.getStatsReport()) }
             )
