@@ -154,6 +154,7 @@ class TaskStateMachine(
         }
         return transitions.any { it.from == currentState.phase && it.to == targetPhase }
     }
+
     fun getStep(): String = currentState.step
     fun getExpectedAction(): String = currentState.expectedAction
     fun isPaused(): Boolean = isPaused
@@ -497,6 +498,146 @@ class TaskStateMachine(
             TaskPhase.BLOCKED -> "Требуется вмешательство для разблокировки"
         }
     }
+
+    fun validateTransition(targetPhase: TaskPhase): TransitionValidationResult {
+        if (isPaused && targetPhase != TaskPhase.PAUSED) {
+            return TransitionValidationResult(
+                valid = false,
+                reason = "Задача на паузе. Сначала возобновите выполнение.",
+                suggestedAction = "Используйте resume() для продолжения"
+            )
+        }
+
+        // Проверяем, что переход разрешен
+        val allowed = transitions.find { it.from == currentState.phase && it.to == targetPhase }
+        if (allowed == null) {
+            return TransitionValidationResult(
+                valid = false,
+                reason = "Переход из ${currentState.phase.displayName} в ${targetPhase.displayName} не разрешен",
+                suggestedAction = "Доступные переходы: ${getAvailableTransitions().joinToString { it.displayName }}"
+            )
+        }
+
+        // Дополнительные проверки для конкретных переходов
+        when (targetPhase) {
+            TaskPhase.EXECUTION if currentState.phase == TaskPhase.PLANNING -> {
+                // Проверяем, что план утвержден (есть маркер в контексте)
+                if (!currentState.context.containsKey("plan_approved")) {
+                    return TransitionValidationResult(
+                        valid = false,
+                        reason = "План не утвержден. Нельзя переходить к выполнению без утвержденного плана.",
+                        suggestedAction = "Утвердите план командой /approve-plan или обсудите детали"
+                    )
+                }
+            }
+
+            TaskPhase.DONE if currentState.phase == TaskPhase.VALIDATION -> {
+                // Проверяем, что валидация пройдена
+                if (!currentState.context.containsKey("validation_passed")) {
+                    return TransitionValidationResult(
+                        valid = false,
+                        reason = "Валидация не пройдена. Нельзя завершить задачу без успешной проверки.",
+                        suggestedAction = "Проверьте результат и подтвердите командой /validate"
+                    )
+                }
+            }
+
+            else -> Unit
+        }
+
+        return TransitionValidationResult(
+            valid = true,
+            reason = "Переход разрешен",
+            suggestedAction = null
+        )
+    }
+
+    // Метод для безопасного перехода с проверкой
+    fun safeTransitionTo(
+        targetPhase: TaskPhase,
+        reason: String = "",
+        triggeredBy: String = "system"
+    ): SafeTransitionResult {
+        val validation = validateTransition(targetPhase)
+        if (!validation.valid) {
+            return SafeTransitionResult(
+                success = false,
+                message = validation.reason,
+                suggestedAction = validation.suggestedAction,
+                state = currentState
+            )
+        }
+
+        // Выполняем переход
+        val result = transitionTo(targetPhase, reason, triggeredBy)
+        return SafeTransitionResult(
+            success = result.success,
+            message = result.message,
+            suggestedAction = null,
+            state = result.state,
+            transition = result.transition
+        )
+    }
+
+    // Дополнительный метод для утверждения плана
+    fun approvePlan(): TransitionResult {
+        if (currentState.phase != TaskPhase.PLANNING) {
+            return TransitionResult(
+                success = false,
+                message = "План можно утвердить только на этапе PLANNING",
+                state = currentState
+            )
+        }
+        currentState = currentState.copy(
+            context = currentState.context + ("plan_approved" to "true"),
+            lastUpdated = System.currentTimeMillis()
+        )
+        saveCurrentState()
+        return TransitionResult(
+            success = true,
+            message = "✅ План утвержден. Теперь можно переходить к выполнению.",
+            state = currentState
+        )
+    }
+
+    // Дополнительный метод для подтверждения валидации
+    fun confirmValidation(): TransitionResult {
+        if (currentState.phase != TaskPhase.VALIDATION) {
+            return TransitionResult(
+                success = false,
+                message = "Валидацию можно подтвердить только на этапе VALIDATION",
+                state = currentState
+            )
+        }
+        currentState = currentState.copy(
+            context = currentState.context + ("validation_passed" to "true"),
+            lastUpdated = System.currentTimeMillis()
+        )
+        saveCurrentState()
+        return TransitionResult(
+            success = true,
+            message = "✅ Валидация подтверждена. Теперь можно завершать задачу.",
+            state = currentState
+        )
+    }
+
+    // ============================================================
+    // DATA CLASSES
+    // ============================================================
+
+    data class TransitionValidationResult(
+        val valid: Boolean,
+        val reason: String,
+        val suggestedAction: String? = null
+    )
+
+    data class SafeTransitionResult(
+        val success: Boolean,
+        val message: String,
+        val suggestedAction: String? = null,
+        val state: TaskState,
+        val transition: StateTransition? = null
+    )
 }
 
 // ============================================================

@@ -10,6 +10,7 @@ import com.llmapp.demo.manager.PersonalizationDemoRunner
 import com.llmapp.demo.manager.StatefulDemoRunner
 import com.llmapp.demo.manager.StrategyDemoRunner
 import com.llmapp.demo.manager.TokenDemoRunner
+import com.llmapp.demo.manager.TransitionDemoRunner
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ sealed class DemoType {
     object Personalization : DemoType()
     object StatefulAgent : DemoType()
     object InvariantDemo : DemoType()
+    object TransitionDemo : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -38,6 +40,7 @@ sealed class DemoType {
             Personalization -> "Персонализация"
             StatefulAgent -> "Stateful Agent"
             InvariantDemo -> "Инварианты"
+            TransitionDemo -> "Управление переходами"
         }
 }
 
@@ -47,10 +50,10 @@ class DemoManager(
     private val onDemoStarted: () -> Unit,
     private val onDemoFinished: () -> Unit,
     private val onTypingStateChanged: (Boolean) -> Unit,
-    private val onStatsUpdated: ((TokenStats) -> Unit)? = null,
-    private val onTokenHistoryUpdated: ((List<com.llmapp.agent.TokenSnapshot>) -> Unit)? = null,
-    private val onContextWarningUpdated: ((String) -> Unit)? = null,
-    private val onTaskStateUpdated: (() -> Unit)? = null,
+    private val onStatsUpdated: ((TokenStats) -> Unit)?,
+    private val onTokenHistoryUpdated: ((List<com.llmapp.agent.TokenSnapshot>) -> Unit)?,
+    private val onContextWarningUpdated: ((String) -> Unit)?,
+    private val onTaskStateUpdated: (() -> Unit),
     private val statefulAgent: StatefulMemoryAgent
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -234,6 +237,17 @@ class DemoManager(
             InvariantDemoRunner(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged
+            )
+        }
+    }
+
+    fun startTransitionDemo() {
+        runDemo(DemoType.TransitionDemo) {
+            TransitionDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                statefulAgent = statefulAgent,
+                onTaskStateUpdated = onTaskStateUpdated
             )
         }
     }

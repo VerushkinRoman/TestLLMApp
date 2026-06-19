@@ -54,6 +54,7 @@ fun DemoScreen(
     onStartPersonalizationDemo: () -> Unit,
     onStartStatefulDemo: () -> Unit,
     onStartInvariantDemo: () -> Unit,
+    onStartTransitionDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -123,7 +124,16 @@ fun DemoScreen(
             features = listOf("Архитектура", "Стек", "Бизнес-правила"),
             color = Color(0xFF673AB7),
             onStart = onStartInvariantDemo
-        )
+        ),
+        DemoItem(
+            id = "transitions",
+            title = "🔄 Управление переходами",
+            icon = Icons.Default.Timeline,
+            description = "Демонстрация контролируемого жизненного цикла задачи",
+            features = listOf("Переходы", "Валидация", "Контроль"),
+            color = Color(0xFF2196F3),
+            onStart = onStartTransitionDemo
+        ),
     )
 
     val gridState = rememberLazyGridState()

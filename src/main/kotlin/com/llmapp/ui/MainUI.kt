@@ -207,6 +207,9 @@ fun MainScreen(
 
     var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
 
+    val showTransitionsDialog by viewModel.showTransitionsDialog.collectAsState()
+    val availableTransitions by viewModel.availableTransitions.collectAsState()
+
     LaunchedEffect(Unit) {
         viewModel.setChatMemoryService(chatMemoryService)
     }
@@ -438,7 +441,12 @@ fun MainScreen(
                 onDismissSnapshotDialog = { viewModel.dismissSnapshotDialog() },
                 onGetSnapshotDetails = { viewModel.getSnapshotDetails(it) },
                 onCreateTask = { viewModel.toggleCreateTaskDialog() },
-                onShowInvariantManager = { showInvariantManager = true }
+                onShowInvariantManager = { showInvariantManager = true },
+                showTransitionsDialog = showTransitionsDialog,
+                availableTransitions = availableTransitions,
+                onShowTransitionsDialog = { viewModel.showTransitionsDialog() },
+                onDismissTransitionsDialog = { viewModel.dismissTransitionsDialog() },
+                onExecuteTransition = { viewModel.executeTransitionFromDialog(it) },
             )
 
             Screen.Demo -> DemoScreen(
@@ -496,6 +504,14 @@ fun MainScreen(
                         viewModel.addDemoMessage(message)
                     }
                     viewModel.startInvariantDemo()
+                    currentScreen = Screen.Chat
+                },
+                onStartTransitionDemo = {
+                    viewModel.clearHistory()
+                    viewModel.initDemoManager { message ->
+                        viewModel.addDemoMessage(message)
+                    }
+                    viewModel.startTransitionDemo()
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = viewModel.isDemoRunning.value,

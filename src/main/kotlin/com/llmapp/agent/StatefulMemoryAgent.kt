@@ -1,15 +1,14 @@
-// src/main/kotlin/com/llmapp/agent/StatefulMemoryAgent.kt
-
 package com.llmapp.agent
 
 import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ProjectConstraints
+import com.llmapp.memory.TaskState
 import com.llmapp.memory.UserProfile
 import com.llmapp.memory.WorkingMemory
+import com.llmapp.state.StateTransition
 import com.llmapp.state.TaskPhase
 import com.llmapp.state.TaskStateMachine
 import com.llmapp.state.TransitionResult
-import com.llmapp.state.StateTransition
 import java.io.File
 import com.llmapp.state.TaskState as StateTaskState
 
@@ -22,6 +21,23 @@ data class StatefulResponse(
     val taskState: StateTaskState,
     val transitionResult: TransitionResult? = null,
     val memoryUsed: MemoryUsageInfo? = null
+)
+
+// Только нужные data классы
+data class AvailableTransition(
+    val from: TaskPhase,
+    val to: TaskPhase,
+    val isValid: Boolean,
+    val reason: String,
+    val suggestedAction: String? = null
+)
+
+data class SafeTransitionResult(
+    val success: Boolean,
+    val message: String,
+    val suggestedAction: String? = null,
+    val state: StateTaskState,
+    val transition: StateTransition? = null
 )
 
 class StatefulMemoryAgent(
@@ -59,7 +75,7 @@ class StatefulMemoryAgent(
         currentTaskId = state.taskId
 
         memoryAgent.startNewTask(taskName, initialContext)
-        memoryAgent.updateTaskState(com.llmapp.memory.TaskState.INIT)
+        memoryAgent.updateTaskState(TaskState.INIT)
 
         sessionMessages.add("system" to "Начинаем работу над задачей: $taskName")
 
@@ -78,10 +94,6 @@ class StatefulMemoryAgent(
     fun getPauseReason(): String = stateMachine.getPauseReason()
     fun canTransitionTo(phase: TaskPhase): Boolean = stateMachine.canTransitionTo(phase)
     fun getAvailableTransitions(): List<TaskPhase> = stateMachine.getAvailableTransitions()
-    fun getTaskHistory(): List<StateTransition> = stateMachine.getCurrentState().history
-    fun getTaskDescription(): String = stateMachine.getCurrentState().description
-    fun getCurrentUserProfile(): UserProfile = memoryAgent.getUserProfile()
-    fun getCurrentConstraints(): ProjectConstraints = memoryAgent.getProjectConstraints()
 
     // ============================================================
     // ПЕРЕХОДЫ
@@ -162,7 +174,6 @@ class StatefulMemoryAgent(
     }
 
     fun getContext(key: String): String? = stateMachine.getContext(key)
-    fun getAllContext(): Map<String, String> = stateMachine.getCurrentState().context
 
     // ============================================================
     // ЗАПРОС К АГЕНТУ
@@ -301,20 +312,10 @@ class StatefulMemoryAgent(
         updateContext("model", newModel)
     }
 
-    fun clearWorkingMemory() {
-        memoryAgent.clearWorkingMemory()
-        createSnapshot("memory_cleared_${System.currentTimeMillis()}")
-    }
-
-    fun resetWorkingMemory() {
-        memoryAgent.clearWorkingMemory()
-        createSnapshot("memory_reset_${System.currentTimeMillis()}")
-    }
-
     fun getMemoryStats(): String {
         return buildString {
             appendLine("📊 Статистика памяти:")
-            appendLine("  • Профиль: ${if (getUserProfile().name.isNotEmpty()) getUserProfile().name else "не настроен"}")
+            appendLine("  • Профиль: ${getUserProfile().name.ifEmpty { "не настроен" }}")
             appendLine("  • Ограничения: ${if (getProjectConstraints().techStack.isNotEmpty()) "настроены" else "не настроены"}")
             appendLine("  • Знаний: ${getAllKnowledge().size}")
             appendLine("  • Решений: ${getAllDecisions().size}")
@@ -368,17 +369,92 @@ class StatefulMemoryAgent(
     }
 
     // ============================================================
+    // НОВЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПЕРЕХОДАМИ
+    // ============================================================
+
+    /**
+     * Безопасный переход с валидацией
+     */
+    fun safeTransitionTo(phase: TaskPhase, reason: String = ""): SafeTransitionResult {
+        val result = stateMachine.safeTransitionTo(phase, reason)
+        if (result.success) {
+            syncWithMemory(stateMachine.getPhase())
+            createSnapshot("transition_${System.currentTimeMillis()}")
+        }
+        return SafeTransitionResult(
+            success = result.success,
+            message = result.message,
+            suggestedAction = result.suggestedAction,
+            state = result.state,
+            transition = result.transition
+        )
+    }
+
+    /**
+     * Утвердить план (переход PLANNING → EXECUTION)
+     */
+    fun approvePlan(): TransitionResult {
+        if (stateMachine.getPhase() != TaskPhase.PLANNING) {
+            return TransitionResult(
+                success = false,
+                message = "⚠️ План можно утвердить только на этапе PLANNING",
+                state = stateMachine.getCurrentState()
+            )
+        }
+        val result = stateMachine.approvePlan()
+        if (result.success) {
+            createSnapshot("plan_approved_${System.currentTimeMillis()}")
+        }
+        return result
+    }
+
+    /**
+     * Подтвердить валидацию (переход VALIDATION → DONE)
+     */
+    fun confirmValidation(): TransitionResult {
+        if (stateMachine.getPhase() != TaskPhase.VALIDATION) {
+            return TransitionResult(
+                success = false,
+                message = "⚠️ Валидацию можно подтвердить только на этапе VALIDATION",
+                state = stateMachine.getCurrentState()
+            )
+        }
+        val result = stateMachine.confirmValidation()
+        if (result.success) {
+            createSnapshot("validation_confirmed_${System.currentTimeMillis()}")
+        }
+        return result
+    }
+
+    /**
+     * Получить все доступные переходы с пояснениями
+     */
+    fun getAvailableTransitionsWithDetails(): List<AvailableTransition> {
+        val phase = stateMachine.getPhase()
+        return stateMachine.getAvailableTransitions().map { targetPhase ->
+            val validation = stateMachine.validateTransition(targetPhase)
+            AvailableTransition(
+                from = phase,
+                to = targetPhase,
+                isValid = validation.valid,
+                reason = validation.reason,
+                suggestedAction = validation.suggestedAction
+            )
+        }
+    }
+
+    // ============================================================
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     // ============================================================
 
     private fun syncWithMemory(phase: TaskPhase) {
         val memoryPhase = when (phase) {
-            TaskPhase.INIT -> com.llmapp.memory.TaskState.INIT
-            TaskPhase.PLANNING -> com.llmapp.memory.TaskState.PLANNING
-            TaskPhase.EXECUTION -> com.llmapp.memory.TaskState.EXECUTING
-            TaskPhase.VALIDATION -> com.llmapp.memory.TaskState.VALIDATING
-            TaskPhase.DONE -> com.llmapp.memory.TaskState.DONE
-            TaskPhase.PAUSED, TaskPhase.BLOCKED -> com.llmapp.memory.TaskState.BLOCKED
+            TaskPhase.INIT -> TaskState.INIT
+            TaskPhase.PLANNING -> TaskState.PLANNING
+            TaskPhase.EXECUTION -> TaskState.EXECUTING
+            TaskPhase.VALIDATION -> TaskState.VALIDATING
+            TaskPhase.DONE -> TaskState.DONE
+            TaskPhase.PAUSED, TaskPhase.BLOCKED -> TaskState.BLOCKED
         }
         memoryAgent.updateTaskState(memoryPhase)
     }
@@ -424,7 +500,9 @@ class StatefulMemoryAgent(
                 } else null
             }
             // Проверка пройдена → Done
-            lower.contains("проверка пройдена") || lower.contains("все работает") || lower.contains("успешно") -> {
+            lower.contains("проверка пройдена") || lower.contains("все работает") || lower.contains(
+                "успешно"
+            ) -> {
                 if (stateMachine.getPhase() == TaskPhase.VALIDATION) {
                     stateMachine.transitionTo(
                         TaskPhase.DONE,
@@ -459,6 +537,7 @@ class StatefulMemoryAgent(
                     )
                 } else null
             }
+
             else -> null
         }
     }

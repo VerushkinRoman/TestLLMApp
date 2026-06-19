@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.llmapp.agent.AvailableTransition
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.agent.InvariantAwareAgent
 import com.llmapp.agent.MemoryAwareAgent
@@ -129,6 +130,17 @@ class ChatViewModel : ViewModel() {
     val demoManagerCurrentDemo = mutableStateOf<DemoType?>(null)
     val demoManagerProgress = mutableStateOf<String?>(null)
 
+    // ============================================================
+    // НОВЫЕ ПОЛЯ ДЛЯ УПРАВЛЕНИЯ ПЕРЕХОДАМИ
+    // ============================================================
+
+    private val _showTransitionsDialog = MutableStateFlow(false)
+    val showTransitionsDialog: StateFlow<Boolean> = _showTransitionsDialog.asStateFlow()
+
+    private val _availableTransitions = MutableStateFlow<List<AvailableTransition>>(emptyList())
+    val availableTransitions: StateFlow<List<AvailableTransition>> =
+        _availableTransitions.asStateFlow()
+
     init {
         initChatSession()
         initProfileManager()
@@ -234,19 +246,32 @@ class ChatViewModel : ViewModel() {
         updateTaskStateUI()
         _showCreateTaskDialog.value = false
 
+        val helpText = buildString {
+            appendLine("✅ Задача '$name' создана!")
+            appendLine()
+            appendLine("📋 Текущая фаза: Сбор требований")
+            appendLine("🎯 Ожидается: Опишите, что нужно сделать")
+            appendLine()
+            appendLine("💡 Управление задачей:")
+            appendLine("  • Опишите требования в чате")
+            appendLine("  • Используйте панель управления внизу")
+            appendLine("  • Или используйте команды:")
+            appendLine("    /planning - перейти в планирование")
+            appendLine("    /execution - перейти в выполнение")
+            appendLine("    /validation - перейти в проверку")
+            appendLine("    /done - завершить задачу")
+            appendLine("    /approve-plan - утвердить план")
+            appendLine("    /validate - подтвердить валидацию")
+            appendLine("    /transitions - показать все доступные переходы")
+            appendLine("    /status - показать статус задачи")
+            appendLine("    /help - полная справка")
+        }
+
         messages.add(
             ChatMessageUI(
                 id = UUID.randomUUID().toString(),
                 role = "assistant",
-                content = """
-                ✅ Задача '$name' создана!
-                
-                📋 Текущая фаза: Сбор требований
-                🎯 Ожидается: Опишите, что нужно сделать
-                
-                💡 Используйте панель управления для навигации по этапам.
-                📝 Укажите стек технологий и ограничения в описании задачи.
-            """.trimIndent(),
+                content = helpText,
                 isDemoMessage = false
             )
         )
@@ -522,6 +547,10 @@ class ChatViewModel : ViewModel() {
         demoManager?.startInvariantDemo()
     }
 
+    fun startTransitionDemo() {
+        demoManager?.startTransitionDemo()
+    }
+
     fun cancelDemo() {
         demoManager?.cancelDemo()
     }
@@ -715,32 +744,7 @@ class ChatViewModel : ViewModel() {
                 ChatMessageUI(
                     id = UUID.randomUUID().toString(),
                     role = "assistant",
-                    content = """
-            📚 ДОСТУПНЫЕ КОМАНДЫ:
-            
-            🎯 Управление задачами:
-              /task <название> - создать новую задачу
-              /status - показать полный статус задачи
-              /clear-task - очистить состояние задачи
-              
-            🔒 Инварианты:
-              /invariant-preset <android|web|base> - создать набор инвариантов из пресета
-              
-            ⏸️ Управление состоянием:
-              /pause - поставить задачу на паузу
-              /resume - возобновить задачу
-              
-            📸 Снимки:
-              /snapshots - открыть диалог управления снимками
-              
-            📊 Токены:
-              /tokens - показать статистику токенов
-              
-            ℹ️ Справка:
-              /help - показать эту справку
-            
-            💡 Также используйте панель управления в интерфейсе чата!
-        """.trimIndent(),
+                    content = buildHelpText(),
                     isDemoMessage = false
                 )
             )
@@ -774,6 +778,222 @@ class ChatViewModel : ViewModel() {
                     isDemoMessage = false
                 )
             )
+            return
+        }
+
+        // /transitions или /available - показать диалог переходов
+        if (userMessage == "/transitions" || userMessage == "/available") {
+            showTransitionsDialog()
+            return
+        }
+
+        // /approve-plan - утвердить план
+        if (userMessage == "/approve-plan") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.approvePlan()
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = if (result.success) {
+                            "✅ План утвержден! Теперь вы можете перейти к выполнению.\n" +
+                                    "Используйте переход в EXECUTION или напишите /execution"
+                        } else {
+                            "⚠️ ${result.message}"
+                        },
+                        isDemoMessage = false
+                    )
+                )
+                updateTaskStateUI()
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /validate - подтвердить валидацию
+        if (userMessage == "/validate") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.confirmValidation()
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = if (result.success) {
+                            "✅ Валидация подтверждена! Теперь вы можете завершить задачу.\n" +
+                                    "Используйте переход в DONE или напишите /done"
+                        } else {
+                            "⚠️ ${result.message}"
+                        },
+                        isDemoMessage = false
+                    )
+                )
+                updateTaskStateUI()
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /execution - переход в EXECUTION
+        if (userMessage == "/execution") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.safeTransitionTo(TaskPhase.EXECUTION)
+                if (result.success) {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "✅ ${result.message}",
+                            isDemoMessage = false
+                        )
+                    )
+                    updateTaskStateUI()
+                } else {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "🚫 ${result.message}\n\n💡 ${result.suggestedAction ?: "Проверьте доступные переходы командой /transitions"}",
+                            isDemoMessage = false
+                        )
+                    )
+                }
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /done - завершить задачу
+        if (userMessage == "/done") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.safeTransitionTo(TaskPhase.DONE)
+                if (result.success) {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "✅ ${result.message}",
+                            isDemoMessage = false
+                        )
+                    )
+                    updateTaskStateUI()
+                } else {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "🚫 ${result.message}\n\n💡 ${result.suggestedAction ?: "Проверьте доступные переходы командой /transitions"}",
+                            isDemoMessage = false
+                        )
+                    )
+                }
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /planning - переход в PLANNING
+        if (userMessage == "/planning") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.safeTransitionTo(TaskPhase.PLANNING)
+                if (result.success) {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "✅ ${result.message}",
+                            isDemoMessage = false
+                        )
+                    )
+                    updateTaskStateUI()
+                } else {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "🚫 ${result.message}\n\n💡 ${result.suggestedAction ?: "Проверьте доступные переходы командой /transitions"}",
+                            isDemoMessage = false
+                        )
+                    )
+                }
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
+            return
+        }
+
+        // /validation - переход в VALIDATION
+        if (userMessage == "/validation") {
+            if (::statefulAgent.isInitialized) {
+                val result = statefulAgent.safeTransitionTo(TaskPhase.VALIDATION)
+                if (result.success) {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "✅ ${result.message}",
+                            isDemoMessage = false
+                        )
+                    )
+                    updateTaskStateUI()
+                } else {
+                    messages.add(
+                        ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "assistant",
+                            content = "🚫 ${result.message}\n\n💡 ${result.suggestedAction ?: "Проверьте доступные переходы командой /transitions"}",
+                            isDemoMessage = false
+                        )
+                    )
+                }
+            } else {
+                messages.add(
+                    ChatMessageUI(
+                        id = UUID.randomUUID().toString(),
+                        role = "assistant",
+                        content = "⚠️ StatefulAgent не инициализирован. Создайте задачу командой /task <название>",
+                        isDemoMessage = false
+                    )
+                )
+            }
             return
         }
 
@@ -863,6 +1083,44 @@ class ChatViewModel : ViewModel() {
                 isGenerating.value = false
             }
         }
+    }
+
+    private fun buildHelpText(): String {
+        return """
+            📚 ДОСТУПНЫЕ КОМАНДЫ:
+            
+            🎯 Управление задачами:
+              /task <название> - создать новую задачу
+              /status - показать полный статус задачи
+              /clear-task - очистить состояние задачи
+              
+            🔒 Инварианты:
+              /invariant-preset <android|web|base> - создать набор инвариантов из пресета
+              
+            ⏸️ Управление состоянием:
+              /pause - поставить задачу на паузу
+              /resume - возобновить задачу
+              
+            📸 Снимки:
+              /snapshots - открыть диалог управления снимками
+              
+            📊 Токены:
+              /tokens - показать статистику токенов
+              
+            🔄 Управление переходами:
+              /transitions или /available - показать диалог управления переходами
+              /approve-plan - утвердить план (PLANNING → EXECUTION)
+              /validate - подтвердить валидацию (VALIDATION → DONE)
+              /planning - перейти в PLANNING
+              /execution - перейти в EXECUTION
+              /validation - перейти в VALIDATION
+              /done - завершить задачу
+              
+            ℹ️ Справка:
+              /help - показать эту справку
+            
+            💡 Также используйте панель управления в интерфейсе чата!
+        """.trimIndent()
     }
 
     fun regenerateMessage(assistantMessageId: String) {
@@ -1323,5 +1581,96 @@ class ChatViewModel : ViewModel() {
         println("✅ MemoryAwareAgent инициализирован")
         println("   Профиль: ${_userProfile.value.name.ifEmpty { "не настроен" }}")
         println("   Ограничения: ${if (_projectConstraints.value.techStack.isNotEmpty()) "настроены" else "не настроены"}")
+    }
+
+    // ============================================================
+    // НОВЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПЕРЕХОДАМИ
+    // ============================================================
+
+    /**
+     * Показать диалог управления переходами
+     */
+    fun showTransitionsDialog() {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+        _availableTransitions.value = statefulAgent.getAvailableTransitionsWithDetails()
+        _showTransitionsDialog.value = true
+    }
+
+    /**
+     * Скрыть диалог управления переходами
+     */
+    fun dismissTransitionsDialog() {
+        _showTransitionsDialog.value = false
+    }
+
+    /**
+     * Выполнить переход через диалог
+     */
+    fun executeTransitionFromDialog(phase: TaskPhase) {
+        if (!::statefulAgent.isInitialized) {
+            println("⚠️ StatefulAgent не инициализирован")
+            return
+        }
+
+        // Проверяем, разрешен ли переход
+        val transition = _availableTransitions.value.find { it.to == phase }
+        if (transition == null || !transition.isValid) {
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "🚫 Переход в ${phase.displayName} не разрешен.\n\nПричина: ${transition?.reason ?: "Переход не найден"}",
+                    isDemoMessage = false
+                )
+            )
+            _showTransitionsDialog.value = false
+            return
+        }
+
+        // Выполняем переход
+        val result =
+            when (phase) {
+                TaskPhase.EXECUTION if statefulAgent.getPhase() == TaskPhase.PLANNING -> {
+                    // Если переходим в EXECUTION из PLANNING, автоматически утверждаем план
+                    statefulAgent.approvePlan()
+                    statefulAgent.transitionTo(phase, "Переход через диалог управления")
+                }
+
+                TaskPhase.DONE if statefulAgent.getPhase() == TaskPhase.VALIDATION -> {
+                    // Если переходим в DONE из VALIDATION, автоматически подтверждаем валидацию
+                    statefulAgent.confirmValidation()
+                    statefulAgent.transitionTo(phase, "Переход через диалог управления")
+                }
+
+                else -> {
+                    statefulAgent.transitionTo(phase, "Переход через диалог управления")
+                }
+            }
+
+        if (result.success) {
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "✅ ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+            updateTaskStateUI()
+        } else {
+            messages.add(
+                ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "❌ ${result.message}",
+                    isDemoMessage = false
+                )
+            )
+        }
+
+        _showTransitionsDialog.value = false
     }
 }

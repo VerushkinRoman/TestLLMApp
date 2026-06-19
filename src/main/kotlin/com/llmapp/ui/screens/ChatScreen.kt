@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.llmapp.agent.AvailableTransition
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.UserProfile
@@ -48,6 +49,7 @@ import com.llmapp.ui.components.ProfileEditDialog
 import com.llmapp.ui.components.SnapshotDialog
 import com.llmapp.ui.components.TaskStatePanel
 import com.llmapp.ui.components.TokenStatsPanel
+import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.components.TypingIndicator
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
@@ -97,7 +99,12 @@ fun ChatScreen(
     onDismissSnapshotDialog: () -> Unit,
     onGetSnapshotDetails: ((String) -> String)?,
     onCreateTask: () -> Unit,
-    onShowInvariantManager: () -> Unit
+    onShowInvariantManager: () -> Unit,
+    showTransitionsDialog: Boolean,
+    availableTransitions: List<AvailableTransition>,
+    onShowTransitionsDialog: () -> Unit,
+    onDismissTransitionsDialog: () -> Unit,
+    onExecuteTransition: (TaskPhase) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -150,6 +157,7 @@ fun ChatScreen(
                 onBlock = onBlockTask,
                 onUnblock = onUnblockTask,
                 onShowSnapshots = onShowSnapshots,
+                onShowTransitions = onShowTransitionsDialog,
                 isDemoRunning = isDemoRunning
             )
         }
@@ -232,6 +240,16 @@ fun ChatScreen(
             isDemoRunning = isDemoRunning,
             modifier = Modifier.imePadding(),
             focusRequester = focusRequester
+        )
+    }
+
+    // Диалог управления переходами
+    if (showTransitionsDialog) {
+        TransitionsDialog(
+            currentPhase = taskState?.phase ?: TaskPhase.INIT,
+            availableTransitions = availableTransitions,
+            onTransition = onExecuteTransition,
+            onDismiss = onDismissTransitionsDialog
         )
     }
 

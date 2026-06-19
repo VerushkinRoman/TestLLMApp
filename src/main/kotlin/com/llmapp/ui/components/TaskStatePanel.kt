@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timeline
@@ -43,6 +44,7 @@ fun TaskStatePanel(
     onBlock: () -> Unit,
     onUnblock: () -> Unit,
     onShowSnapshots: () -> Unit,
+    onShowTransitions: () -> Unit,
     isDemoRunning: Boolean = false
 ) {
     Card(
@@ -154,13 +156,12 @@ fun TaskStatePanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Кнопки переходов
+                // Кнопки переходов с валидацией
                 state.availableTransitions
                     .filter { target ->
                         target != state.phase &&
                                 target !in listOf(TaskPhase.PAUSED, TaskPhase.BLOCKED)
                     }
-                    .take(3)  // ограничиваем до 3 кнопок, чтобы не переполнять
                     .forEach { target ->
                         SmallTransitionButton(
                             target = target,
@@ -168,6 +169,17 @@ fun TaskStatePanel(
                             enabled = !isDemoRunning && !state.isPaused && !state.isBlocked
                         )
                     }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Новая кнопка "Доступные переходы"
+                SmallIconButton(
+                    icon = Icons.Default.Info,
+                    label = "Переходы",
+                    onClick = onShowTransitions,
+                    enabled = !isDemoRunning,
+                    color = MaterialTheme.colorScheme.primary
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -195,6 +207,25 @@ fun TaskStatePanel(
                     enabled = !isDemoRunning,
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            if (!state.isPaused && !state.isBlocked && state.availableTransitions.isNotEmpty()) {
+                val hint = when (state.phase) {
+                    TaskPhase.INIT -> "💡 Опишите требования к задаче"
+                    TaskPhase.PLANNING -> "💡 Создайте план или используйте /approve-plan"
+                    TaskPhase.EXECUTION -> "💡 Выполняйте задачу или перейдите в VALIDATION"
+                    TaskPhase.VALIDATION -> "💡 Проверьте результат или используйте /validate"
+                    TaskPhase.DONE -> "✅ Задача завершена!"
+                    else -> ""
+                }
+                if (hint.isNotEmpty()) {
+                    Text(
+                        text = hint,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -284,16 +315,6 @@ fun SmallIconButton(
             tint = if (enabled) color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
     }
-}
-
-fun getPhaseColor(phase: TaskPhase): Color = when (phase) {
-    TaskPhase.INIT -> Color(0xFF2196F3)
-    TaskPhase.PLANNING -> Color(0xFFFF9800)
-    TaskPhase.EXECUTION -> Color(0xFF4CAF50)
-    TaskPhase.VALIDATION -> Color(0xFF9C27B0)
-    TaskPhase.DONE -> Color(0xFF4CAF50)
-    TaskPhase.PAUSED -> Color(0xFFFF9800)
-    TaskPhase.BLOCKED -> Color(0xFFF44336)
 }
 
 fun getProgressColor(progress: Float): Color = when {
