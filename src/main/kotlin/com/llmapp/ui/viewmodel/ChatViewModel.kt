@@ -1,5 +1,3 @@
-// src/main/kotlin/com/llmapp/ui/viewmodel/ChatViewModel.kt
-
 package com.llmapp.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
@@ -19,10 +17,6 @@ import com.llmapp.domain.usercase.TransitionUseCase
 import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
 import com.llmapp.memory.LongTermMemoryManager
-import com.llmapp.model.TokenStats
-import com.llmapp.state.TaskPhase
-import com.llmapp.ui.DemoManager
-import com.llmapp.ui.DemoType
 import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
@@ -37,32 +31,17 @@ import java.util.prefs.Preferences
 import kotlin.time.Duration.Companion.milliseconds
 
 class ChatViewModel : ViewModel() {
-    // ============================================================
-    // СОСТОЯНИЕ
-    // ============================================================
-
     private val _state = MutableStateFlow(ChatViewState.initial())
     val state: StateFlow<ChatViewState> = _state.asStateFlow()
-
-    // StateFlow для UI
     val taskState: StateFlow<TaskStateUI?> get() = taskUseCase.taskState
-    val demoManagerCurrentDemo = MutableStateFlow<DemoType?>(null)
+    val demoManagerCurrentDemo = MutableStateFlow<com.llmapp.ui.DemoType?>(null)
     val demoManagerProgress = MutableStateFlow<String?>(null)
-
-    // ============================================================
-    // СЕРВИСЫ
-    // ============================================================
 
     private val invariantManager = InvariantManager()
     private lateinit var chatSession: ChatSession
     private lateinit var statefulAgent: StatefulMemoryAgent
     private lateinit var profileManager: ProfileManager
     private var chatMemoryService: ChatMemoryAgent? = null
-    private var demoManager: DemoManager? = null
-
-    // ============================================================
-    // USECASE'ы
-    // ============================================================
 
     private lateinit var messageUseCase: MessageUseCase
     private lateinit var taskUseCase: TaskUseCase
@@ -73,13 +52,13 @@ class ChatViewModel : ViewModel() {
     private lateinit var compressionUseCase: CompressionUseCase
     private lateinit var memoryUseCase: MemoryUseCase
 
-    // ============================================================
-    // ИНИЦИАЛИЗАЦИЯ
-    // ============================================================
+    private lateinit var demoHandler: DemoHandler
+    private lateinit var commandHandler: CommandHandler
 
     init {
         initServices()
         initUseCases()
+        initHandlers()
         loadSelectedInvariantSet()
 
         viewModelScope.launch {
@@ -96,20 +75,28 @@ class ChatViewModel : ViewModel() {
                 handleEvent(ViewEvent.SelectInvariantSet(set))
             }
         }
+
+        viewModelScope.launch {
+            demoHandler.demoManagerCurrentDemo.collect { demo ->
+                demoManagerCurrentDemo.value = demo
+            }
+        }
+        viewModelScope.launch {
+            demoHandler.demoManagerProgress.collect { progress ->
+                demoManagerProgress.value = progress
+            }
+        }
     }
 
     private fun initServices() {
         val apiKey = ApiConfig.getApiKey()
-
         chatSession = ChatSession(
             apiKey = apiKey,
             compressionEnabled = _state.value.compressionEnabled,
             keepLastMessages = _state.value.keepLastMessages,
             summarizeEvery = _state.value.summarizeEvery
         )
-
         statefulAgent = StatefulMemoryAgent(apiKey = apiKey)
-
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
         profileManager = ProfileManager(storageDir, longTermManager)
@@ -121,7 +108,6 @@ class ChatViewModel : ViewModel() {
             onStateUpdate = { _state.value = it },
             onTokenStatsUpdate = { updateTokenStats() }
         )
-
         taskUseCase = TaskUseCase(statefulAgent = statefulAgent)
         transitionUseCase = TransitionUseCase(statefulAgent = statefulAgent)
         profileUseCase = ProfileUseCase(profileManager = profileManager)
@@ -144,20 +130,28 @@ class ChatViewModel : ViewModel() {
         )
     }
 
-    // ============================================================
-    // ЕДИНЫЙ МЕТОД ОБРАБОТКИ СОБЫТИЙ
-    // ============================================================
+    private fun initHandlers() {
+        demoHandler = DemoHandler(
+            chatSession = chatSession,
+            statefulAgent = statefulAgent,
+            taskUseCase = taskUseCase,
+            viewModelScope = viewModelScope,
+            chatMemoryService = chatMemoryService
+        )
+        commandHandler = CommandHandler(
+            invariantManager = invariantManager,
+            onHandleEvent = { handleEvent(it) },
+            onAddAssistantMessage = { addAssistantMessage(it) },
+            onGetTokenStats = { chatSession.getTokenStats() }
+        )
+    }
 
     fun handleEvent(event: ViewEvent) {
         when (event) {
-            // ============================================================
-            // СООБЩЕНИЯ
-            // ============================================================
-
             is ViewEvent.SendMessage -> {
                 if (_state.value.isGenerating || _state.value.isDemoRunning) return
                 if (event.text.startsWith("/")) {
-                    handleCommand(event.text)
+                    commandHandler.handleCommand(event.text)
                     return
                 }
                 messageUseCase.sendMessage(
@@ -202,10 +196,6 @@ class ChatViewModel : ViewModel() {
                 updateTokenStats()
             }
 
-            // ============================================================
-            // ЗАДАЧИ
-            // ============================================================
-
             is ViewEvent.CreateTask -> {
                 _state.value = taskUseCase.createTask(_state.value, event.name, event.description)
                 updateState { copy(showCreateTaskDialog = false) }
@@ -231,10 +221,6 @@ class ChatViewModel : ViewModel() {
                 _state.value = taskUseCase.clearTask(_state.value)
             }
 
-            // ============================================================
-            // ПЕРЕХОДЫ
-            // ============================================================
-
             ViewEvent.ShowTransitionsDialog -> {
                 _state.value = transitionUseCase.showTransitionsDialog(_state.value)
             }
@@ -255,10 +241,6 @@ class ChatViewModel : ViewModel() {
                 _state.value = transitionUseCase.safeTransitionTo(_state.value, event.phase)
             }
 
-            // ============================================================
-            // СНИМКИ
-            // ============================================================
-
             ViewEvent.ToggleSnapshotDialog -> {
                 _state.value = snapshotUseCase.toggleSnapshotDialog(_state.value)
             }
@@ -275,10 +257,6 @@ class ChatViewModel : ViewModel() {
                 _state.value = snapshotUseCase.restoreSnapshot(_state.value, event.id)
                 updateTokenStats()
             }
-
-            // ============================================================
-            // ПРОФИЛИ
-            // ============================================================
 
             ViewEvent.ToggleProfileManager -> {
                 _state.value = profileUseCase.toggleProfileManager(_state.value)
@@ -308,10 +286,6 @@ class ChatViewModel : ViewModel() {
                 _state.value = profileUseCase.dismissWelcomeDialog(_state.value)
             }
 
-            // ============================================================
-            // ПАМЯТЬ
-            // ============================================================
-
             is ViewEvent.UpdateMemorySettings -> {
                 _state.value = memoryUseCase.updateMemorySettings(_state.value, event.settings)
             }
@@ -321,25 +295,16 @@ class ChatViewModel : ViewModel() {
             }
 
             is ViewEvent.UpdateProjectConstraints -> {
-                _state.value =
-                    memoryUseCase.updateProjectConstraints(_state.value, event.constraints)
+                _state.value = memoryUseCase.updateProjectConstraints(_state.value, event.constraints)
             }
 
             ViewEvent.ResetWorkingMemory -> {
                 _state.value = memoryUseCase.resetWorkingMemory(_state.value)
             }
 
-            // ============================================================
-            // МОДЕЛЬ
-            // ============================================================
-
             is ViewEvent.ChangeModel -> {
                 _state.value = modelUseCase.changeModel(_state.value, event.modelId)
             }
-
-            // ============================================================
-            // КОМПРЕССИЯ
-            // ============================================================
 
             is ViewEvent.ToggleCompression -> {
                 _state.value = compressionUseCase.toggleCompression(_state.value, event.enabled)
@@ -353,27 +318,23 @@ class ChatViewModel : ViewModel() {
                 )
             }
 
-            // ============================================================
-            // ДЕМОНСТРАЦИИ
-            // ============================================================
-
             is ViewEvent.InitDemoManager -> {
-                initDemoManager(event.onMessageAdded)
+                demoHandler.initDemoManager(
+                    onMessageAdded = event.onMessageAdded,
+                    updateState = { update -> updateState(update) },
+                    updateTokenStats = { updateTokenStats() }
+                )
             }
 
-            ViewEvent.StartTokenDemo -> demoManager?.startTokenDemo()
-            ViewEvent.StartCompressionDemo -> demoManager?.startCompressionDemo()
-            ViewEvent.StartStrategyDemo -> demoManager?.startStrategyDemo()
-            ViewEvent.StartMemoryDemo -> demoManager?.startMemoryDemo()
-            ViewEvent.StartPersonalizationDemo -> demoManager?.startPersonalizationDemo()
-            ViewEvent.StartStatefulDemo -> demoManager?.startStatefulDemo()
-            ViewEvent.StartInvariantDemo -> demoManager?.startInvariantDemo()
-            ViewEvent.StartTransitionDemo -> demoManager?.startTransitionDemo()
-            ViewEvent.CancelDemo -> demoManager?.cancelDemo()
-
-            // ============================================================
-            // ИНВАРИАНТЫ
-            // ============================================================
+            ViewEvent.StartTokenDemo -> demoHandler.startTokenDemo()
+            ViewEvent.StartCompressionDemo -> demoHandler.startCompressionDemo()
+            ViewEvent.StartStrategyDemo -> demoHandler.startStrategyDemo()
+            ViewEvent.StartMemoryDemo -> demoHandler.startMemoryDemo()
+            ViewEvent.StartPersonalizationDemo -> demoHandler.startPersonalizationDemo()
+            ViewEvent.StartStatefulDemo -> demoHandler.startStatefulDemo()
+            ViewEvent.StartInvariantDemo -> demoHandler.startInvariantDemo()
+            ViewEvent.StartTransitionDemo -> demoHandler.startTransitionDemo()
+            ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {
                 updateState { copy(activeInvariantSetName = event.set.name) }
@@ -400,15 +361,9 @@ class ChatViewModel : ViewModel() {
 
             ViewEvent.RefreshInvariantSets -> {
                 val allSets = invariantManager.getAllInvariantSets()
-                updateState {
-                    copy(invariantSets = allSets)
-                }
+                updateState { copy(invariantSets = allSets) }
                 println("🔄 Список инвариантов обновлен: ${allSets.size} наборов")
             }
-
-            // ============================================================
-            // ТОКЕНЫ
-            // ============================================================
 
             ViewEvent.ClearTokenStats -> {
                 if (_state.value.isDemoRunning) return
@@ -417,31 +372,22 @@ class ChatViewModel : ViewModel() {
             }
 
             ViewEvent.RefreshTokenStats -> {
-                if (!_state.value.isDemoRunning) {
-                    updateTokenStats()
-                }
+                if (!_state.value.isDemoRunning) updateTokenStats()
             }
 
-            // ============================================================
-            // API
-            // ============================================================
-
             ViewEvent.RefreshApiKeys -> chatSession.refreshApiKeys()
+
             ViewEvent.ForceRotateToNextKey -> {
                 ApiConfig.rotateToNextKey()
                 chatSession.refreshApiKeys()
             }
-
-            // ============================================================
-            // СИСТЕМНЫЕ
-            // ============================================================
 
             is ViewEvent.SetChatMemoryService -> {
                 chatMemoryService = event.service
             }
 
             is ViewEvent.ExecuteCommand -> {
-                handleCommand(event.command)
+                commandHandler.handleCommand(event.command)
             }
 
             is ViewEvent.GetChatSession -> {
@@ -454,20 +400,13 @@ class ChatViewModel : ViewModel() {
 
             is ViewEvent.AddDemoMessage -> {
                 updateState { copy(messages = messages + event.message) }
-                if (!_state.value.isDemoRunning) {
-                    updateTokenStats()
-                }
+                if (!_state.value.isDemoRunning) updateTokenStats()
             }
 
             is ViewEvent.SetControlEnabled -> {
                 val newControl = _state.value.responseControl.copy(enabled = event.enabled)
                 chatSession.setResponseControl(newControl)
-                updateState {
-                    copy(
-                        responseControl = newControl,
-                        controlEnabled = event.enabled
-                    )
-                }
+                updateState { copy(responseControl = newControl, controlEnabled = event.enabled) }
             }
 
             is ViewEvent.SetFormatDescription -> {
@@ -476,12 +415,7 @@ class ChatViewModel : ViewModel() {
                     enabled = true
                 )
                 chatSession.setResponseControl(newControl)
-                updateState {
-                    copy(
-                        responseControl = newControl,
-                        controlEnabled = true
-                    )
-                }
+                updateState { copy(responseControl = newControl, controlEnabled = true) }
             }
 
             is ViewEvent.SetMaxTokens -> {
@@ -490,12 +424,7 @@ class ChatViewModel : ViewModel() {
                     enabled = true
                 )
                 chatSession.setResponseControl(newControl)
-                updateState {
-                    copy(
-                        responseControl = newControl,
-                        controlEnabled = true
-                    )
-                }
+                updateState { copy(responseControl = newControl, controlEnabled = true) }
             }
 
             is ViewEvent.SetStopSequences -> {
@@ -504,12 +433,7 @@ class ChatViewModel : ViewModel() {
                     enabled = true
                 )
                 chatSession.setResponseControl(newControl)
-                updateState {
-                    copy(
-                        responseControl = newControl,
-                        controlEnabled = true
-                    )
-                }
+                updateState { copy(responseControl = newControl, controlEnabled = true) }
             }
 
             is ViewEvent.SetTemperature -> {
@@ -518,36 +442,21 @@ class ChatViewModel : ViewModel() {
                     enabled = true
                 )
                 chatSession.setResponseControl(newControl)
-                updateState {
-                    copy(
-                        responseControl = newControl,
-                        controlEnabled = true
-                    )
-                }
+                updateState { copy(responseControl = newControl, controlEnabled = true) }
             }
 
             is ViewEvent.LoadPreset -> {
                 val preset = com.llmapp.controller.PresetManager.getPreset(event.number)
                 if (preset != null) {
                     chatSession.setResponseControl(preset)
-                    updateState {
-                        copy(
-                            responseControl = preset,
-                            controlEnabled = preset.enabled
-                        )
-                    }
+                    updateState { copy(responseControl = preset, controlEnabled = preset.enabled) }
                 }
             }
 
             ViewEvent.ResetToDefault -> {
                 val defaultControl = com.llmapp.controller.PresetManager.getDefaultControl()
                 chatSession.setResponseControl(defaultControl)
-                updateState {
-                    copy(
-                        responseControl = defaultControl,
-                        controlEnabled = defaultControl.enabled
-                    )
-                }
+                updateState { copy(responseControl = defaultControl, controlEnabled = defaultControl.enabled) }
             }
 
             is ViewEvent.BlockTask -> {
@@ -568,10 +477,6 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    // ============================================================
-    // ОБНОВЛЕНИЕ СОСТОЯНИЯ
-    // ============================================================
-
     private fun updateState(update: ChatViewState.() -> ChatViewState) {
         _state.update { it.update() }
     }
@@ -587,150 +492,6 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    // ============================================================
-    // ДЕМОНСТРАЦИИ (ВНУТРЕННИЙ МЕТОД)
-    // ============================================================
-
-    private fun initDemoManager(onMessageAdded: (ChatMessageUI) -> Unit) {
-        chatMemoryService?.markAsDemoMode()
-
-        demoManager = DemoManager(
-            chatSession = chatSession,
-            onMessageAdded = { message -> onMessageAdded(message) },
-            onDemoStarted = {
-                updateState {
-                    copy(
-                        isDemoRunning = true,
-                        isGenerating = true,
-                        isTyping = true,
-                        tokenStats = TokenStats(),
-                        tokenHistory = emptyList(),
-                        contextWarning = "✅ Демонстрация запущена..."
-                    )
-                }
-                demoManagerCurrentDemo.value = demoManager?.currentDemo?.value
-                demoManagerProgress.value = demoManager?.progressMessage?.value
-            },
-            onDemoFinished = {
-                updateState {
-                    copy(
-                        isDemoRunning = false,
-                        isGenerating = false,
-                        isTyping = false
-                    )
-                }
-                chatMemoryService?.createNewChat()
-                updateTokenStats()
-                demoManagerCurrentDemo.value = null
-                demoManagerProgress.value = null
-            },
-            onTypingStateChanged = { typing -> updateState { copy(isTyping = typing) } },
-            onStatsUpdated = { stats ->
-                if (_state.value.isDemoRunning) updateState { copy(tokenStats = stats) }
-            },
-            onTokenHistoryUpdated = { history ->
-                if (_state.value.isDemoRunning) updateState { copy(tokenHistory = history) }
-            },
-            onContextWarningUpdated = { warning ->
-                if (_state.value.isDemoRunning) updateState { copy(contextWarning = warning) }
-            },
-            onTaskStateUpdated = {
-                // Обновляем состояние задачи через TaskUseCase
-                // taskState обновляется автоматически через StateFlow
-                // Но вызываем принудительное обновление для UI
-                taskUseCase.taskState.value?.let { state ->
-                    // Можно обновить что-то дополнительно в UI
-                    println("🔄 Состояние задачи обновлено: ${state.phase.displayName}")
-                }
-            },
-            statefulAgent = statefulAgent
-        )
-
-        viewModelScope.launch {
-            demoManager?.isRunning?.collect { running ->
-                updateState { copy(isDemoRunning = running) }
-            }
-        }
-        viewModelScope.launch {
-            demoManager?.currentDemo?.collect { demo ->
-                demoManagerCurrentDemo.value = demo
-            }
-        }
-        viewModelScope.launch {
-            demoManager?.progressMessage?.collect { progress ->
-                demoManagerProgress.value = progress
-            }
-        }
-    }
-
-    // ============================================================
-    // ОБРАБОТКА КОМАНД
-    // ============================================================
-
-    private fun handleCommand(text: String) {
-        when {
-            text.startsWith("/task ") -> {
-                val taskName = text.removePrefix("/task ").trim()
-                if (taskName.isNotEmpty()) {
-                    handleEvent(ViewEvent.CreateTask(taskName))
-                } else {
-                    addAssistantMessage("⚠️ Укажите название задачи: /task <название>")
-                }
-            }
-
-            text == "/status" -> handleEvent(ViewEvent.ShowStatus)
-            text == "/clear-task" -> handleEvent(ViewEvent.ClearTask)
-
-            text == "/transitions" || text == "/available" -> handleEvent(ViewEvent.ShowTransitionsDialog)
-            text == "/approve-plan" -> handleEvent(ViewEvent.ApprovePlan)
-            text == "/validate" -> handleEvent(ViewEvent.Validate)
-
-            text == "/planning" -> handleEvent(ViewEvent.SafeTransitionTo(TaskPhase.PLANNING))
-            text == "/execution" -> handleEvent(ViewEvent.SafeTransitionTo(TaskPhase.EXECUTION))
-            text == "/validation" -> handleEvent(ViewEvent.SafeTransitionTo(TaskPhase.VALIDATION))
-            text == "/done" -> handleEvent(ViewEvent.SafeTransitionTo(TaskPhase.DONE))
-
-            text == "/pause" -> handleEvent(ViewEvent.PauseTask("Пауза по команде /pause"))
-            text == "/resume" -> handleEvent(ViewEvent.ResumeTask)
-
-            text == "/snapshots" -> {
-                handleEvent(ViewEvent.ToggleSnapshotDialog)
-                addAssistantMessage("📸 Открыт диалог управления снимками")
-            }
-
-            text == "/tokens" -> {
-                val stats = chatSession.getTokenStats()
-                addAssistantMessage(buildTokenStatsMessage(stats))
-            }
-
-            text.startsWith("/invariant-preset ") -> {
-                val presetName = text.removePrefix("/invariant-preset ").trim()
-                if (presetName.isNotEmpty()) {
-                    val success = invariantManager.saveInvariantSet(
-                        when (presetName.lowercase()) {
-                            "android" -> InvariantPresets.getAndroidKMPInvariants()
-                            "web" -> InvariantPresets.getWebInvariants()
-                            else -> InvariantPresets.getBaseInvariants()
-                        }
-                    )
-                    addAssistantMessage(
-                        if (success) "✅ Набор инвариантов '$presetName' создан и активирован!"
-                        else "❌ Не удалось создать набор инвариантов '$presetName'"
-                    )
-                } else {
-                    addAssistantMessage("⚠️ Укажите название пресета: /invariant-preset <android|web|base>")
-                }
-            }
-
-            text == "/help" -> addAssistantMessage(buildHelpText())
-            else -> addAssistantMessage("⚠️ Неизвестная команда: $text\nИспользуйте /help для списка команд")
-        }
-    }
-
-    // ============================================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    // ============================================================
-
     private fun addAssistantMessage(content: String) {
         val message = ChatMessageUI(
             id = UUID.randomUUID().toString(),
@@ -739,58 +500,6 @@ class ChatViewModel : ViewModel() {
             isDemoMessage = false
         )
         _state.value = _state.value.copy(messages = _state.value.messages + message)
-    }
-
-    private fun buildHelpText(): String {
-        return """
-            📚 ДОСТУПНЫЕ КОМАНДЫ:
-            
-            🎯 Управление задачами:
-              /task <название> - создать новую задачу
-              /status - показать полный статус задачи
-              /clear-task - очистить состояние задачи
-              
-            🔒 Инварианты:
-              /invariant-preset <android|web|base> - создать набор инвариантов из пресета
-              
-            ⏸️ Управление состоянием:
-              /pause - поставить задачу на паузу
-              /resume - возобновить задачу
-              
-            📸 Снимки:
-              /snapshots - открыть диалог управления снимками
-              
-            📊 Токены:
-              /tokens - показать статистику токенов
-              
-            🔄 Управление переходами:
-              /transitions или /available - показать диалог управления переходами
-              /approve-plan - утвердить план (PLANNING → EXECUTION)
-              /validate - подтвердить валидацию (VALIDATION → DONE)
-              /planning - перейти в PLANNING
-              /execution - перейти в EXECUTION
-              /validation - перейти в VALIDATION
-              /done - завершить задачу
-              
-            ℹ️ Справка:
-              /help - показать эту справку
-            
-            💡 Также используйте панель управления в интерфейсе чата!
-        """.trimIndent()
-    }
-
-    private fun buildTokenStatsMessage(stats: TokenStats): String {
-        return """
-            📊 СТАТИСТИКА ТОКЕНОВ:
-            
-            • Запросов: ${stats.requestCount}
-            • Всего токенов: ${stats.totalTokens}
-            • Prompt токенов: ${stats.totalPromptTokens}
-            • Completion токенов: ${stats.totalCompletionTokens}
-            • Стоимость: ${stats.getFormattedCost()}
-            
-            ${chatSession.getContextWarning()}
-        """.trimIndent()
     }
 
     private fun loadSelectedInvariantSet() {

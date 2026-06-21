@@ -3,7 +3,6 @@ package com.llmapp.ui.components
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,36 +15,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.llmapp.api.ApiConfig
-import com.llmapp.api.KeyUsageMonitor
 import com.llmapp.model.ResponseControl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -450,273 +440,3 @@ fun InfoCard(title: String, content: String) {
     }
 }
 
-@Composable
-fun CompressionSettingsCard(
-    compressionEnabled: Boolean,
-    keepLastMessages: Int,
-    summarizeEvery: Int,
-    onCompressionToggle: (Boolean) -> Unit,
-    onKeepLastMessagesChange: (Int) -> Unit,
-    onSummarizeEveryChange: (Int) -> Unit,
-    compressionStats: com.llmapp.agent.CompressedChatHistory.CompressionStats?
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "📊 Сжатие контекста",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Switch(
-                    checked = compressionEnabled,
-                    onCheckedChange = onCompressionToggle
-                )
-            }
-
-            if (compressionEnabled) {
-                Text(
-                    text = "Экономит токены, сжимая старые сообщения в краткое резюме",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Хранить последних сообщений:", fontSize = 14.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {
-                            onKeepLastMessagesChange(
-                                (keepLastMessages - 1).coerceAtLeast(
-                                    2
-                                )
-                            )
-                        }) {
-                            Text("-", fontSize = 20.sp)
-                        }
-                        Text(
-                            "$keepLastMessages",
-                            fontSize = 16.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-                        IconButton(onClick = {
-                            onKeepLastMessagesChange(
-                                (keepLastMessages + 1).coerceAtMost(
-                                    20
-                                )
-                            )
-                        }) {
-                            Text("+", fontSize = 20.sp)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Резюме каждые N сообщений:", fontSize = 14.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {
-                            onSummarizeEveryChange(
-                                (summarizeEvery - 1).coerceAtLeast(
-                                    3
-                                )
-                            )
-                        }) {
-                            Text("-", fontSize = 20.sp)
-                        }
-                        Text(
-                            "$summarizeEvery",
-                            fontSize = 16.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-                        IconButton(onClick = {
-                            onSummarizeEveryChange(
-                                (summarizeEvery + 1).coerceAtMost(
-                                    15
-                                )
-                            )
-                        }) {
-                            Text("+", fontSize = 20.sp)
-                        }
-                    }
-                }
-
-                if (compressionStats != null && compressionStats.totalMessages > 0) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "📈 Текущая эффективность:",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    Text(
-                        text = "Сэкономлено ~${compressionStats.tokensSaved} токенов (${
-                            "%.1f".format(
-                                (1 - compressionStats.compressionRatio) * 100
-                            )
-                        }%)",
-                        fontSize = 12.sp,
-                        color = Color(0xFF2E7D32)
-                    )
-
-                    LinearProgressIndicator(
-                        progress = (1 - compressionStats.compressionRatio).toFloat(),
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF2E7D32)
-                    )
-                }
-            } else {
-                Text(
-                    text = "Включите сжатие для экономии токенов в длинных диалогах",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ApiKeysStatusCard() {
-    val keyStats by KeyUsageMonitor.keyStats.collectAsState()
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "🔑 API Ключи",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            keyStats.forEach { stats ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(
-                                    color = if (stats.isRateLimited)
-                                        Color(0xFFF44336)
-                                    else
-                                        Color(0xFF2E7D32),
-                                    shape = CircleShape
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ключ #${stats.keyIndex}")
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "${stats.requestsCount} запросов",
-                            fontSize = 12.sp
-                        )
-                        if (stats.errorsCount > 0) {
-                            Text(
-                                text = "${stats.errorsCount} ошибок",
-                                fontSize = 10.sp,
-                                color = Color(0xFFFF9800)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ApiKeysControlCard(
-    onRotateKey: () -> Unit,
-    onResetRotation: () -> Unit,
-    onShowStats: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "🔄 Управление API ключами",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onResetRotation,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Сбросить ротацию", fontSize = 12.sp)
-                }
-
-                OutlinedButton(
-                    onClick = onRotateKey,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Следующий ключ →", fontSize = 12.sp)
-                }
-            }
-
-            OutlinedButton(
-                onClick = onShowStats,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("📊 Показать статистику (в консоль)", fontSize = 12.sp)
-            }
-
-            Text(
-                text = "Текущий ключ: #${ApiConfig.getCurrentKeyIndex()} из ${ApiConfig.getTotalKeysCount()}",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-    }
-}

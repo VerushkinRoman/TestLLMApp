@@ -21,7 +21,7 @@ class LLMAgent(
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
     maxHistorySize: Int = 50
-) {
+) : IAgent {
     private val apiClient = OpenRouterClient(apiKey)
     private val history = ChatHistory(systemPrompt, maxHistorySize)
     private val tokenTracker = TokenTracker()
@@ -31,12 +31,12 @@ class LLMAgent(
         tokenTracker.updateModel(model)
     }
 
-    fun refreshApiKey(newApiKey: String) {
+    override fun refreshApiKey(newApiKey: String) {
         apiClient.updateApiKey(newApiKey)
         println("🔑 LLMAgent: API ключ обновлен")
     }
 
-    suspend fun processRequest(userInput: String): LLMResponse {
+    override suspend fun processRequest(userInput: String): LLMResponse {
         try {
             val enhancedPrompt = enhancePrompt(userInput)
             history.addUserMessage(enhancedPrompt)
@@ -148,16 +148,16 @@ class LLMAgent(
         return Pair(response, endTime - startTime)
     }
 
-    fun changeModel(newModel: String) {
+    override fun changeModel(newModel: String) {
         model = newModel
         tokenTracker.updateModel(newModel)
     }
 
-    fun updateResponseControl(control: ResponseControl) {
+    override fun updateResponseControl(control: ResponseControl) {
         responseControl = control
     }
 
-    fun clearHistory() {
+    override fun clearHistory() {
         history.clear()
         tokenTracker.reset()
         requestCounter = 0
