@@ -83,8 +83,6 @@ fun ChatScreen(
         ChatTopBar(
             controlEnabled = viewState.controlEnabled,
             currentModel = viewState.currentModel,
-            currentAgentName = "LLM Agent",
-            currentAgentIcon = "🤖",
             memorySettings = MemorySettings(
                 useShortTerm = true,
                 useWorkingMemory = true,
@@ -272,7 +270,7 @@ fun MemoryLayersIndicator(
                 icon = "💬",
                 label = "Краткосрочная",
                 active = useShortTerm,
-                color = Color(0xFF4CAF50)
+                color = Color(0xFF2E7D32)
             )
             MemoryLayerChip(
                 icon = "💼",
@@ -284,7 +282,7 @@ fun MemoryLayersIndicator(
                 icon = "📚",
                 label = "Долговременная",
                 active = useLongTerm,
-                color = Color(0xFF9C27B0)
+                color = Color(0xFF43A047)
             )
         }
     }

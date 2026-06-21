@@ -125,34 +125,34 @@ fun SettingsPanel(
                     )
 
                     InfoCard(
-                        title = "Model Comparison",
-                        content = "Use /compare command in chat to see response comparison with different settings"
+                        title = "Сравнение моделей",
+                        content = "Используйте /compare в чате для сравнения ответов с разными настройками"
                     )
 
                     InfoCard(
-                        title = "Tips",
+                        title = "Советы",
                         content = """
-                            • Temperature: Lower values (0.1-0.3) for consistent responses
-                            • Temperature: Higher values (0.7-0.9) for creative responses
-                            • Max Tokens: Limits response length
-                            • Stop Sequences: Words that will stop response generation
-                            • Format Description: Instructions for response formatting
+                            • Temperature: Низкие значения (0.1-0.3) для стабильных ответов
+                            • Temperature: Высокие значения (0.7-0.9) для креативных ответов
+                            • Max Tokens: Ограничивает длину ответа
+                            • Stop Sequences: Слова, останавливающие генерацию
+                            • Format Description: Инструкции по форматированию ответа
                         """.trimIndent()
                     )
 
                     InfoCard(
-                        title = "Presets Guide",
+                        title = "Гайд по пресетам",
                         content = """
-                            Strict: Short, format-controlled responses
-                            Creative: Longer, creative responses with examples
-                            Technical: Precise, code-friendly responses
-                            Casual: Friendly, emoji-rich responses
-                            Kotlin Dev: Professional Kotlin/Compose development assistant
+                            Строгий: Короткие ответы с контролем формата
+                            Креативный: Длинные креативные ответы с примерами
+                            Технический: Точные ответы, удобные для кода
+                            Неформальный: Дружелюбные ответы с эмодзи
+                            Kotlin Dev: Профессиональный ассистент Kotlin/Compose
                         """.trimIndent()
                     )
 
                     InfoCard(
-                        title = "Compression Guide",
+                        title = "Гайд по сжатию",
                         content = """
                             • Сжатие контекста помогает экономить токены в длинных диалогах
                             • "Хранить последних сообщений": сколько последних сообщений оставить без сжатия
@@ -235,7 +235,7 @@ fun ResponseControlCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Enable Response Control")
+                Text("Включить управление ответами")
                 Switch(
                     checked = control.enabled,
                     onCheckedChange = onEnableChanged
@@ -278,11 +278,11 @@ fun ResponseControlCard(
                     ) {
                         Icon(
                             Icons.Default.Restore,
-                            contentDescription = "Reset",
+                            contentDescription = "Сброс",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reset to Default")
+                        Text("Сбросить")
                     }
                 }
             }
@@ -298,7 +298,7 @@ fun FormatDescriptionField(
     OutlinedTextField(
         value = value ?: "",
         onValueChange = onValueChange,
-        label = { Text("Format Description") },
+        label = { Text("Описание формата") },
         modifier = Modifier.fillMaxWidth(),
         minLines = 3,
         maxLines = 5
@@ -316,8 +316,8 @@ fun MaxTokensField(
             val tokens = text.toIntOrNull()
             onValueChange(tokens)
         },
-        label = { Text("Max Tokens") },
-        placeholder = { Text("No limit") },
+        label = { Text("Макс. токенов") },
+        placeholder = { Text("Без лимита") },
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -333,7 +333,7 @@ fun StopSequencesField(
             val stops = if (text.isBlank()) null else text.split(",").map { it.trim() }
             onValueChange(stops)
         },
-        label = { Text("Stop Sequences (comma-separated)") },
+        label = { Text("Стоп-последовательности (через запятую)") },
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -355,11 +355,11 @@ fun TemperatureField(
             onValueChange(clampedTemp)
         },
         label = { Text("Temperature (0.0-2.0)") },
-        placeholder = { Text("Default") },
+        placeholder = { Text("По умолчанию") },
         modifier = Modifier.fillMaxWidth(),
         supportingText = {
             Text(
-                text = "Current: ${value?.toString() ?: "default"}",
+                text = "Текущее: ${value?.toString() ?: "по умолчанию"}",
                 fontSize = 12.sp
             )
         }
@@ -372,7 +372,7 @@ fun PresetButtons(onPresetLoaded: (Int) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "Quick Presets",
+            text = "Быстрые пресеты",
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium
         )
@@ -382,10 +382,10 @@ fun PresetButtons(onPresetLoaded: (Int) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val presets = listOf(
-                1 to "Strict",
-                2 to "Creative",
-                3 to "Technical",
-                4 to "Casual"
+                1 to "Строгий",
+                2 to "Креативный",
+                3 to "Технический",
+                4 to "Неформальный"
             )
             presets.forEach { (preset, name) ->
                 OutlinedButton(
@@ -580,13 +580,13 @@ fun CompressionSettingsCard(
                             )
                         }%)",
                         fontSize = 12.sp,
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFF2E7D32)
                     )
 
                     LinearProgressIndicator(
                         progress = (1 - compressionStats.compressionRatio).toFloat(),
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFF2E7D32)
                     )
                 }
             } else {
@@ -635,7 +635,7 @@ fun ApiKeysStatusCard() {
                                     color = if (stats.isRateLimited)
                                         Color(0xFFF44336)
                                     else
-                                        Color(0xFF4CAF50),
+                                        Color(0xFF2E7D32),
                                     shape = CircleShape
                                 )
                         )

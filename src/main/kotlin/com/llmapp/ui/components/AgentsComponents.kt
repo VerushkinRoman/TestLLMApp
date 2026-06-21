@@ -86,7 +86,7 @@ fun SavedChatCard(
                 ) {
                     Icon(
                         Icons.Default.Edit,
-                        contentDescription = "Rename",
+                        contentDescription = "Переименовать",
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -97,7 +97,7 @@ fun SavedChatCard(
                 ) {
                     Icon(
                         Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = "Удалить",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.error
                     )

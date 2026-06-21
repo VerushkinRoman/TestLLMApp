@@ -207,7 +207,7 @@ fun ProfileCard(
                         Icons.Default.CheckCircle,
                         null,
                         modifier = Modifier.size(16.dp),
-                        tint = Color(0xFF4CAF50)
+                        tint = Color(0xFF2E7D32)
                     )
                 }
 
@@ -226,13 +226,13 @@ fun ProfileCard(
                         if (isActive) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                color = Color(0xFF2E7D32).copy(alpha = 0.2f)
                             ) {
                                 Text(
                                     "Активен",
                                     fontSize = 9.sp,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = Color(0xFF4CAF50)
+                                    color = Color(0xFF2E7D32)
                                 )
                             }
                         }
@@ -268,7 +268,7 @@ fun ProfileCard(
                         Icons.Default.CheckCircle,
                         "Активировать",
                         modifier = Modifier.size(16.dp),
-                        tint = if (isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (isActive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 

@@ -159,11 +159,16 @@ fun main() = application {
     ) {
         MaterialTheme(
             colorScheme = darkColorScheme(
-                primary = Color(0xFF4CAF50),
-                secondary = Color(0xFF2196F3),
-                tertiary = Color(0xFF9C27B0),
+                primary = Color(0xFF2E7D32),
+                secondary = Color(0xFF388E3C),
+                tertiary = Color(0xFF43A047),
                 background = Color(0xFF1E1E1E),
-                surface = Color(0xFF2D2D2D)
+                surface = Color(0xFF2D2D2D),
+                primaryContainer = Color(0xFF1B5E20),
+                onPrimary = Color(0xFFFFFFFF),
+                secondaryContainer = Color(0xFF2E7D32),
+                tertiaryContainer = Color(0xFF4CAF50),
+                onSurfaceVariant = Color(0xFFA5D6A7)
             )
         ) {
             Surface(

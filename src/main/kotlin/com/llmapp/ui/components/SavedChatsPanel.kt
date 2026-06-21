@@ -59,7 +59,7 @@ fun SavedChatsPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "💬 Saved Chats",
+            text = "💬 Сохранённые чаты",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -71,7 +71,7 @@ fun SavedChatsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Your conversation history",
+                text = "История переписок",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -87,11 +87,11 @@ fun SavedChatsPanel(
                 ) {
                     Icon(
                         Icons.Default.Add,
-                        contentDescription = "New Chat",
+                        contentDescription = "Новый чат",
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("New Chat", fontSize = 13.sp)
+                    Text("Новый чат", fontSize = 13.sp)
                 }
             }
         }
@@ -125,20 +125,20 @@ fun SavedChatsPanel(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "📭 No saved chats yet",
+                                    text = "📭 Нет сохранённых чатов",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Start a conversation and it will be saved automatically.",
+                                    text = "Начните разговор — он сохранится автоматически.",
                                     fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = onNewChat) {
-                                    Text("Start New Chat")
+                                    Text("Новый чат")
                                 }
                             }
                         }
@@ -164,12 +164,12 @@ fun SavedChatsPanel(
     if (renameDialogChat != null) {
         AlertDialog(
             onDismissRequest = { renameDialogChat = null },
-            title = { Text("Rename Chat") },
+            title = { Text("Переименовать чат") },
             text = {
                 OutlinedTextField(
                     value = newTitle,
                     onValueChange = { newTitle = it },
-                    label = { Text("Chat title") },
+                    label = { Text("Название чата") },
                     singleLine = true
                 )
             },
@@ -182,12 +182,12 @@ fun SavedChatsPanel(
                         renameDialogChat = null
                     }
                 ) {
-                    Text("Save")
+                    Text("Сохранить")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { renameDialogChat = null }) {
-                    Text("Cancel")
+                    Text("Отмена")
                 }
             }
         )

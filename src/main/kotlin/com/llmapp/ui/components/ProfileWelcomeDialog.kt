@@ -103,7 +103,7 @@ fun ProfileWelcomeDialog(
                     )
                     PresetQuickButton(
                         icon = "🏗️",
-                        label = "Architect",
+                        label = "Архитектор",
                         onClick = {
                             onSetupProfile()
                         },

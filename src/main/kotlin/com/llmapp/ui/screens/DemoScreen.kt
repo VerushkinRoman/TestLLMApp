@@ -77,7 +77,7 @@ fun DemoScreen(
             icon = Icons.Default.Compress,
             description = "Сравнение работы с компрессией и без",
             features = listOf("Без компрессии", "С компрессией", "Сравнение"),
-            color = Color(0xFF2196F3),
+            color = Color(0xFF388E3C),
             onStart = onStartCompressionDemo
         ),
         DemoItem(
@@ -85,8 +85,8 @@ fun DemoScreen(
             title = "🎯 Стратегии контекста",
             icon = Icons.Default.Timeline,
             description = "Сравнение 3 стратегий управления контекстом",
-            features = listOf("Sliding Window", "Sticky Facts", "Branching"),
-            color = Color(0xFF9C27B0),
+            features = listOf("Скользящее окно", "Фиксация фактов", "Ветвление"),
+            color = Color(0xFF43A047),
             onStart = onStartStrategyDemo
         ),
         DemoItem(
@@ -95,7 +95,7 @@ fun DemoScreen(
             icon = Icons.Default.Memory,
             description = "Трехслойная модель памяти: краткосрочная, рабочая, долговременная",
             features = listOf("Профиль", "Рабочая задача", "Ограничения"),
-            color = Color(0xFFFF9800),
+            color = Color(0xFF66BB6A),
             onStart = onStartMemoryDemo
         ),
         DemoItem(
@@ -104,7 +104,7 @@ fun DemoScreen(
             icon = Icons.Default.Person,
             description = "Демонстрация персонализации агента под профиль пользователя",
             features = listOf("Профили", "Стили", "Ограничения"),
-            color = Color(0xFFE91E63),
+            color = Color(0xFF66BB6A),
             onStart = onStartPersonalizationDemo
         ),
         DemoItem(
@@ -112,8 +112,8 @@ fun DemoScreen(
             title = "🧠 Stateful Agent",
             icon = Icons.Default.Memory,
             description = "Полная демонстрация агента с конечным автоматом",
-            features = listOf("Task State", "Пауза", "Снимки"),
-            color = Color(0xFF673AB7),
+            features = listOf("Состояние задачи", "Пауза", "Снимки"),
+            color = Color(0xFF2E7D32),
             onStart = onStartStatefulDemo
         ),
         DemoItem(
@@ -122,7 +122,7 @@ fun DemoScreen(
             icon = Icons.Default.Security,
             description = "Контроль поведения агента через инварианты",
             features = listOf("Архитектура", "Стек", "Бизнес-правила"),
-            color = Color(0xFF673AB7),
+            color = Color(0xFF388E3C),
             onStart = onStartInvariantDemo
         ),
         DemoItem(
@@ -131,7 +131,7 @@ fun DemoScreen(
             icon = Icons.Default.Timeline,
             description = "Демонстрация контролируемого жизненного цикла задачи",
             features = listOf("Переходы", "Валидация", "Контроль"),
-            color = Color(0xFF2196F3),
+            color = Color(0xFF4CAF50),
             onStart = onStartTransitionDemo
         ),
     )

@@ -45,7 +45,7 @@ fun ModelsPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Available Models",
+            text = "Доступные модели",
             fontSize = 24.sp,
             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -131,7 +131,7 @@ fun ModelCard(
             if (isSelected) {
                 Icon(
                     Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
+                    contentDescription = "Выбрана",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }

@@ -190,13 +190,13 @@ fun DetailStats(stats: TokenStats) {
             label = "Prompt токены",
             value = stats.totalPromptTokens.toDouble(),
             max = (stats.totalTokens).toDouble(),
-            color = Color(0xFF4CAF50)
+            color = Color(0xFF2E7D32)
         )
         ProgressBar(
             label = "Completion токены",
             value = stats.totalCompletionTokens.toDouble(),
             max = stats.totalTokens.toDouble(),
-            color = Color(0xFF2196F3)
+            color = Color(0xFF388E3C)
         )
     }
 }
@@ -229,7 +229,7 @@ fun HistoryItem(snapshot: TokenSnapshot) {
     val statusColor = when {
         snapshot.contextUsagePercent > 90 -> Color(0xFFF44336)
         snapshot.contextUsagePercent > 70 -> Color(0xFFFF9800)
-        else -> Color(0xFF4CAF50)
+        else -> Color(0xFF2E7D32)
     }
 
     Surface(
@@ -264,7 +264,7 @@ fun HistoryItem(snapshot: TokenSnapshot) {
                 Text(
                     text = snapshot.getFormattedCost(),
                     fontSize = 10.sp,
-                    color = Color(0xFF4CAF50)
+                    color = Color(0xFF2E7D32)
                 )
                 Text(
                     text = "🔋 ${"%.1f".format(snapshot.contextUsagePercent)}%",
@@ -279,10 +279,10 @@ fun HistoryItem(snapshot: TokenSnapshot) {
 @Composable
 fun StatusIndicator(warning: String) {
     val color = when {
-        warning.contains("✅") -> Color(0xFF4CAF50)
+        warning.contains("✅") -> Color(0xFF2E7D32)
         warning.contains("⚠️") -> Color(0xFFFF9800)
         warning.contains("🔴") -> Color(0xFFF44336)
-        warning.contains("💥") -> Color(0xFF9C27B0)
+        warning.contains("💥") -> Color(0xFF43A047)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 

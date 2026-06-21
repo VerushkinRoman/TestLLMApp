@@ -290,7 +290,7 @@ fun CodeBlock(code: String, language: String?) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = language?.uppercase() ?: "CODE",
+                    text = language?.uppercase() ?: "КОД",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF6A9955),
@@ -312,9 +312,9 @@ fun CodeBlock(code: String, language: String?) {
                 ) {
                     Icon(
                         if (showCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-                        contentDescription = "Copy code",
+                        contentDescription = "Копировать код",
                         modifier = Modifier.size(16.dp),
-                        tint = if (showCopied) Color(0xFF4CAF50) else Color.White
+                        tint = if (showCopied) Color(0xFF2E7D32) else Color.White
                     )
                 }
             }

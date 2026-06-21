@@ -229,11 +229,11 @@ fun TransitionItem(
 }
 
 fun getPhaseColor(phase: TaskPhase): Color = when (phase) {
-    TaskPhase.INIT -> Color(0xFF2196F3)
+    TaskPhase.INIT -> Color(0xFF66BB6A)
     TaskPhase.PLANNING -> Color(0xFFFF9800)
-    TaskPhase.EXECUTION -> Color(0xFF4CAF50)
-    TaskPhase.VALIDATION -> Color(0xFF9C27B0)
-    TaskPhase.DONE -> Color(0xFF4CAF50)
+    TaskPhase.EXECUTION -> Color(0xFF2E7D32)
+    TaskPhase.VALIDATION -> Color(0xFF43A047)
+    TaskPhase.DONE -> Color(0xFF2E7D32)
     TaskPhase.PAUSED -> Color(0xFFFF9800)
     TaskPhase.BLOCKED -> Color(0xFFF44336)
 }

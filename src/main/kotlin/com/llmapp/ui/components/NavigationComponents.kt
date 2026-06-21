@@ -44,36 +44,36 @@ fun AppNavigationRail(
             NavigationRailItem(
                 selected = currentScreen == Screen.Chat,
                 onClick = { onScreenSelected(Screen.Chat) },
-                icon = { Icon(Icons.AutoMirrored.Filled.Chat, "Chat") },
-                label = { Text("Chat", fontSize = 10.sp) }
+                icon = { Icon(Icons.AutoMirrored.Filled.Chat, "Чат") },
+                label = { Text("Чат", fontSize = 10.sp) }
             )
 
             NavigationRailItem(
                 selected = currentScreen == Screen.Agents,
                 onClick = { onScreenSelected(Screen.Agents) },
-                icon = { Icon(Icons.Default.Folder, "Chats") },
-                label = { Text("Chats", fontSize = 10.sp) }
+                icon = { Icon(Icons.Default.Folder, "Чаты") },
+                label = { Text("Чаты", fontSize = 10.sp) }
             )
 
             NavigationRailItem(
                 selected = currentScreen == Screen.Models,
                 onClick = { onScreenSelected(Screen.Models) },
-                icon = { Icon(Icons.Default.ModelTraining, "Models") },
-                label = { Text("Models", fontSize = 10.sp) }
+                icon = { Icon(Icons.Default.ModelTraining, "Модели") },
+                label = { Text("Модели", fontSize = 10.sp) }
             )
 
             NavigationRailItem(
                 selected = currentScreen == Screen.Demo,
                 onClick = { onScreenSelected(Screen.Demo) },
-                icon = { Icon(Icons.Default.Science, "Demo") },
-                label = { Text("Demo", fontSize = 10.sp) }
+                icon = { Icon(Icons.Default.Science, "Демо") },
+                label = { Text("Демо", fontSize = 10.sp) }
             )
 
             NavigationRailItem(
                 selected = currentScreen == Screen.Settings,
                 onClick = { onScreenSelected(Screen.Settings) },
-                icon = { Icon(Icons.Default.Settings, "Settings") },
-                label = { Text("Settings", fontSize = 10.sp) }
+                icon = { Icon(Icons.Default.Settings, "Настройки") },
+                label = { Text("Настройки", fontSize = 10.sp) }
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -81,8 +81,8 @@ fun AppNavigationRail(
             NavigationRailItem(
                 selected = false,
                 onClick = onClearHistory,
-                icon = { Icon(Icons.Default.Delete, "Clear") },
-                label = { Text("Clear", fontSize = 10.sp) }
+                icon = { Icon(Icons.Default.Delete, "Очистить") },
+                label = { Text("Очистить", fontSize = 10.sp) }
             )
         }
     }

@@ -189,7 +189,7 @@ fun TaskStatePanel(
                     label = if (state.isPaused) "Возобновить" else "Пауза",
                     onClick = if (state.isPaused) onResume else onPause,
                     enabled = !isDemoRunning && (!state.isBlocked || state.isPaused),
-                    color = if (state.isPaused) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                    color = if (state.isPaused) Color(0xFF2E7D32) else Color(0xFFFF9800)
                 )
 
                 SmallIconButton(
@@ -197,7 +197,7 @@ fun TaskStatePanel(
                     label = if (state.isBlocked) "Разблок." else "Блок",
                     onClick = if (state.isBlocked) onUnblock else onBlock,
                     enabled = !isDemoRunning && (!state.isPaused || state.isBlocked),
-                    color = if (state.isBlocked) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    color = if (state.isBlocked) Color(0xFF2E7D32) else Color(0xFFF44336)
                 )
 
                 SmallIconButton(
@@ -318,7 +318,7 @@ fun SmallIconButton(
 }
 
 fun getProgressColor(progress: Float): Color = when {
-    progress < 0.3f -> Color(0xFF2196F3)
+    progress < 0.3f -> Color(0xFF66BB6A)
     progress < 0.7f -> Color(0xFFFF9800)
-    else -> Color(0xFF4CAF50)
+    else -> Color(0xFF2E7D32)
 }

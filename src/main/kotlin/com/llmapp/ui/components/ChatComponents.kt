@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -99,8 +100,6 @@ import kotlin.time.Duration.Companion.seconds
 fun ChatTopBar(
     controlEnabled: Boolean,
     currentModel: String,
-    currentAgentName: String?,
-    currentAgentIcon: String?,
     memorySettings: MemorySettings,
     onMemorySettingChanged: (MemorySettings) -> Unit,
     onEditProfile: () -> Unit,
@@ -116,40 +115,22 @@ fun ChatTopBar(
 
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("LLM Chat Assistant")
-                Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.heightIn(max = 48.dp)
+            ) {
                 Surface(
                     shape = CircleShape,
-                    color = if (controlEnabled) Color(0xFF4CAF50) else Color(0xFFF44336),
+                    color = if (controlEnabled) Color(0xFF2E7D32) else Color(0xFFF44336),
                     modifier = Modifier.size(8.dp)
                 ) {}
-
-                if (currentAgentName != null) {
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = currentAgentIcon ?: "🤖",
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                text = currentAgentName,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (controlEnabled) "Response: вкл" else "Response: выкл",
+                    fontSize = 11.sp,
+                    color = if (controlEnabled) Color(0xFF2E7D32) else Color(0xFFF44336),
+                    maxLines = 1
+                )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -185,7 +166,7 @@ fun ChatTopBar(
                                 .size(8.dp)
                                 .align(Alignment.BottomEnd),
                             shape = MaterialTheme.shapes.small,
-                            color = Color(0xFF4CAF50)
+                            color = Color(0xFF2E7D32)
                         ) {}
                     }
                 }
@@ -205,7 +186,7 @@ fun ChatTopBar(
                 ) {
                     Icon(
                         Icons.Default.Memory,
-                        contentDescription = "Memory Settings",
+                        contentDescription = "Настройки памяти",
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -213,21 +194,21 @@ fun ChatTopBar(
             }
 
             MemoryStatusChip(
-                label = "STM",
+                label = "КПП",
                 active = memorySettings.useShortTerm,
-                color = Color(0xFF4CAF50)
+                color = Color(0xFF2E7D32)
             )
 
             MemoryStatusChip(
-                label = "WM",
+                label = "РП",
                 active = memorySettings.useWorkingMemory,
                 color = Color(0xFFFF9800)
             )
 
             MemoryStatusChip(
-                label = "LTM",
+                label = "ДП",
                 active = memorySettings.useLongTerm,
-                color = Color(0xFF9C27B0)
+                color = Color(0xFF43A047)
             )
 
             Surface(
@@ -438,7 +419,12 @@ fun MessageBubble(
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isUser) Modifier.padding(start = 48.dp)
+                else Modifier.padding(end = 48.dp)
+            ),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         Surface(
@@ -464,7 +450,7 @@ fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isUser) "You" else "Assistant",
+                        text = if (isUser) "Вы" else "Ассистент",
                         fontSize = 12.sp,
                         color = if (isUser)
                             MaterialTheme.colorScheme.primary
@@ -499,7 +485,7 @@ fun MessageBubble(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Cancel")
+                                Text("Отмена")
                             }
                             Button(
                                 onClick = {
@@ -508,7 +494,7 @@ fun MessageBubble(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Save")
+                                Text("Сохранить")
                             }
                         }
                     }
@@ -556,11 +542,11 @@ fun MessageBubble(
                         ) {
                             Icon(
                                 Icons.Default.ContentCopy,
-                                contentDescription = "Copy",
+                                contentDescription = "Копировать",
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Copy")
+                            Text("Копировать")
                             if (showCopiedTooltip) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
@@ -594,11 +580,11 @@ fun MessageBubble(
                             ) {
                                 Icon(
                                     Icons.Default.Edit,
-                                    contentDescription = "Edit",
+                                    contentDescription = "Редактировать",
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit")
+                                Text("Редактировать")
                             }
                         }
                     }
@@ -630,15 +616,15 @@ fun MessageBubble(
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Regenerating...")
+                                    Text("Генерация...")
                                 } else {
                                     Icon(
                                         Icons.Default.Refresh,
-                                        contentDescription = "Regenerate",
+                                        contentDescription = "Перегенерировать",
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Regenerate")
+                                    Text("Перегенерировать")
                                 }
                             }
                         }
@@ -743,7 +729,7 @@ fun CopyMetricsButton(
     ) {
         Icon(
             if (showCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-            contentDescription = if (showCopied) "Copied!" else "Copy metrics",
+            contentDescription = if (showCopied) "Скопировано!" else "Копировать метрики",
             modifier = Modifier.size(14.dp),
             tint = if (showCopied)
                 MaterialTheme.colorScheme.primary
@@ -776,7 +762,7 @@ fun TypingIndicator(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Thinking",
+                    text = "Думает",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
@@ -942,7 +928,7 @@ fun MessageInput(
                                 else -> false
                             }
                         },
-                    placeholder = { Text("Type your message...") },
+                    placeholder = { Text("Введите сообщение...") },
                     textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = if (!isGenerating)

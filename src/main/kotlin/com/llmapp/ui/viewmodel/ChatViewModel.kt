@@ -83,6 +83,12 @@ class ChatViewModel : ViewModel() {
         loadSelectedInvariantSet()
 
         viewModelScope.launch {
+            taskUseCase.taskState.collect { taskState ->
+                updateState { copy(taskState = taskState) }
+            }
+        }
+
+        viewModelScope.launch {
             kotlinx.coroutines.delay(100.milliseconds)
             if (_state.value.activeInvariantSetName == null) {
                 val set = InvariantPresets.getBaseInvariants()

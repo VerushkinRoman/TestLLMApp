@@ -73,7 +73,7 @@ fun InvariantSetCard(
                     if (isActive) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFF4CAF50),
+                            color = Color(0xFF2E7D32),
                             modifier = Modifier.size(8.dp)
                         ) {}
                     }
@@ -106,12 +106,12 @@ fun InvariantSetCard(
                     if (isActive) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                            color = Color(0xFF2E7D32).copy(alpha = 0.2f)
                         ) {
                             Text(
                                 "Активен",
                                 fontSize = 10.sp,
-                                color = Color(0xFF4CAF50),
+                                color = Color(0xFF2E7D32),
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
@@ -202,13 +202,13 @@ fun InvariantManagerDialog(
                 if (activeSetName != null) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                            color = Color(0xFF2E7D32).copy(alpha = 0.2f),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Text(
                             text = "✅ Активен: ${activeSetName.take(20)}",
                             fontSize = 11.sp,
-                            color = Color(0xFF4CAF50),
+                            color = Color(0xFF2E7D32),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
@@ -247,7 +247,7 @@ fun InvariantManagerDialog(
                         onClick = { onCreatePreset("base") },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("📋 Base Rules", fontSize = 11.sp)
+                        Text("📋 Базовые правила", fontSize = 11.sp)
                     }
                 }
 

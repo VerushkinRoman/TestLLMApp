@@ -6,8 +6,10 @@ import com.llmapp.agent.TokenSnapshot
 import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.UserProfile
+import com.llmapp.model.ModelInfo
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
+import com.llmapp.model.freeModels
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
 
@@ -23,12 +25,12 @@ data class ChatViewState(
     val cursorPosition: Int = 0,
 
     // Модель
-    val currentModel: String = "",
-    val availableModels: List<com.llmapp.model.ModelInfo> = emptyList(),
+    val currentModel: String = "nvidia/nemotron-3-super-120b-a12b:free",
+    val availableModels: List<ModelInfo> = freeModels,
 
     // Управление ответами
     val responseControl: ResponseControl = ResponseControl(),
-    val controlEnabled: Boolean = false,
+    val controlEnabled: Boolean = true,
 
     // Токены
     val tokenStats: TokenStats = TokenStats(),
