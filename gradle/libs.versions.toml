@@ -8,6 +8,7 @@ compose = "1.11.1"
 material3 = "1.11.0-alpha07"
 materialIcons-extended = "1.7.3"
 lifecycle = "2.11.0-beta01"
+mcp-sdk = "0.13.0"
 
 
 [libraries]
@@ -33,6 +34,9 @@ kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-
 
 # Logging
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+
+# MCP SDK
+mcp-kotlin-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcp-sdk" }
 
 
 [plugins]

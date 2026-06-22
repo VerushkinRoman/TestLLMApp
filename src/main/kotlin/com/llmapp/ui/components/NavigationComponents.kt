@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ModelTraining
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -67,6 +68,13 @@ fun AppNavigationRail(
                 onClick = { onScreenSelected(Screen.Demo) },
                 icon = { Icon(Icons.Default.Science, "Демо") },
                 label = { Text("Демо", fontSize = 10.sp) }
+            )
+
+            NavigationRailItem(
+                selected = currentScreen == Screen.Mcp,
+                onClick = { onScreenSelected(Screen.Mcp) },
+                icon = { Icon(Icons.Default.SportsSoccer, "MCP") },
+                label = { Text("MCP", fontSize = 10.sp) }
             )
 
             NavigationRailItem(

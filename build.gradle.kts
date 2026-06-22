@@ -29,6 +29,9 @@ dependencies {
     // Serialization
     implementation(libs.kotlinx.serialization.json)
 
+    // MCP SDK
+    implementation(libs.mcp.kotlin.sdk.client)
+
     // Logging
     implementation(libs.slf4j.nop)
 
@@ -43,7 +46,7 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "MainKt"
+        mainClass = "com.llmapp.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "LLM Chat App"

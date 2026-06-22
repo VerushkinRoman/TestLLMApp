@@ -41,6 +41,7 @@ import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
 import com.llmapp.ui.screens.DemoScreen
+import com.llmapp.ui.screens.McpScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
 import com.llmapp.ui.viewmodel.ViewEvent
 import java.util.prefs.Preferences
@@ -512,6 +513,8 @@ fun MainScreen(
                     sendEvent(ViewEvent.RefreshTokenStats)
                 }
             )
+
+            Screen.Mcp -> McpScreen()
 
             Screen.Settings -> SettingsPanel(
                 control = state.responseControl,
