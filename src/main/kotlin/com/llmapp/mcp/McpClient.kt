@@ -21,7 +21,7 @@ class McpClient(
     private fun log(msg: String) = onLog?.invoke(msg)
 
     suspend fun initialize(timeoutSeconds: Long = 15): InitResult {
-        val url = "http://127.0.0.1:4455/mcp"
+        val url = "https://alcoserver.ru:4456/mcp"
         log("🔗 Подключение к $url")
 
         val httpClient = HttpClient {

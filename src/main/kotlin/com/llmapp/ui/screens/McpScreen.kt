@@ -107,7 +107,7 @@ fun McpScreen() {
             } catch (e: Exception) {
                 val msg = e.message ?: e.javaClass.simpleName
                 addLog("❌ Ошибка: $msg")
-                addLog("💡 Убедитесь, что MCP сервер запущен на http://127.0.0.1:4455")
+                addLog("💡 Убедитесь, что MCP сервер запущен на https://alcoserver.ru:4456")
             } finally {
                 connecting = false
             }
@@ -164,7 +164,7 @@ fun McpScreen() {
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Подключение к World Cup MCP-серверу (http://127.0.0.1:4455)",
+            text = "Подключение к World Cup MCP-серверу (https://alcoserver.ru:4456)",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

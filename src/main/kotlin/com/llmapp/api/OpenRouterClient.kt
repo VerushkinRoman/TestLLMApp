@@ -100,7 +100,15 @@ class OpenRouterClient(
                     }
 
                     return try {
-                        json.decodeFromString<OpenRouterResponse>(responseBody)
+                        val parsed = json.decodeFromString<OpenRouterResponse>(responseBody)
+                        if (parsed.error != null) {
+                            println("⚠️ Модель ${request.model} вернула ошибку в теле 200: ${parsed.error.message}")
+                            KeyUsageMonitor.recordError(currentKeyIndex, true)
+                            tryNextModel(request, retryCount, modelRetryCount)
+                        } else {
+                            ApiConfig.recordSuccess()
+                            parsed
+                        }
                     } catch (e: Exception) {
                         println("⚠️ Ошибка парсинга JSON от ${request.model}: ${e.message}")
                         KeyUsageMonitor.recordError(currentKeyIndex, false)

@@ -5,6 +5,7 @@ import java.util.Properties
 
 object ApiConfig {
     private const val PROPS_FILE = "openrouter.properties"
+    private const val STATE_FILE = "openrouter.state"
 
     private var apiKeys: List<String> = emptyList()
     private var currentKeyIndex = 0
@@ -31,6 +32,21 @@ object ApiConfig {
             }
 
             println("✅ Загружено ${apiKeys.size} API ключей")
+
+            val stateFile = File(STATE_FILE)
+            if (stateFile.exists()) {
+                val savedIndex = stateFile.readText().trim().toIntOrNull() ?: 0
+                currentKeyIndex = savedIndex.coerceIn(0, apiKeys.lastIndex)
+                println("📌 Восстановлен последний использованный ключ #${currentKeyIndex + 1}")
+            }
+        }
+    }
+
+    private fun saveCurrentKeyIndex() {
+        try {
+            File(STATE_FILE).writeText(currentKeyIndex.toString())
+        } catch (_: Exception) {
+            // ignore write errors
         }
     }
 
@@ -43,6 +59,7 @@ object ApiConfig {
         loadApiKeys()
         val oldIndex = currentKeyIndex
         currentKeyIndex = (currentKeyIndex + 1) % apiKeys.size
+        saveCurrentKeyIndex()
         println("🔄 Переключение с ключа #${oldIndex + 1} на ключ #${currentKeyIndex + 1}")
         return apiKeys[currentKeyIndex]
     }
@@ -54,8 +71,14 @@ object ApiConfig {
         return apiKeys.size
     }
 
+    fun recordSuccess() {
+        loadApiKeys()
+        saveCurrentKeyIndex()
+    }
+
     fun resetKeyRotation() {
         currentKeyIndex = 0
+        saveCurrentKeyIndex()
         println("🔄 Сброс ротации ключей к первому")
     }
 }

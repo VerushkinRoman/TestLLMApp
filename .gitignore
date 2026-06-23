@@ -21,3 +21,4 @@ openrouter.properties
 /.idea/
 /all_kotlin_files.txt
 /export project.sh
+/openrouter.state
