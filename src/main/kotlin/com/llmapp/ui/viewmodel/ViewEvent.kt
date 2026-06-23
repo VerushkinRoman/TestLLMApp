@@ -135,4 +135,11 @@ sealed class ViewEvent {
     data class BlockTask(val reason: String = "Блокировка") : ViewEvent()
     object UnblockTask : ViewEvent()
     object ToggleCreateTaskDialog : ViewEvent()
+
+    // ============================================================
+    // MCP
+    // ============================================================
+    object ConnectMcp : ViewEvent()
+    object DisconnectMcp : ViewEvent()
+    data class OnMcpLog(val message: String) : ViewEvent()
 }

@@ -62,7 +62,9 @@ fun ChatTopBar(
     activeProfile: UserProfile,
     onShowProfileManager: () -> Unit,
     onShowInvariantManager: () -> Unit,
-    onCreateTask: () -> Unit
+    onCreateTask: () -> Unit,
+    mcpConnected: Boolean = false,
+    onToggleMcp: () -> Unit = {}
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -97,6 +99,13 @@ fun ChatTopBar(
                 modifier = Modifier.size(36.dp)
             ) {
                 Text("🔒", fontSize = 20.sp)
+            }
+
+            IconButton(
+                onClick = onToggleMcp,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text(if (mcpConnected) "⚽" else "🌍", fontSize = 20.sp)
             }
 
             IconButton(

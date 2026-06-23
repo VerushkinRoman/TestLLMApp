@@ -99,7 +99,15 @@ fun ChatScreen(
             activeProfile = viewState.activeProfile,
             onShowProfileManager = { onEvent(ViewEvent.ToggleProfileManager) },
             onCreateTask = { onEvent(ViewEvent.ToggleCreateTaskDialog) },
-            onShowInvariantManager = { /* onEvent(ViewEvent.ShowInvariantManager) */ }
+            onShowInvariantManager = { /* onEvent(ViewEvent.ShowInvariantManager) */ },
+            mcpConnected = viewState.mcpConnected,
+            onToggleMcp = {
+                if (viewState.mcpConnected) {
+                    onEvent(ViewEvent.DisconnectMcp)
+                } else {
+                    onEvent(ViewEvent.ConnectMcp)
+                }
+            }
         )
 
         viewState.taskState?.let { taskState ->

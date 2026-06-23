@@ -71,7 +71,12 @@ data class ChatViewState(
     // Компрессия
     val compressionEnabled: Boolean = true,
     val keepLastMessages: Int = 8,
-    val summarizeEvery: Int = 6
+    val summarizeEvery: Int = 6,
+
+    // MCP
+    val mcpConnected: Boolean = false,
+    val mcpServerName: String? = null,
+    val mcpLog: List<String> = emptyList()
 ) {
     companion object {
         fun initial() = ChatViewState()

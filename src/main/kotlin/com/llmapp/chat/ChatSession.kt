@@ -4,8 +4,14 @@ import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.LLMAgent
 import com.llmapp.agent.StrategicLLMAgent
 import com.llmapp.agent.TokenSnapshot
+import com.llmapp.api.OpenRouterClient
+import com.llmapp.mcp.McpIntegration
+import com.llmapp.model.ChatMessage
+import com.llmapp.model.OpenRouterRequest
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 data class ChatResponse(
     val content: String,
@@ -19,7 +25,7 @@ data class ChatResponse(
 class ChatSession(
     apiKey: String,
     private var currentModel: String = "nvidia/nemotron-3-super-120b-a12b:free",
-    systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
+    private val systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
         Форматирование ответов:
         - Используй **жирный** текст для важной информации
         - Используй *курсив* для выделения
@@ -43,6 +49,8 @@ class ChatSession(
     private var strategicAgent: StrategicLLMAgent? = null
     private var useStrategicAgent = true
     private var currentApiKey = apiKey
+
+    var mcpIntegration: McpIntegration? = null
 
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
@@ -108,44 +116,46 @@ class ChatSession(
         strategicAgent?.updateResponseControl(control)
     }
 
-    fun getResponseControl(): ResponseControl = responseControl
-
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
         refreshApiKeys()
 
+        val effectivePrompt = if (mcpIntegration?.isConnected() == true) {
+            "$userPrompt\n\n${mcpIntegration!!.getToolDescriptions()}"
+        } else userPrompt
+
         try {
-            if (useStrategicAgent && strategicAgent != null) {
-                try {
-                    val response = strategicAgent!!.processRequest(userPrompt)
-                    printMetadata(
-                        finishReason = response.finishReason,
-                        promptTokens = response.promptTokens,
-                        completionTokens = response.completionTokens,
-                        totalTokens = response.totalTokens,
-                        responseTimeMs = response.responseTimeMs
-                    )
-                    println("📊 Стратегия: ${response.strategyUsed}")
-
-                    return ChatResponse(
-                        content = response.content,
-                        promptTokens = response.promptTokens,
-                        completionTokens = response.completionTokens,
-                        totalTokens = response.totalTokens,
-                        finishReason = response.finishReason,
-                        responseTimeMs = response.responseTimeMs
-                    )
-                } catch (_: Exception) {
-                    println("⚠️ Стратегический агент не работает, переключаюсь на обычный")
-                    useStrategicAgent = false
-                }
-            }
-
-            val response = when {
+            val response = run {
+                if (useStrategicAgent && strategicAgent != null) {
+                    try {
+                        val resp = strategicAgent!!.processRequest(effectivePrompt)
+                        printMetadata(
+                            finishReason = resp.finishReason,
+                            promptTokens = resp.promptTokens,
+                            completionTokens = resp.completionTokens,
+                            totalTokens = resp.totalTokens,
+                            responseTimeMs = resp.responseTimeMs
+                        )
+                        println("📊 Стратегия: ${resp.strategyUsed}")
+                        ChatResponse(
+                            content = resp.content,
+                            promptTokens = resp.promptTokens,
+                            completionTokens = resp.completionTokens,
+                            totalTokens = resp.totalTokens,
+                            finishReason = resp.finishReason,
+                            responseTimeMs = resp.responseTimeMs
+                        )
+                    } catch (_: Exception) {
+                        println("⚠️ Стратегический агент не работает, переключаюсь на обычный")
+                        useStrategicAgent = false
+                        null
+                    }
+                } else null
+            } ?: when {
                 compressedAgent != null -> {
                     if (isRegeneration) {
                         println("⚠️ Регенерация для сжатого агента пока не поддерживается")
                     }
-                    val resp = compressedAgent.processRequest(userPrompt)
+                    val resp = compressedAgent.processRequest(effectivePrompt)
                     ChatResponse(
                         content = resp.content,
                         promptTokens = resp.promptTokens,
@@ -158,9 +168,9 @@ class ChatSession(
 
                 regularAgent != null -> {
                     val resp = if (isRegeneration) {
-                        regularAgent.regenerateLastResponse(userPrompt)
+                        regularAgent.regenerateLastResponse(effectivePrompt)
                     } else {
-                        regularAgent.processRequest(userPrompt)
+                        regularAgent.processRequest(effectivePrompt)
                     }
                     ChatResponse(
                         content = resp.content,
@@ -183,10 +193,127 @@ class ChatSession(
                 responseTimeMs = response.responseTimeMs
             )
 
-            return response
+            val finalContent = handleMcpToolCalls(response.content, userPrompt)
+            return response.copy(content = finalContent)
         } catch (e: Exception) {
             throw Exception("Ошибка при обращении к LLM: ${e.message}", e)
         }
+    }
+
+    private suspend fun handleMcpToolCalls(
+        initialContent: String,
+        originalUserPrompt: String
+    ): String {
+        var content = initialContent
+        val allResults = mutableListOf<String>()
+        repeat(5) {
+            val json = extractMcpCallJson(content) ?: return synthesizeFinalAnswer(
+                allResults,
+                originalUserPrompt,
+                content
+            )
+            val result = try {
+                mcpIntegration?.executeToolCall(json) ?: return synthesizeFinalAnswer(
+                    allResults,
+                    originalUserPrompt,
+                    content
+                )
+            } catch (e: Exception) {
+                return synthesizeFinalAnswer(
+                    allResults,
+                    originalUserPrompt,
+                    "MCP tool error: ${e.message}"
+                )
+            }
+            allResults.add(result)
+            val followUp = buildString {
+                appendLine("Original user question: $originalUserPrompt")
+                appendLine()
+                appendLine("MCP tool returned this data:")
+                appendLine(result)
+                appendLine()
+                appendLine("If you need more data, call another MCP tool using the same [MCP_CALL] format.")
+                appendLine("If you have all the data needed, provide the FINAL answer in Russian.")
+                appendLine("Do NOT output [MCP_CALL] or [MCPCALL] markers if you are ready to answer.")
+            }
+            content = askMcpFollowUp(followUp)
+        }
+        return synthesizeFinalAnswer(allResults, originalUserPrompt, content)
+    }
+
+    private suspend fun synthesizeFinalAnswer(
+        allResults: List<String>,
+        originalUserPrompt: String,
+        fallback: String
+    ): String {
+        if (allResults.isEmpty()) return fallback
+        val prompt = buildString {
+            appendLine("Answer the user's question using ONLY the data below. Do NOT use your own knowledge.")
+            appendLine()
+            appendLine("User question: $originalUserPrompt")
+            appendLine()
+            appendLine("MCP tool results (use these, ignore your own knowledge):")
+            allResults.forEachIndexed { i, r ->
+                appendLine("--- Result ${i + 1} ---")
+                appendLine(r)
+            }
+            appendLine()
+            appendLine("Now provide the final answer in Russian based ONLY on the data above.")
+            appendLine("If the data shows a group letter, position, or points — use those exact values.")
+            append("Do NOT guess or use your training data.")
+        }
+        return askMcpFollowUp(prompt)
+    }
+
+    private fun extractMcpCallJson(text: String): String? {
+        val json = Json { ignoreUnknownKeys = true }
+        val markers = listOf("[MCP_CALL]", "[MCPCALL]", "[mcp_call]", "[mcpcall]")
+        for (marker in markers) {
+            val idx = text.indexOf(marker, ignoreCase = true)
+            if (idx == -1) continue
+            val after = text.substring(idx + marker.length).trim()
+            var searchFrom = 0
+            while (true) {
+                val braceStart = after.indexOf('{', searchFrom)
+                if (braceStart == -1) break
+                var depth = 0
+                for (i in braceStart until after.length) {
+                    when (after[i]) {
+                        '{' -> depth++
+                        '}' -> {
+                            depth--
+                            if (depth == 0) {
+                                val candidate = after.substring(braceStart, i + 1)
+                                try {
+                                    json.parseToJsonElement(candidate).jsonObject
+                                    return candidate
+                                } catch (_: Exception) {
+                                    searchFrom = braceStart + 1
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+                if (depth > 0) break
+            }
+        }
+        return null
+    }
+
+    private suspend fun askMcpFollowUp(prompt: String): String {
+        val client = OpenRouterClient(currentApiKey)
+        val request = OpenRouterRequest(
+            model = currentModel,
+            messages = listOf(
+                ChatMessage("system", systemPrompt),
+                ChatMessage("user", prompt)
+            ),
+            skipContextOptimization = true
+        )
+        val response = client.sendRequest(request)
+        response.error?.let { throw Exception(it.message) }
+        return response.choices?.firstOrNull()?.message?.content ?: "No response"
     }
 
     fun rebuildHistoryFromUiMessages(uiMessages: List<Pair<String, String>>) {

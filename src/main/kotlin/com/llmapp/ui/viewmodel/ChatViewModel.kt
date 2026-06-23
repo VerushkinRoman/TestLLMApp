@@ -7,6 +7,7 @@ import com.llmapp.agent.StatefulMemoryAgent
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.domain.usercase.CompressionUseCase
+import com.llmapp.mcp.McpIntegration
 import com.llmapp.domain.usercase.MemoryUseCase
 import com.llmapp.domain.usercase.MessageUseCase
 import com.llmapp.domain.usercase.ModelUseCase
@@ -39,6 +40,7 @@ class ChatViewModel : ViewModel() {
 
     private val invariantManager = InvariantManager()
     private lateinit var chatSession: ChatSession
+    private val mcpIntegration = McpIntegration(onLog = { handleEvent(ViewEvent.OnMcpLog(it)) })
     private lateinit var statefulAgent: StatefulMemoryAgent
     private lateinit var profileManager: ProfileManager
     private var chatMemoryService: ChatMemoryAgent? = null
@@ -95,7 +97,7 @@ class ChatViewModel : ViewModel() {
             compressionEnabled = _state.value.compressionEnabled,
             keepLastMessages = _state.value.keepLastMessages,
             summarizeEvery = _state.value.summarizeEvery
-        )
+        ).also { it.mcpIntegration = mcpIntegration }
         statefulAgent = StatefulMemoryAgent(apiKey = apiKey)
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
@@ -474,6 +476,31 @@ class ChatViewModel : ViewModel() {
             is ViewEvent.RebuildHistoryFromUiMessages -> {
                 chatSession.rebuildHistoryFromUiMessages(event.messages)
             }
+
+            ViewEvent.ConnectMcp -> {
+                viewModelScope.launch {
+                    updateState { copy(mcpConnected = true) }
+                    addLogMessage("🔄 Подключение к MCP серверу...")
+                    try {
+                        val result = mcpIntegration.connect()
+                        addLogMessage("✅ MCP подключен: ${result.name} v${result.version}")
+                        updateState { copy(mcpServerName = "${result.name} v${result.version}") }
+                    } catch (e: Exception) {
+                        addLogMessage("❌ MCP: ${e.message}")
+                        updateState { copy(mcpConnected = false) }
+                    }
+                }
+            }
+
+            ViewEvent.DisconnectMcp -> {
+                mcpIntegration.disconnect()
+                addLogMessage("🔌 MCP отключен")
+                updateState { copy(mcpConnected = false, mcpServerName = null) }
+            }
+
+            is ViewEvent.OnMcpLog -> {
+                addLogMessage("MCP: ${event.message}")
+            }
         }
     }
 
@@ -511,5 +538,10 @@ class ChatViewModel : ViewModel() {
                 updateState { copy(activeInvariantSetName = name) }
             }
         }
+    }
+
+    private fun addLogMessage(msg: String) {
+        val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
+        updateState { copy(mcpLog = mcpLog + entry) }
     }
 }

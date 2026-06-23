@@ -69,7 +69,7 @@ fun McpScreen() {
     var connecting by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<List<Tool>>(emptyList()) }
     var serverName by remember { mutableStateOf("") }
-    var log by remember { mutableStateOf(listOf("⚽ Onside Football MCP Client")) }
+    var log by remember { mutableStateOf(listOf("World Cup 2026 MCP Client")) }
 
     var selectedTool by remember { mutableStateOf<Tool?>(null) }
     var paramsText by remember { mutableStateOf("") }
@@ -89,7 +89,7 @@ fun McpScreen() {
 
     fun connect() {
         connecting = true
-        addLog("🚀 Запуск Onside Football MCP...")
+        addLog("🚀 Подключение к World Cup MCP серверу...")
         scope.launch {
             try {
                 val mcpClient = McpClient(onLog = { msg -> addLog(msg) })
@@ -107,7 +107,7 @@ fun McpScreen() {
             } catch (e: Exception) {
                 val msg = e.message ?: e.javaClass.simpleName
                 addLog("❌ Ошибка: $msg")
-                addLog("💡 Попробуйте: npm install -g onside-football-mcp")
+                addLog("💡 Убедитесь, что MCP сервер запущен на http://127.0.0.1:4455")
             } finally {
                 connecting = false
             }
@@ -157,14 +157,14 @@ fun McpScreen() {
         modifier = Modifier.fillMaxSize().padding(16.dp)
     ) {
         Text(
-            text = "Onside Football MCP",
+            text = "World Cup 2026 MCP",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Подключение к локальному MCP-серверу Onside Football",
+            text = "Подключение к World Cup MCP-серверу (http://127.0.0.1:4455)",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -201,7 +201,7 @@ fun McpScreen() {
                     } else {
                         Icon(Icons.Default.Link, "Подключиться", modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Запустить MCP сервер")
+                        Text("Подключиться к MCP серверу")
                     }
                 }
             }
