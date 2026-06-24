@@ -76,7 +76,15 @@ data class ChatViewState(
     // MCP
     val mcpConnected: Boolean = false,
     val mcpServerName: String? = null,
-    val mcpLog: List<String> = emptyList()
+    val mcpLog: List<String> = emptyList(),
+
+    // Коллектор матчей
+    val collectorRunning: Boolean = false,
+    val collectorInterval: Double = 15.0,
+    val collectorLog: List<String> = emptyList(),
+    val collectorSummary: String? = null,
+    val collectorLastRun: String? = null,
+    val showCollectorPanel: Boolean = false
 ) {
     companion object {
         fun initial() = ChatViewState()

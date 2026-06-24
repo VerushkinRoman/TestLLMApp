@@ -6,8 +6,10 @@ import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.agent.StatefulMemoryAgent
 import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
+import com.llmapp.collector.MatchAggregator
+import com.llmapp.collector.MatchStore
+import com.llmapp.collector.PeriodicCollector
 import com.llmapp.domain.usercase.CompressionUseCase
-import com.llmapp.mcp.McpIntegration
 import com.llmapp.domain.usercase.MemoryUseCase
 import com.llmapp.domain.usercase.MessageUseCase
 import com.llmapp.domain.usercase.ModelUseCase
@@ -17,6 +19,7 @@ import com.llmapp.domain.usercase.TaskUseCase
 import com.llmapp.domain.usercase.TransitionUseCase
 import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
+import com.llmapp.mcp.McpIntegration
 import com.llmapp.memory.LongTermMemoryManager
 import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
@@ -56,6 +59,8 @@ class ChatViewModel : ViewModel() {
 
     private lateinit var demoHandler: DemoHandler
     private lateinit var commandHandler: CommandHandler
+    private var collector: PeriodicCollector? = null
+    private var matchStore: MatchStore? = null
 
     init {
         initServices()
@@ -102,6 +107,18 @@ class ChatViewModel : ViewModel() {
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
         profileManager = ProfileManager(storageDir, longTermManager)
+        val store = MatchStore(File(storageDir, "match_collector"))
+        matchStore = store
+        collector = PeriodicCollector(
+            store = store,
+            onLog = { handleEvent(ViewEvent.OnCollectorLog(it)) },
+            onSummaryGenerated = {
+                val text = MatchAggregator.generateTextSummary(
+                    store.loadLatestSnapshot() ?: return@PeriodicCollector
+                )
+                handleEvent(ViewEvent.OnCollectorSummary(text))
+            }
+        )
     }
 
     private fun initUseCases() {
@@ -297,7 +314,8 @@ class ChatViewModel : ViewModel() {
             }
 
             is ViewEvent.UpdateProjectConstraints -> {
-                _state.value = memoryUseCase.updateProjectConstraints(_state.value, event.constraints)
+                _state.value =
+                    memoryUseCase.updateProjectConstraints(_state.value, event.constraints)
             }
 
             ViewEvent.ResetWorkingMemory -> {
@@ -458,7 +476,12 @@ class ChatViewModel : ViewModel() {
             ViewEvent.ResetToDefault -> {
                 val defaultControl = com.llmapp.controller.PresetManager.getDefaultControl()
                 chatSession.setResponseControl(defaultControl)
-                updateState { copy(responseControl = defaultControl, controlEnabled = defaultControl.enabled) }
+                updateState {
+                    copy(
+                        responseControl = defaultControl,
+                        controlEnabled = defaultControl.enabled
+                    )
+                }
             }
 
             is ViewEvent.BlockTask -> {
@@ -500,6 +523,44 @@ class ChatViewModel : ViewModel() {
 
             is ViewEvent.OnMcpLog -> {
                 addLogMessage("MCP: ${event.message}")
+            }
+
+            is ViewEvent.StartCollector -> {
+                viewModelScope.launch {
+                    addCollectorLog("🔄 Запуск периодического сбора (интервал: ${event.intervalMinutes} мин)...")
+                    updateState {
+                        copy(
+                            collectorRunning = true,
+                            collectorInterval = event.intervalMinutes
+                        )
+                    }
+                    collector?.start(event.intervalMinutes)
+                }
+            }
+
+            ViewEvent.StopCollector -> {
+                collector?.stop()
+                updateState { copy(collectorRunning = false) }
+                addCollectorLog("⏹ Сбор остановлен")
+            }
+
+            ViewEvent.CollectNow -> {
+                viewModelScope.launch {
+                    addCollectorLog("📡 Принудительный сбор...")
+                    collector?.collectOnce()
+                }
+            }
+
+            is ViewEvent.OnCollectorLog -> {
+                addCollectorLog(event.message)
+            }
+
+            is ViewEvent.OnCollectorSummary -> {
+                updateState { copy(collectorSummary = event.summaryText) }
+            }
+
+            ViewEvent.ClearCollectorLog -> {
+                updateState { copy(collectorLog = emptyList()) }
             }
         }
     }
@@ -543,5 +604,10 @@ class ChatViewModel : ViewModel() {
     private fun addLogMessage(msg: String) {
         val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
         updateState { copy(mcpLog = mcpLog + entry) }
+    }
+
+    private fun addCollectorLog(msg: String) {
+        val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
+        updateState { copy(collectorLog = collectorLog + entry) }
     }
 }

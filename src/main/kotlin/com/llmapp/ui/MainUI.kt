@@ -40,6 +40,7 @@ import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
+import com.llmapp.ui.screens.CollectorScreen
 import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.screens.McpScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
@@ -515,6 +516,14 @@ fun MainScreen(
             )
 
             Screen.Mcp -> McpScreen()
+
+            Screen.Collector -> CollectorScreen(
+                isRunning = state.collectorRunning,
+                intervalMinutes = state.collectorInterval,
+                log = state.collectorLog,
+                summary = state.collectorSummary,
+                onEvent = { event -> viewModel.handleEvent(event) }
+            )
 
             Screen.Settings -> SettingsPanel(
                 control = state.responseControl,

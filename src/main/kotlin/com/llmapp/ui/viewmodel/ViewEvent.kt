@@ -142,4 +142,14 @@ sealed class ViewEvent {
     object ConnectMcp : ViewEvent()
     object DisconnectMcp : ViewEvent()
     data class OnMcpLog(val message: String) : ViewEvent()
+
+    // ============================================================
+    // КОЛЛЕКТОР МАТЧЕЙ (периодический сбор данных)
+    // ============================================================
+    data class StartCollector(val intervalMinutes: Double = 15.0) : ViewEvent()
+    object StopCollector : ViewEvent()
+    object CollectNow : ViewEvent()
+    data class OnCollectorLog(val message: String) : ViewEvent()
+    data class OnCollectorSummary(val summaryText: String) : ViewEvent()
+    object ClearCollectorLog : ViewEvent()
 }
