@@ -123,9 +123,20 @@ class ChatSession(
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
         refreshApiKeys()
 
-        val effectivePrompt = if (mcpIntegration?.isConnected() == true) {
+        val mcpConnected = mcpIntegration?.isConnected() == true
+
+        val effectivePrompt = if (mcpConnected) {
             "$userPrompt\n\n${mcpIntegration!!.getToolDescriptions()}"
         } else userPrompt
+
+        val savedControl = if (mcpConnected && responseControl.enabled && (responseControl.maxTokens
+                ?: 0) in 1..500
+        ) {
+            responseControl
+        } else null
+        if (savedControl != null) {
+            setResponseControl(savedControl.copy(maxTokens = 1536, formatDescription = null))
+        }
 
         try {
             val response = run {
@@ -205,6 +216,10 @@ class ChatSession(
             return response.copy(content = finalContent)
         } catch (e: Exception) {
             throw Exception("Ошибка при обращении к LLM: ${e.message}", e)
+        } finally {
+            if (savedControl != null) {
+                setResponseControl(savedControl)
+            }
         }
     }
 

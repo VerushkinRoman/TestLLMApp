@@ -58,12 +58,21 @@ class McpIntegration(
     fun getToolDescriptions(): String {
         if (tools.isEmpty()) return ""
         val sb = StringBuilder()
-        sb.appendLine("You have access to the following MCP tools. Call ONE tool per response using this format:")
+        val firstTool = tools.first()
+        val firstArg = firstTool.parameters.firstOrNull()
+        val exampleCall = if (firstArg != null) {
+            "{\"tool\": \"${firstTool.name}\", \"arguments\": {\"${firstArg.name}\": \"${exampleValue(firstArg)}\"}}"
+        } else {
+            "{\"tool\": \"${firstTool.name}\", \"arguments\": {}}"
+        }
+
+        sb.appendLine("You have access to the following MCP tools. Call ONE tool per response.")
         sb.appendLine()
+        sb.appendLine("FORMAT: Your ENTIRE response must be EXACTLY this (nothing before, nothing after):")
         sb.appendLine("[MCP_CALL]")
-        sb.appendLine("{\"tool\": \"tool_name\", \"arguments\": {\"key\": \"value\"}}")
+        sb.appendLine(exampleCall)
         sb.appendLine()
-        sb.appendLine("IMPORTANT: The JSON MUST be valid — every quote and brace MUST be closed. Do NOT truncate or cut off the JSON. A broken JSON will cause an error.")
+        sb.appendLine("Do NOT add any text before or after. Do NOT think out loud. Do NOT explain. Just the block above.")
         sb.appendLine()
         sb.appendLine("Available tools:")
         sb.appendLine()
@@ -89,15 +98,12 @@ class McpIntegration(
             sb.appendLine()
         }
         sb.appendLine("CRITICAL RULES:")
-        sb.appendLine("- Do NOT output answer text together with [MCP_CALL]. Output ONLY the [MCP_CALL] block, nothing else.")
+        sb.appendLine("- Your FIRST response MUST be ONLY the [MCP_CALL] block shown above. No thinking, no English text.")
         sb.appendLine("- Do NOT call any tool twice with the same arguments.")
-        sb.appendLine("- Before calling a tool, check: do I already have this exact data from a previous call? If yes, skip it.")
         sb.appendLine("- Once you have all the data to answer the user, stop calling tools and just answer in Russian.")
+        sb.appendLine("- The JSON MUST be valid — every quote and brace MUST be closed.")
         sb.appendLine()
-        sb.appendLine("NOTE: For the pipeline tools, use them in order: search_data -> summarize_data -> save_data.")
-        sb.appendLine("Pass the output of one step as input to the next (raw_data -> summary_data).")
-        sb.appendLine()
-        sb.appendLine("After calling a tool, you will receive the result. Use the data to answer in Russian.")
+        sb.appendLine("After calling a tool, you will receive the result. Use the data to continue or answer in Russian.")
         return sb.toString()
     }
 
