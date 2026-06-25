@@ -259,6 +259,11 @@ class ChatSession(
                     return@repeat
                 }
                 println("✅ MCP: Извлечён JSON: $json")
+                val lastToolName = try {
+                    Json.parseToJsonElement(json).jsonObject["tool"]?.jsonPrimitive?.content
+                } catch (_: Exception) {
+                    null
+                }
                 var result: String
                 var errorMsg: String? = null
                 try {
@@ -298,7 +303,6 @@ class ChatSession(
                         appendLine()
                         appendLine("Fix the JSON using the correct format above and call the tool ONE MORE TIME.")
                         appendLine("Do NOT change the parameter names — use exactly 'tool' and 'arguments'.")
-                        appendLine("For get_group, the parameter name is EXACTLY 'name', not 'group', not 'letter', not 'id'.")
                         appendLine("IMPORTANT: Do NOT call the same tool with the same arguments twice. Check what you already got from previous results.")
                     }
                     content = askMcpFollowUpSafe(fixPrompt)
@@ -311,22 +315,92 @@ class ChatSession(
                         appendLine("=== DATA COLLECTED SO FAR ===")
                         for ((i, prev) in allResults.withIndex()) {
                             appendLine("--- Result ${i + 1} ---")
-                            appendLine(filterGamesForDisplay(prev, allResults).take(500))
+                            appendLine(
+                                if (prev.length > 1000) prev.take(15000) else filterGamesForDisplay(
+                                    prev,
+                                    allResults
+                                ).take(500)
+                            )
                             appendLine()
                         }
                         appendLine("--- Latest result ---")
-                        appendLine(filterGamesForDisplay(result, allResults).take(500))
+                        appendLine(
+                            if (result.length > 1000) result.take(15000) else filterGamesForDisplay(
+                                result,
+                                allResults
+                            ).take(500)
+                        )
                         appendLine("=== END ===")
                         appendLine()
-                        appendLine("Review ALL data above. If you still need more data, call [MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {...}}[/MCP_CALL]")
+                        appendLine(getPipelineNextStep(lastToolName))
                         appendLine("Do NOT call the same tool with the same arguments twice — you already have its data above.")
-                        appendLine("HINT: for goals/scorers → call get_games. For team group → call get_team. For standings → call get_group.")
+                        appendLine(getMcpHints())
                     }
                     content = askMcpFollowUpSafe(followUp)
                 }
             }
         }
         return synthesizeFinalAnswer(allResults, originalUserPrompt, content)
+    }
+
+    private fun getPipelineNextStep(lastToolName: String?): String {
+        val names = mcpIntegration?.getToolNames()
+            ?: return "Review ALL data above. If you still need more data, call [MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {...}}[/MCP_CALL]"
+        val pipelineTools = setOf("search_data", "summarize_data", "save_data")
+        val hasPipeline = names.toSet().containsAll(pipelineTools)
+        if (!hasPipeline) return "Review ALL data above. If you still need more data, call [MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {...}}[/MCP_CALL]"
+
+        val sb = StringBuilder()
+        when (lastToolName) {
+            "search_data" -> {
+                sb.appendLine("You just called search_data. Now you MUST continue the pipeline.")
+                sb.appendLine("IMPORTANT: Do NOT pass the search_data result as raw_data argument.")
+                sb.appendLine("Just call summarize_data with EMPTY arguments — it will fetch data automatically.")
+                sb.appendLine("Call format EXACTLY: [MCP_CALL]{\"tool\": \"summarize_data\", \"arguments\": {}}[/MCP_CALL]")
+                sb.appendLine("CRITICAL: Do NOT answer the user yet. You MUST call summarize_data next.")
+            }
+
+            "summarize_data" -> {
+                sb.appendLine("You just called summarize_data. Now you MUST continue the pipeline.")
+                sb.appendLine("IMPORTANT: Do NOT pass the summarize_data result as summary_data argument.")
+                sb.appendLine("Just call save_data with only the format argument — it will generate the summary automatically.")
+                sb.appendLine("Call format EXACTLY: [MCP_CALL]{\"tool\": \"save_data\", \"arguments\": {\"format\": \"json\"}}[/MCP_CALL]")
+                sb.appendLine("CRITICAL: Do NOT answer the user yet. You MUST call save_data next.")
+            }
+
+            "save_data" -> {
+                sb.appendLine("Pipeline complete! You have called all three tools: search_data → summarize_data → save_data.")
+                sb.appendLine("Now provide the final answer to the user in Russian. Show results of each step.")
+                sb.appendLine("Do NOT call any more tools. Just answer using the data you have collected.")
+            }
+
+            else -> {
+                sb.appendLine("Review ALL data above. If you still need more data, call [MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {...}}[/MCP_CALL]")
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun getMcpHints(): String {
+        val names = mcpIntegration?.getToolNames() ?: return ""
+        val hasPipeline = mcpIntegration?.hasPipelineTools() == true
+
+        val hints = mutableListOf<String>()
+        if (hasPipeline) {
+            hints.add("PIPELINE: use search_data → summarize_data → save_data in order.")
+            hints.add("  Pass the FULL output of search_data as raw_data to summarize_data.")
+            hints.add("  Pass the FULL output of summarize_data as summary_data to save_data.")
+        }
+        if ("get_team" in names && "get_group" in names) {
+            hints.add("Team → group standings: call get_team(to find group) → get_group(to find position).")
+        }
+        if ("get_games" in names) {
+            hints.add("Goals/scorers/match results: call get_games.")
+        }
+        if ("get_stadiums" in names) {
+            hints.add("Stadiums/capacity: call get_stadiums.")
+        }
+        return hints.joinToString("\n").ifEmpty { "HINT: call a tool that answers the question." }
     }
 
     private fun formatConversationHistory(): String {
@@ -365,6 +439,7 @@ class ChatSession(
             return fallback
         }
         println("📊 MCP: Собираю финальный ответ из ${allResults.size} результатов тулов")
+        val hasPipeline = mcpIntegration?.hasPipelineTools() == true
         val prompt = buildString {
             append(formatConversationHistory())
             appendLine("Answer the user's question using ONLY the data below. Do NOT use your own knowledge.")
@@ -372,13 +447,37 @@ class ChatSession(
             appendLine("User question: $originalUserPrompt")
             appendLine()
             appendLine("MCP tool results (use these, ignore your own knowledge):")
-            allResults.forEachIndexed { i, r ->
-                appendLine("--- Result ${i + 1} ---")
-                appendLine(filterGamesForDisplay(r, allResults))
+            if (hasPipeline && allResults.size >= 3) {
+                val rawResult = allResults[0]
+                val summaryResult = allResults[1]
+                val saveResult = allResults[2]
+                appendLine("--- Summary (summarize_data) ---")
+                appendLine(summaryResult)
+                appendLine()
+                appendLine("--- Saved File (save_data) ---")
+                appendLine(saveResult)
+                appendLine()
+                appendLine("--- Raw Data Loaded (search_data — summary only) ---")
+                val gameCount = try {
+                    Json.parseToJsonElement(rawResult).jsonObject["games"]?.jsonArray?.size ?: "?"
+                } catch (_: Exception) {
+                    "?"
+                }
+                appendLine("Total games loaded: $gameCount")
+                appendLine()
+            } else {
+                allResults.forEachIndexed { i, r ->
+                    appendLine("--- Result ${i + 1} ---")
+                    appendLine(
+                        if (r.length > 1000) r.take(25000) else filterGamesForDisplay(
+                            r,
+                            allResults
+                        )
+                    )
+                }
             }
             appendLine()
             appendLine("Now provide the final answer in Russian based ONLY on the data above.")
-            appendLine("If the data shows a group letter, position, or points — use those exact values.")
             appendLine("CRITICAL: Do NOT output [MCP_CALL] markers. Do NOT call any tools. You already have all the data you need.")
             append("Do NOT guess or use your training data.")
         }

@@ -1,5 +1,3 @@
-// src/main/kotlin/com/llmapp/ui/components/ProfileManager.kt
-
 package com.llmapp.ui.components
 
 import com.llmapp.memory.LongTermMemoryManager
@@ -24,25 +22,8 @@ class ProfileManager(
 
     private val prefs: Preferences = Preferences.userRoot().node(PREFS_NODE)
 
-    // ===== МЕТОДЫ ДЛЯ РАБОТЫ С ПЕРВЫМ ЗАПУСКОМ =====
-
-    fun isFirstLaunch(): Boolean {
-        return prefs.getBoolean(KEY_FIRST_LAUNCH, true)
-    }
-
     fun setFirstLaunchCompleted() {
         prefs.putBoolean(KEY_FIRST_LAUNCH, false)
-    }
-
-    // ===== МЕТОДЫ ДЛЯ РАБОТЫ С АКТИВНЫМ ПРОФИЛЕМ =====
-
-    fun getActiveProfile(): UserProfile {
-        val profileName = prefs.get(KEY_ACTIVE_PROFILE, "")
-        if (profileName.isNotEmpty()) {
-            val profile = loadProfile(profileName)
-            if (profile != null) return profile
-        }
-        return UserProfile()
     }
 
     fun setActiveProfile(profile: UserProfile) {
@@ -62,27 +43,6 @@ class ProfileManager(
         saveProfileToFile(profile)
 
         return result
-    }
-
-    fun loadProfile(name: String): UserProfile? {
-        // Сначала пробуем загрузить через LongTermMemoryManager
-        val profileFromLTM = longTermManager.loadProfile()
-        if (profileFromLTM.name == name) {
-            return profileFromLTM
-        }
-
-        // Если не найден, пробуем загрузить из файла
-        val profileFile = File(storageDir, "profiles")
-        if (!profileFile.exists()) profileFile.mkdirs()
-
-        val file = File(profileFile, "${sanitizeFileName(name)}.md")
-        if (!file.exists()) return null
-
-        return try {
-            parseProfileFromFile(file.readText())
-        } catch (_: Exception) {
-            null
-        }
     }
 
     fun getAllProfiles(): List<UserProfile> {
