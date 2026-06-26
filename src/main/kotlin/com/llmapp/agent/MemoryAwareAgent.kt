@@ -1,6 +1,7 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.chat.ChatHistory
 import com.llmapp.memory.Decision
 import com.llmapp.memory.KnowledgeBase
@@ -10,7 +11,8 @@ import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.TaskState
 import com.llmapp.memory.UserProfile
 import com.llmapp.memory.WorkingMemory
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 import java.io.File
@@ -41,7 +43,7 @@ class MemoryAwareAgent(
     userHome: String = System.getProperty("user.home"),
     private val persistToDisk: Boolean = true
 ) {
-    private val apiClient = OpenRouterClient(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create(apiKey)
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0
 
@@ -334,20 +336,19 @@ class MemoryAwareAgent(
         }
     }
 
-    private suspend fun sendToLLM(): Pair<com.llmapp.model.OpenRouterResponse, Long> {
+    private suspend fun sendToLLM(): Pair<RouterResponse, Long> {
         val messages = if (useShortTerm) {
             shortTermHistory.getMessages()
         } else {
             listOf(com.llmapp.model.ChatMessage(role = "user", content = "Текущий запрос"))
         }
 
-        val request = OpenRouterRequest(
+        val request = RouterRequest(
             model = model,
             messages = messages,
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null,
-            skipContextOptimization = true
+            temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
         val startTime = System.currentTimeMillis()

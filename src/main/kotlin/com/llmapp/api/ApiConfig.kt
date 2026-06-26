@@ -4,8 +4,8 @@ import java.io.File
 import java.util.Properties
 
 object ApiConfig {
-    private const val PROPS_FILE = "openrouter.properties"
-    private const val STATE_FILE = "openrouter.state"
+    private const val PROPS_FILE = "keys.properties"
+    private const val STATE_FILE = "kodikrouter.state"
 
     private var apiKeys: List<String> = emptyList()
     private var currentKeyIndex = 0
@@ -31,7 +31,7 @@ object ApiConfig {
                 throw IllegalStateException("No API keys found in $PROPS_FILE")
             }
 
-            println("✅ Загружено ${apiKeys.size} API ключей")
+            println("✅ Загружено ${apiKeys.size} KodikRouter API ключей")
 
             val stateFile = File(STATE_FILE)
             if (stateFile.exists()) {

@@ -249,8 +249,8 @@ fun main() = runBlocking {
     } catch (e: Exception) {
         println("\n❌ Критическая ошибка: ${e.message}")
         println("\n💡 Возможные решения:")
-        println("   1. Проверьте API ключ в файле openrouter.properties")
+        println("   1. Проверьте API ключ в файле keys.properties")
         println("   2. Убедитесь, что есть интернет-соединение")
-        println("   3. Проверьте лимиты запросов на https://openrouter.io/limits")
+        println("   3. Проверьте лимиты запросов на KodikRouter")
     }
 }

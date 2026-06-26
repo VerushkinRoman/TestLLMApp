@@ -1,13 +1,15 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.chat.ChatHistory
 import com.llmapp.invariants.Invariant
 import com.llmapp.invariants.InvariantCheckResult
 import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
 import com.llmapp.invariants.InvariantSet
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 
@@ -35,7 +37,7 @@ class InvariantAwareAgent(
     val maxRetries: Int = 3,
     private val onAgentMessage: (suspend (String, String?) -> Unit)? = null
 ) {
-    private val apiClient = OpenRouterClient(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create(apiKey)
 
     // Используем systemPrompt напрямую, но добавляем правила
     private val history = ChatHistory(
@@ -355,14 +357,13 @@ class InvariantAwareAgent(
         }
     }
 
-    private suspend fun sendToLLM(): Pair<com.llmapp.model.OpenRouterResponse, Long> {
-        val request = OpenRouterRequest(
+    private suspend fun sendToLLM(): Pair<RouterResponse, Long> {
+        val request = RouterRequest(
             model = model,
             messages = history.getMessages(),
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null,
-            skipContextOptimization = true
+            temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
         val startTime = System.currentTimeMillis()

@@ -65,7 +65,7 @@ class MemoryDemo {
             taskName = "Разработка чат-бота с памятью",
             initialContext = mapOf(
                 "требования" to "Чат-бот должен помнить контекст диалога",
-                "ограничения" to "Использовать бесплатные модели OpenRouter"
+                "ограничения" to "Использовать бесплатные модели KodikRouter"
             )
         )
         agent.updateTaskState(TaskState.PLANNING)

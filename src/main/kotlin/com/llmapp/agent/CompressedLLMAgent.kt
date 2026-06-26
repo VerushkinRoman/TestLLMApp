@@ -1,8 +1,9 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
-import com.llmapp.model.OpenRouterRequest
-import com.llmapp.model.OpenRouterResponse
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 
@@ -26,7 +27,7 @@ class CompressedLLMAgent(
     keepLastMessages: Int = 8,
     summarizeEvery: Int = 6
 ) {
-    private val apiClient = OpenRouterClient(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create(apiKey)
     private val history = CompressedChatHistory(
         apiClient = apiClient,
         systemPrompt = systemPrompt,
@@ -111,16 +112,15 @@ class CompressedLLMAgent(
         }
     }
 
-    private suspend fun sendToLLM(): Pair<OpenRouterResponse, Long> {
+    private suspend fun sendToLLM(): Pair<RouterResponse, Long> {
         val messages = history.getMessagesForRequest(compressionEnabled)
 
-        val request = OpenRouterRequest(
+        val request = RouterRequest(
             model = model,
             messages = messages,
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null,
-            skipContextOptimization = true
+            temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
         val startTime = System.currentTimeMillis()
@@ -137,6 +137,10 @@ class CompressedLLMAgent(
 
     fun updateResponseControl(control: ResponseControl) {
         responseControl = control
+    }
+
+    fun updateSystemPrompt(newPrompt: String) {
+        history.updateSystemPrompt(newPrompt)
     }
 
     fun clearHistory() {

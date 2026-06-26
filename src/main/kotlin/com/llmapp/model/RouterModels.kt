@@ -4,18 +4,17 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class OpenRouterRequest(
+data class RouterRequest(
     val model: String,
     val messages: List<ChatMessage>,
     val stream: Boolean = false,
     @SerialName("max_tokens") val maxTokens: Int? = null,
     val stop: List<String>? = null,
-    val temperature: Double? = null,
-    @SerialName("skip_context_optimization") val skipContextOptimization: Boolean = true
+    val temperature: Double? = null
 )
 
 @Serializable
-data class OpenRouterResponse(
+data class RouterResponse(
     val choices: List<Choice>? = null,
     val error: ErrorResponse? = null,
     val usage: Usage? = null

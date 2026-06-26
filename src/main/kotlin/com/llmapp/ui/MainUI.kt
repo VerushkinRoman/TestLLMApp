@@ -142,7 +142,7 @@ fun main() = application {
     }
 
     Window(
-        title = "LLM Chat - OpenRouter Client",
+        title = "LLM Chat - KodikRouter Client",
         onCloseRequest = {
             WindowSettings.saveWindowState(
                 width = windowState.size.width.value.toInt(),

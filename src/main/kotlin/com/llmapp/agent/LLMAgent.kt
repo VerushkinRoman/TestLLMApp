@@ -1,8 +1,10 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.chat.ChatHistory
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 
@@ -22,7 +24,7 @@ class LLMAgent(
     private var responseControl: ResponseControl = ResponseControl(),
     maxHistorySize: Int = 50
 ) : IAgent {
-    private val apiClient = OpenRouterClient(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create(apiKey)
     private val history = ChatHistory(systemPrompt, maxHistorySize)
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0
@@ -131,14 +133,13 @@ class LLMAgent(
         }
     }
 
-    private suspend fun sendToLLM(): Pair<com.llmapp.model.OpenRouterResponse, Long> {
-        val request = OpenRouterRequest(
+    private suspend fun sendToLLM(): Pair<RouterResponse, Long> {
+        val request = RouterRequest(
             model = model,
             messages = history.getMessages(),
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null,
-            skipContextOptimization = true
+            temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
         val startTime = System.currentTimeMillis()
@@ -155,6 +156,10 @@ class LLMAgent(
 
     override fun updateResponseControl(control: ResponseControl) {
         responseControl = control
+    }
+
+    override fun updateSystemPrompt(newPrompt: String) {
+        history.updateSystemPrompt(newPrompt)
     }
 
     override fun clearHistory() {

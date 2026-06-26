@@ -71,8 +71,9 @@ class McpIntegration(
         sb.appendLine("FORMAT: Your ENTIRE response must be EXACTLY this (nothing before, nothing after):")
         sb.appendLine("[MCP_CALL]")
         sb.appendLine(exampleCall)
+        sb.appendLine("[/MCP_CALL]")
         sb.appendLine()
-        sb.appendLine("Do NOT add any text before or after. Do NOT think out loud. Do NOT explain. Just the block above.")
+        sb.appendLine("Do NOT add any text before or after. Do NOT think out loud. Do NOT explain. Just the block above. The [/MCP_CALL] tag is REQUIRED.")
         sb.appendLine()
         sb.appendLine("Available tools:")
         sb.appendLine()
@@ -105,6 +106,10 @@ class McpIntegration(
         sb.appendLine()
         sb.appendLine("After calling a tool, you will receive the result. Use the data to continue or answer in Russian.")
         return sb.toString()
+    }
+
+    fun getToolFormatReminder(): String {
+        return "REMINDER: To call a tool, respond with EXACTLY:\n[MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {}}[/MCP_CALL]\nNo other text. No thinking. The [/MCP_CALL] tag is REQUIRED."
     }
 
     private fun buildExampleCall(tool: McpToolInfo): String? {

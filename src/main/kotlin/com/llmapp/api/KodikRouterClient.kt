@@ -1,7 +1,7 @@
 package com.llmapp.api
 
-import com.llmapp.model.OpenRouterRequest
-import com.llmapp.model.OpenRouterResponse
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -18,49 +18,61 @@ import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-class OpenRouterClient(
+class KodikRouterClient(
     private var apiKey: String,
     private val onApiKeyChanged: ((String) -> Unit)? = null
-) {
+) : RouterClient {
     private val json = Json {
         prettyPrint = true
         isLenient = true
         ignoreUnknownKeys = true
     }
 
+    private val baseUrl = "https://api.kodikrouter.ru/v1"
+
     private val fallbackModels = listOf(
-        "nvidia/nemotron-3-nano-30b-a3b:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3-nano-omni:free",
-        "nvidia/nemotron-nano-9b-v2:free",
-        "nvidia/nemotron-nano-12b-2-vl:free",
-        "openai/gpt-oss-20b:free",
-        "openai/gpt-oss-120b:free",
-        "google/gemma-4-26b-a4b-it:free",
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-4-31b-it:free",
-        "poolside/laguna-xs.2:free",
+        "qwen/qwen3-coder:free",
+        "openai/gpt-oss-120b:free",
+        "liquid/lfm-2.5-1.2b-thinking:free",
+        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
         "poolside/laguna-m.1:free",
-        "openrouter/owl-alpha",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "openai/gpt-oss-20b:free",
+        "poolside/laguna-xs.2:free",
+        "google/gemma-4-26b-a4b-it:free",
         "z-ai/glm-4.5-air:free",
-        "moonshotai/kimi-k2.6:free"
+        "liquid/lfm-2.5-1.2b-instruct:free",
+        "tencent/hy3-preview:free",
+        "minimax/minimax-m2.5:free",
+        "arcee-ai/trinity-large-thinking:free",
+        "deepseek/deepseek-v4-flash:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free"
     )
 
-    fun updateApiKey(newApiKey: String) {
+    override fun updateApiKey(newApiKey: String) {
         if (apiKey != newApiKey) {
             apiKey = newApiKey
             onApiKeyChanged?.invoke(newApiKey)
-            println("🔑 API ключ обновлен, уведомление отправлено")
+            println("🔑 API ключ KodikRouter обновлен, уведомление отправлено")
         }
     }
 
     fun getCurrentApiKeyPreview(): String = apiKey.take(10) + "..."
 
-    suspend fun sendRequest(
-        request: OpenRouterRequest,
-        retryCount: Int = 0,
-        modelRetryCount: Int = 0
-    ): OpenRouterResponse {
+    override suspend fun sendRequest(request: RouterRequest): RouterResponse {
+        return sendRequestWithRetry(request, 0, 0)
+    }
+
+    private suspend fun sendRequestWithRetry(
+        request: RouterRequest,
+        retryCount: Int,
+        modelRetryCount: Int
+    ): RouterResponse {
         val currentKeyIndex = ApiConfig.getCurrentKeyIndex()
         val currentApiKeyPreview = getCurrentApiKeyPreview()
         println("🔄 Попытка ${retryCount + 1}/${fallbackModels.size + 1} с моделью: ${request.model} (ключ #$currentKeyIndex: $currentApiKeyPreview)")
@@ -81,11 +93,9 @@ class OpenRouterClient(
 
         client.use { client ->
             try {
-                val response = client.post("https://openrouter.ai/api/v1/chat/completions") {
+                val response = client.post("$baseUrl/chat/completions") {
                     header(HttpHeaders.Authorization, "Bearer $apiKey")
                     header(HttpHeaders.ContentType, "application/json")
-                    header("HTTP-Referer", "https://localhost")
-                    header("X-Title", "LLM Chat App")
                     contentType(ContentType.Application.Json)
                     setBody(request)
                 }
@@ -100,7 +110,7 @@ class OpenRouterClient(
                     }
 
                     return try {
-                        val parsed = json.decodeFromString<OpenRouterResponse>(responseBody)
+                        val parsed = json.decodeFromString<RouterResponse>(responseBody)
                         if (parsed.error != null) {
                             println("⚠️ Модель ${request.model} вернула ошибку в теле 200: ${parsed.error.message}")
                             KeyUsageMonitor.recordError(currentKeyIndex, true)
@@ -128,7 +138,7 @@ class OpenRouterClient(
 
                     429 -> {
                         println("⚠️ Превышен лимит запросов для ключа #$currentKeyIndex")
-                        KeyUsageMonitor.recordError(currentKeyIndex, true)  // rate limit
+                        KeyUsageMonitor.recordError(currentKeyIndex, true)
                         rotateToNextKeyAndRetry(request, retryCount, modelRetryCount)
                     }
 
@@ -166,13 +176,13 @@ class OpenRouterClient(
     }
 
     private suspend fun rotateToNextKeyAndRetry(
-        originalRequest: OpenRouterRequest,
+        originalRequest: RouterRequest,
         currentModelRetry: Int,
         currentKeyRetry: Int
-    ): OpenRouterResponse {
+    ): RouterResponse {
         if (currentKeyRetry >= ApiConfig.getTotalKeysCount()) {
             println("❌ Все API ключи перепробованы, все достигли лимита!")
-            return OpenRouterResponse(
+            return RouterResponse(
                 error = com.llmapp.model.ErrorResponse(
                     message = "All API keys have reached their limits. Try again later.",
                     code = 429
@@ -186,7 +196,7 @@ class OpenRouterClient(
         println("🔄 Переключение на ключ #${ApiConfig.getCurrentKeyIndex()}, повторяем запрос...")
         delay(1.seconds)
 
-        return sendRequest(
+        return sendRequestWithRetry(
             originalRequest,
             currentModelRetry,
             currentKeyRetry + 1
@@ -194,10 +204,10 @@ class OpenRouterClient(
     }
 
     private suspend fun tryNextModel(
-        originalRequest: OpenRouterRequest,
+        originalRequest: RouterRequest,
         currentModelRetry: Int,
         currentKeyRetry: Int
-    ): OpenRouterResponse {
+    ): RouterResponse {
         if (currentModelRetry >= fallbackModels.size) {
             if (currentKeyRetry < ApiConfig.getTotalKeysCount()) {
                 println("🔄 Все модели перепробованы, пробуем следующий API ключ...")
@@ -205,7 +215,7 @@ class OpenRouterClient(
             }
 
             println("❌ Все модели и все ключи перепробованы, ни одна комбинация не работает!")
-            return OpenRouterResponse(
+            return RouterResponse(
                 error = com.llmapp.model.ErrorResponse(
                     message = "All models and API keys failed. Check API keys and internet connection.",
                     code = 500
@@ -217,7 +227,7 @@ class OpenRouterClient(
         println("🔄 Переключение на следующую модель: $nextModel (${currentModelRetry + 1}/${fallbackModels.size})")
         delay(2.seconds)
 
-        return sendRequest(
+        return sendRequestWithRetry(
             originalRequest.copy(model = nextModel),
             currentModelRetry + 1,
             currentKeyRetry

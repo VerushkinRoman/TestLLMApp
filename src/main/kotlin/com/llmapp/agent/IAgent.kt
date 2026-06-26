@@ -8,4 +8,5 @@ interface IAgent {
     fun updateResponseControl(control: ResponseControl)
     fun clearHistory()
     fun refreshApiKey(newApiKey: String)
+    fun updateSystemPrompt(newPrompt: String)
 }

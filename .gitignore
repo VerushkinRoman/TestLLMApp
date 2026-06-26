@@ -22,3 +22,5 @@ openrouter.properties
 /all_kotlin_files.txt
 /export project.sh
 /openrouter.state
+/kodikrouter.state
+/keys.properties

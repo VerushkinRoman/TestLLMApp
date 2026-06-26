@@ -1,8 +1,10 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.model.ChatMessage
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
+import com.llmapp.model.RouterResponse
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 import com.llmapp.strategy.BranchingStrategy
@@ -34,14 +36,14 @@ class StrategicLLMAgent(
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl()
 ) {
-    private val apiClient = OpenRouterClient(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create(apiKey)
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0
 
     private var currentStrategyType: ContextStrategyType = ContextStrategyType.SLIDING_WINDOW
     private lateinit var strategy: ContextStrategy
     private val branchingStrategy: BranchingStrategy
-    private val originalSystemPrompt: String = systemPrompt
+    private var originalSystemPrompt: String = systemPrompt
 
     init {
         tokenTracker.updateModel(model)
@@ -152,18 +154,17 @@ class StrategicLLMAgent(
         }
     }
 
-    private suspend fun sendToLLM(): Pair<com.llmapp.model.OpenRouterResponse, Long> {
+    private suspend fun sendToLLM(): Pair<RouterResponse, Long> {
         val messages = strategy.getContextForRequest()
 
         println("📊 [${strategy.getName()}] Отправляю запрос с ${messages.size} сообщениями")
 
-        val request = OpenRouterRequest(
+        val request = RouterRequest(
             model = model,
             messages = messages,
             maxTokens = if (responseControl.enabled) responseControl.maxTokens else null,
             stop = if (responseControl.enabled) responseControl.stopSequences else null,
-            temperature = if (responseControl.enabled) responseControl.temperature else null,
-            skipContextOptimization = true
+            temperature = if (responseControl.enabled) responseControl.temperature else null
         )
 
         val startTime = System.currentTimeMillis()
@@ -180,6 +181,11 @@ class StrategicLLMAgent(
 
     fun updateResponseControl(control: ResponseControl) {
         responseControl = control
+    }
+
+    fun updateSystemPrompt(newPrompt: String) {
+        originalSystemPrompt = newPrompt
+        strategy.updateSystemPrompt(newPrompt)
     }
 
     fun clearHistory() {

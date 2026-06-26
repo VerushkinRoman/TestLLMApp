@@ -1,18 +1,19 @@
 package com.llmapp.service
 
 import com.llmapp.api.ApiConfig
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.model.ChatMessage
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
 import kotlinx.serialization.json.Json
 import java.io.File
 
 class TranslationService {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val client by lazy {
+    private val client: RouterClient? by lazy {
         try {
-            OpenRouterClient(ApiConfig.getApiKey())
+            ClientFactory.create(ApiConfig.getApiKey())
         } catch (e: Exception) {
             println("⚠️ TranslationService: ${e.message}")
             null
@@ -46,9 +47,9 @@ class TranslationService {
 
     suspend fun translate(key: String, text: String, targetLang: String = "ru"): String {
         val c = client
-            ?: throw RuntimeException("OpenRouter не настроен. Добавьте openrouter.properties с API ключом.")
+            ?: throw RuntimeException("KodikRouter не настроен. Добавьте keys.properties с API ключом.")
 
-        val request = OpenRouterRequest(
+        val request = RouterRequest(
             model = "openai/gpt-oss-20b:free",
             messages = listOf(
                 ChatMessage(

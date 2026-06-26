@@ -24,6 +24,12 @@ class ChatHistory(
 
     fun getMessages(): List<ChatMessage> = messages.toList()
 
+    fun updateSystemPrompt(newPrompt: String) {
+        if (messages.isNotEmpty()) {
+            messages[0] = ChatMessage(role = "system", content = newPrompt)
+        }
+    }
+
     fun clear() {
         val systemMessage = messages.first()
         messages.clear()

@@ -4,10 +4,11 @@ import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.LLMAgent
 import com.llmapp.agent.StrategicLLMAgent
 import com.llmapp.agent.TokenSnapshot
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.ClientFactory
+import com.llmapp.api.RouterClient
 import com.llmapp.mcp.McpIntegration
 import com.llmapp.model.ChatMessage
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
 import kotlinx.serialization.json.Json
@@ -125,17 +126,33 @@ class ChatSession(
 
         val mcpConnected = mcpIntegration?.isConnected() == true
 
+        val mcpSystemPrompt = if (mcpConnected) {
+            buildString {
+                appendLine("Ты — ассистент, который вызывает MCP инструменты. Не используй Markdown-форматирование, указанное в предыдущей версии этого промпта.")
+                appendLine()
+                appendLine(mcpIntegration!!.getToolDescriptions())
+            }
+        } else null
+
+        if (mcpSystemPrompt != null) {
+            strategicAgent?.updateSystemPrompt(mcpSystemPrompt)
+            compressedAgent?.updateSystemPrompt(mcpSystemPrompt)
+            regularAgent?.updateSystemPrompt(mcpSystemPrompt)
+        }
+
         val effectivePrompt = if (mcpConnected) {
-            "$userPrompt\n\n${mcpIntegration!!.getToolDescriptions()}"
+            "IGNORE the Markdown formatting from the old system prompt. You are in TOOL-CALLING MODE.\n\n$userPrompt"
         } else userPrompt
 
-        val savedControl = if (mcpConnected && responseControl.enabled && (responseControl.maxTokens
-                ?: 0) in 1..500
-        ) {
+        val savedControl = if (mcpConnected && responseControl.enabled) {
             responseControl
         } else null
         if (savedControl != null) {
-            setResponseControl(savedControl.copy(maxTokens = 1536, formatDescription = null))
+            setResponseControl(savedControl.copy(
+                maxTokens = 250,
+                formatDescription = mcpIntegration!!.getToolFormatReminder(),
+                stopSequences = listOf("[/MCP_CALL]")
+            ))
         }
 
         try {
@@ -220,6 +237,11 @@ class ChatSession(
             if (savedControl != null) {
                 setResponseControl(savedControl)
             }
+            if (mcpSystemPrompt != null) {
+                strategicAgent?.updateSystemPrompt(systemPrompt)
+                compressedAgent?.updateSystemPrompt(systemPrompt)
+                regularAgent?.updateSystemPrompt(systemPrompt)
+            }
         }
     }
 
@@ -266,6 +288,7 @@ class ChatSession(
                         appendLine("Fix the JSON and call the tool again using exactly this format:")
                         appendLine("[MCP_CALL]")
                         appendLine("""{"tool": "tool_name", "arguments": {"param": "value"}}""")
+                        appendLine("[/MCP_CALL]")
                         appendLine()
                         appendLine("For get_group, the parameter name is EXACTLY 'name' (not 'group', not 'letter').")
                     }
@@ -315,6 +338,7 @@ class ChatSession(
                         appendLine("The correct format is:")
                         appendLine("[MCP_CALL]")
                         appendLine("""{"tool": "tool_name", "arguments": {"param": "value"}}""")
+                        appendLine("[/MCP_CALL]")
                         appendLine()
                         appendLine("Fix the JSON using the correct format above and call the tool ONE MORE TIME.")
                         appendLine("Do NOT change the parameter names — use exactly 'tool' and 'arguments'.")
@@ -496,7 +520,7 @@ class ChatSession(
             appendLine("CRITICAL: Do NOT output [MCP_CALL] markers. Do NOT call any tools. You already have all the data you need.")
             append("Do NOT guess or use your training data.")
         }
-        val response = askMcpFollowUpSafe(prompt)
+        val response = askMcpFollowUpSafe(prompt, isFinalSynthesis = true)
         if (response == "NO_MCP_CALL") {
             println("⚠️ MCP: LLM недоступен для синтеза, возвращаю сырые данные")
             val teamResult = allResults.firstOrNull()
@@ -642,27 +666,32 @@ class ChatSession(
         return null
     }
 
-    private suspend fun askMcpFollowUpSafe(prompt: String): String {
+    private suspend fun askMcpFollowUpSafe(prompt: String, isFinalSynthesis: Boolean = false): String {
         return try {
-            askMcpFollowUp(prompt)
+            askMcpFollowUp(prompt, isFinalSynthesis)
         } catch (e: Exception) {
             println("⚠️ MCP: Follow-up не удался (${e.message?.take(200)}), синтезирую из имеющихся данных")
             "NO_MCP_CALL"
         }
     }
 
-    private suspend fun askMcpFollowUp(prompt: String): String {
+    private suspend fun askMcpFollowUp(prompt: String, isFinalSynthesis: Boolean = false): String {
         println("🔄 LLM: Отправляю follow-up запрос (${prompt.length} символов)")
         println("📝 LLM: Промт (первые 500): ${prompt.take(500)}")
-        val client = OpenRouterClient(currentApiKey)
-        val request = OpenRouterRequest(
+        val client: RouterClient = ClientFactory.create(currentApiKey)
+        val effectiveSystemPrompt = if (mcpIntegration?.isConnected() == true) {
+            "You are an assistant that calls MCP tools. When you need to call a tool, use EXACTLY:\n[MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {}}[/MCP_CALL]\nNo other text. The [/MCP_CALL] tag is REQUIRED. When you have all data, answer in Russian."
+        } else {
+            systemPrompt
+        }
+        val request = RouterRequest(
             model = currentModel,
             messages = listOf(
-                ChatMessage("system", systemPrompt),
+                ChatMessage("system", effectiveSystemPrompt),
                 ChatMessage("user", prompt)
             ),
-            maxTokens = 1536,
-            skipContextOptimization = true
+            maxTokens = if (isFinalSynthesis) 1536 else 250,
+            stop = if (isFinalSynthesis) null else listOf("[/MCP_CALL]")
         )
         val response = client.sendRequest(request)
         response.error?.let {

@@ -1,11 +1,11 @@
 package com.llmapp.agent
 
-import com.llmapp.api.OpenRouterClient
+import com.llmapp.api.RouterClient
 import com.llmapp.model.ChatMessage
-import com.llmapp.model.OpenRouterRequest
+import com.llmapp.model.RouterRequest
 
 class CompressedChatHistory(
-    private val apiClient: OpenRouterClient,
+    private val apiClient: RouterClient,
     private val systemPrompt: String,
     private val keepLastMessages: Int = 10,
     private val summarizeEvery: Int = 8,
@@ -111,6 +111,12 @@ class CompressedChatHistory(
         return fullHistory.drop(start)
     }
 
+    fun updateSystemPrompt(newPrompt: String) {
+        if (fullHistory.isNotEmpty()) {
+            fullHistory[0] = ChatMessage(role = "system", content = newPrompt)
+        }
+    }
+
     fun clear() {
         val systemMessage = fullHistory.firstOrNull()
         fullHistory.clear()
@@ -169,7 +175,7 @@ class CompressedChatHistory(
     }
 
     private suspend fun callSummarizationApi(prompt: String): String {
-        val request = OpenRouterRequest(
+        val request = RouterRequest(
             model = "google/gemma-4-26b-a4b-it:free",
             messages = listOf(ChatMessage(role = "user", content = prompt)),
             maxTokens = 500,

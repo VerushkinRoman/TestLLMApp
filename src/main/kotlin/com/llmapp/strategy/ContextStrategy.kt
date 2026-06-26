@@ -10,6 +10,7 @@ interface ContextStrategy {
     fun getStats(): StrategyStats
     fun getName(): String
     fun getDescription(): String
+    fun updateSystemPrompt(newPrompt: String)
 }
 
 data class StrategyStats(
@@ -39,6 +40,12 @@ class SlidingWindowStrategy(
     override fun getContextForRequest(): List<ChatMessage> = messages.toList()
     override fun getFullHistory(): List<ChatMessage> = messages.toList()
 
+    override fun updateSystemPrompt(newPrompt: String) {
+        if (messages.isNotEmpty()) {
+            messages[0] = ChatMessage(role = "system", content = newPrompt)
+        }
+    }
+
     override fun clear() {
         val system = messages.firstOrNull()
         messages.clear()
@@ -65,7 +72,7 @@ class SlidingWindowStrategy(
 
 class StickyFactsStrategy(
     private val keepLastMessages: Int = 10,
-    private val systemPrompt: String
+    private var systemPrompt: String
 ) : ContextStrategy {
     private val messages = mutableListOf<ChatMessage>()
     private val facts = mutableMapOf<String, String>()
@@ -136,6 +143,13 @@ class StickyFactsStrategy(
 
     override fun getFullHistory(): List<ChatMessage> = messages.toList()
 
+    override fun updateSystemPrompt(newPrompt: String) {
+        systemPrompt = newPrompt
+        if (messages.isNotEmpty()) {
+            messages[0] = ChatMessage(role = "system", content = newPrompt)
+        }
+    }
+
     override fun clear() {
         val system = messages.firstOrNull()
         messages.clear()
@@ -164,7 +178,7 @@ class StickyFactsStrategy(
 }
 
 class BranchingStrategy(
-    private val systemPrompt: String
+    private var systemPrompt: String
 ) : ContextStrategy {
     data class Branch(
         val id: String,
@@ -268,6 +282,15 @@ class BranchingStrategy(
         checkpoints.clear()
         branches[mainBranch.id] = mainBranch
         currentBranchId = mainBranch.id
+    }
+
+    override fun updateSystemPrompt(newPrompt: String) {
+        systemPrompt = newPrompt
+        for (branch in branches.values) {
+            if (branch.messages.isNotEmpty() && branch.messages[0].role == "system") {
+                branch.messages[0] = ChatMessage(role = "system", content = newPrompt)
+            }
+        }
     }
 
     override fun getStats(): StrategyStats {
