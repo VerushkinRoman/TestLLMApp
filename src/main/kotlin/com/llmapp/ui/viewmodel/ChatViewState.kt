@@ -74,8 +74,10 @@ data class ChatViewState(
     val summarizeEvery: Int = 6,
 
     // MCP
-    val mcpConnected: Boolean = false,
-    val mcpServerName: String? = null,
+    val dataMcpConnected: Boolean = false,
+    val dataMcpServerName: String? = null,
+    val pipelineMcpConnected: Boolean = false,
+    val pipelineMcpServerName: String? = null,
     val mcpLog: List<String> = emptyList(),
 
     // Коллектор матчей

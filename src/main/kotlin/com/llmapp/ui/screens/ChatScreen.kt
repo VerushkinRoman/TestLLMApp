@@ -100,12 +100,20 @@ fun ChatScreen(
             onShowProfileManager = { onEvent(ViewEvent.ToggleProfileManager) },
             onCreateTask = { onEvent(ViewEvent.ToggleCreateTaskDialog) },
             onShowInvariantManager = { /* onEvent(ViewEvent.ShowInvariantManager) */ },
-            mcpConnected = viewState.mcpConnected,
-            onToggleMcp = {
-                if (viewState.mcpConnected) {
-                    onEvent(ViewEvent.DisconnectMcp)
+            dataMcpConnected = viewState.dataMcpConnected,
+            onToggleDataMcp = {
+                if (viewState.dataMcpConnected) {
+                    onEvent(ViewEvent.DisconnectDataMcp)
                 } else {
-                    onEvent(ViewEvent.ConnectMcp)
+                    onEvent(ViewEvent.ConnectDataMcp)
+                }
+            },
+            pipelineMcpConnected = viewState.pipelineMcpConnected,
+            onTogglePipelineMcp = {
+                if (viewState.pipelineMcpConnected) {
+                    onEvent(ViewEvent.DisconnectPipelineMcp)
+                } else {
+                    onEvent(ViewEvent.ConnectPipelineMcp)
                 }
             }
         )
@@ -173,6 +181,12 @@ fun ChatScreen(
                     if (viewState.isTyping) {
                         item(key = "typing_indicator") {
                             TypingIndicator()
+                        }
+                    }
+
+                    if (viewState.mcpLog.isNotEmpty()) {
+                        item(key = "mcp_log") {
+                            McpLogBanner(logs = viewState.mcpLog.takeLast(8))
                         }
                     }
                 }
@@ -313,5 +327,28 @@ fun MemoryLayerChip(
             fontSize = 10.sp,
             color = if (active) color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
+    }
+}
+
+@Composable
+fun McpLogBanner(logs: List<String>) {
+    val displayLogs = logs.takeLast(6)
+    if (displayLogs.isEmpty()) return
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(6.dp)) {
+            Text("🔧 MCP:", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+            displayLogs.forEach { log ->
+                Text(
+                    log.take(150),
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1
+                )
+            }
+        }
     }
 }

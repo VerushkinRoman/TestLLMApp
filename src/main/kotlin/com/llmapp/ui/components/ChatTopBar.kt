@@ -63,8 +63,10 @@ fun ChatTopBar(
     onShowProfileManager: () -> Unit,
     onShowInvariantManager: () -> Unit,
     onCreateTask: () -> Unit,
-    mcpConnected: Boolean = false,
-    onToggleMcp: () -> Unit = {}
+    dataMcpConnected: Boolean = false,
+    onToggleDataMcp: () -> Unit = {},
+    pipelineMcpConnected: Boolean = false,
+    onTogglePipelineMcp: () -> Unit = {}
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -102,10 +104,17 @@ fun ChatTopBar(
             }
 
             IconButton(
-                onClick = onToggleMcp,
+                onClick = onToggleDataMcp,
                 modifier = Modifier.size(36.dp)
             ) {
-                Text(if (mcpConnected) "⚽" else "🌍", fontSize = 20.sp)
+                Text(if (dataMcpConnected) "🗄️" else "📁", fontSize = 20.sp)
+            }
+
+            IconButton(
+                onClick = onTogglePipelineMcp,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text(if (pipelineMcpConnected) "⚙️" else "🔧", fontSize = 20.sp)
             }
 
             IconButton(

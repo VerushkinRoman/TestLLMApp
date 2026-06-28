@@ -139,8 +139,10 @@ sealed class ViewEvent {
     // ============================================================
     // MCP
     // ============================================================
-    object ConnectMcp : ViewEvent()
-    object DisconnectMcp : ViewEvent()
+    object ConnectDataMcp : ViewEvent()
+    object DisconnectDataMcp : ViewEvent()
+    object ConnectPipelineMcp : ViewEvent()
+    object DisconnectPipelineMcp : ViewEvent()
     data class OnMcpLog(val message: String) : ViewEvent()
 
     // ============================================================

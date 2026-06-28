@@ -16,7 +16,6 @@ object DemoData {
         "google/gemma-4-31b-it:free",
         "poolside/laguna-xs.2:free",
         "poolside/laguna-m.1:free",
-        "z-ai/glm-4.5-air:free",
         "moonshotai/kimi-k2.6:free",
         "qwen/qwen3-coder:free"
     )
@@ -71,7 +70,6 @@ object DemoData {
             modelId.contains("gemma-4-31b") -> "Gemma 4 31B"
             modelId.contains("laguna-xs") -> "Laguna XS"
             modelId.contains("laguna-m") -> "Laguna M"
-            modelId.contains("glm-4.5-air") -> "GLM 4.5 Air"
             modelId.contains("kimi-k2.6") -> "Kimi K2.6"
             else -> modelId.take(30)
         }

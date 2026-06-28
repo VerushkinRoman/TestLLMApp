@@ -34,6 +34,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -62,13 +64,42 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+private data class McpServerConfig(
+    val id: String,
+    val label: String,
+    val url: String,
+    val icon: String,
+    val description: String
+)
+
+private val servers = listOf(
+    McpServerConfig(
+        id = "data",
+        label = "Data Server",
+        url = "https://alcoserver.ru:4454/mcp",
+        icon = "🗄️",
+        description = "World Cup 2026 API — группы, команды, матчи, стадионы"
+    ),
+    McpServerConfig(
+        id = "pipeline",
+        label = "Pipeline Server",
+        url = "https://alcoserver.ru:4456/mcp",
+        icon = "⚙️",
+        description = "Обработка данных — суммаризация, сохранение в файл"
+    )
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun McpScreen() {
-    var connected by remember { mutableStateOf(false) }
-    var connecting by remember { mutableStateOf(false) }
+    var selectedServerId by remember { mutableStateOf(servers.first().id) }
+    val selectedServer = servers.first { it.id == selectedServerId }
+
+    var connections by remember {
+        mutableStateOf(servers.associate { it.id to McpConnectionState() })
+    }
+
     var tools by remember { mutableStateOf<List<Tool>>(emptyList()) }
-    var serverName by remember { mutableStateOf("") }
     var log by remember { mutableStateOf(listOf("World Cup 2026 MCP Client")) }
 
     var selectedTool by remember { mutableStateOf<Tool?>(null) }
@@ -81,59 +112,77 @@ fun McpScreen() {
     val translationService = remember { TranslationService() }
 
     val scope = rememberCoroutineScope()
-    val client = remember { mutableStateOf<McpClient?>(null) }
 
-    fun addLog(msg: String) {
-        log = log + msg
-    }
+    fun addLog(msg: String) { log = log + msg }
 
-    fun connect() {
-        connecting = true
-        addLog("🚀 Подключение к World Cup MCP серверу...")
+    fun connectTo(server: McpServerConfig) {
+        val cur = connections[server.id] ?: return
+        connections = connections + (server.id to cur.copy(connecting = true))
+        addLog("🚀 ${server.icon} Подключение к ${server.label} (${server.url})...")
         scope.launch {
             try {
-                val mcpClient = McpClient(onLog = { msg -> addLog(msg) })
+                val mcpClient = McpClient(serverUrl = server.url, onLog = { msg -> addLog(msg) })
                 val initResult = mcpClient.initialize()
-                serverName = "${initResult.name} v${initResult.version}"
-                addLog("✅ Подключено: $serverName")
-
-                addLog("📋 Получение списка инструментов...")
+                val ver = "${initResult.name} v${initResult.version}"
+                addLog("✅ ${server.icon} Подключено: $ver")
                 val toolList = mcpClient.listTools()
-                tools = toolList
-                addLog("✅ Найдено инструментов: ${toolList.size}")
-
-                client.value = mcpClient
-                connected = true
+                addLog("📋 ${server.icon} Инструментов: ${toolList.size}")
+                connections = connections + (server.id to McpConnectionState(
+                    connected = true, connecting = false,
+                    serverName = ver, client = mcpClient
+                ))
+                if (selectedServerId == server.id) {
+                    tools = toolList
+                }
             } catch (e: Exception) {
-                val msg = e.message ?: e.javaClass.simpleName
-                addLog("❌ Ошибка: $msg")
-                addLog("💡 Убедитесь, что MCP сервер запущен на https://alcoserver.ru:4456")
-            } finally {
-                connecting = false
+                addLog("❌ ${server.icon} Ошибка: ${e.message ?: e.javaClass.simpleName}")
+                connections = connections + (server.id to McpConnectionState(connecting = false))
             }
         }
     }
 
-    fun disconnect() {
-        client.value?.close()
-        client.value = null
-        connected = false
-        tools = emptyList()
-        serverName = ""
+    fun disconnectFrom(serverId: String) {
+        val cur = connections[serverId] ?: return
+        cur.client?.close()
+        connections = connections + (serverId to McpConnectionState())
+        if (selectedServerId == serverId) {
+            tools = emptyList()
+            selectedTool = null
+            paramsText = ""
+            responseText = ""
+        }
+        val cfg = servers.first { it.id == serverId }
+        addLog("🔌 ${cfg.icon} Отключено")
+    }
+
+    fun switchTo(serverId: String) {
+        selectedServerId = serverId
+        val conn = connections[serverId] ?: return
+        if (conn.connected && conn.client != null) {
+            scope.launch {
+                try {
+                    tools = conn.client.listTools()
+                } catch (_: Exception) {
+                    tools = emptyList()
+                }
+            }
+        } else {
+            tools = emptyList()
+        }
         selectedTool = null
         paramsText = ""
         responseText = ""
-        addLog("🔌 Отключено")
     }
 
     fun callSelectedTool() {
         val tool = selectedTool ?: return
+        val conn = connections[selectedServerId] ?: return
+        val mcp = conn.client ?: return
         val parsed = parseParams(paramsText)
-        addLog("📞 Вызов: ${tool.name} $parsed")
+        addLog("📞 ${selectedServer.icon} Вызов: ${tool.name} $parsed")
         responseText = "⏳ Выполнение..."
         scope.launch {
             try {
-                val mcp = client.value ?: return@launch
                 val result = mcp.callTool(tool.name, parsed)
                 val sb = StringBuilder()
                 var hasText = false
@@ -153,9 +202,7 @@ fun McpScreen() {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = "World Cup 2026 MCP",
             fontSize = 20.sp,
@@ -164,7 +211,7 @@ fun McpScreen() {
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Подключение к World Cup MCP-серверу (https://alcoserver.ru:4456)",
+            text = "Выберите сервер и подключитесь для просмотра инструментов",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -174,9 +221,53 @@ fun McpScreen() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (connected) {
+            for (server in servers) {
+                val conn = connections[server.id] ?: return@Row
+                FilterChip(
+                    selected = selectedServerId == server.id,
+                    onClick = { switchTo(server.id) },
+                    label = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(server.icon, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(server.label, fontSize = 12.sp)
+                            if (conn.connected) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("•", fontSize = 14.sp, color = Color(0xFF2E7D32))
+                            }
+                        }
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = selectedServer.icon + " " + selectedServer.description,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val currentConn = connections[selectedServerId] ?: return@Column
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (currentConn.connected) {
                 OutlinedButton(
-                    onClick = { disconnect() },
+                    onClick = { disconnectFrom(selectedServerId) },
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
@@ -187,27 +278,27 @@ fun McpScreen() {
                 }
             } else {
                 Button(
-                    onClick = { connect() },
-                    enabled = !connecting
+                    onClick = { connectTo(selectedServer) },
+                    enabled = !currentConn.connecting
                 ) {
-                    if (connecting) {
+                    if (currentConn.connecting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Запуск...")
+                        Text("Подключение...")
                     } else {
                         Icon(Icons.Default.Link, "Подключиться", modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Подключиться к MCP серверу")
+                        Text("Подключиться")
                     }
                 }
             }
         }
 
-        if (connected && serverName.isNotEmpty()) {
+        if (currentConn.connected && currentConn.serverName.isNotEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
@@ -225,7 +316,7 @@ fun McpScreen() {
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Подключено: $serverName",
+                        text = "Подключено: ${currentConn.serverName}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -479,8 +570,6 @@ fun McpScreen() {
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         items(log) { line ->
-                            val isUser = line.startsWith("👤") || line.startsWith("📞")
-                            val isBot = line.startsWith("📊")
                             val isError = line.startsWith("❌")
                             val isSuccess = line.startsWith("✅")
                             Text(
@@ -488,8 +577,6 @@ fun McpScreen() {
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = when {
-                                    isUser -> Color(0xFF64B5F6)
-                                    isBot -> Color(0xFF81C784)
                                     isError -> Color(0xFFE57373)
                                     isSuccess -> Color(0xFF81C784)
                                     else -> Color(0xFFBDBDBD)
@@ -503,6 +590,13 @@ fun McpScreen() {
     }
 }
 
+private data class McpConnectionState(
+    val connected: Boolean = false,
+    val connecting: Boolean = false,
+    val serverName: String = "",
+    val client: McpClient? = null
+)
+
 private data class ParamInfo(
     val name: String,
     val type: String,
@@ -512,11 +606,9 @@ private data class ParamInfo(
 private fun describeToolParams(tool: Tool): Triple<List<ParamInfo>, List<ParamInfo>, String> {
     val required = tool.inputSchema.required?.toSet() ?: emptySet()
     val props = tool.inputSchema.properties ?: return Triple(emptyList(), emptyList(), "")
-
     val requiredParams = mutableListOf<ParamInfo>()
     val optionalParams = mutableListOf<ParamInfo>()
     val template = StringBuilder()
-
     for ((key, value) in props) {
         val obj = value.jsonObject
         val type = obj["type"]?.jsonPrimitive?.content ?: "string"

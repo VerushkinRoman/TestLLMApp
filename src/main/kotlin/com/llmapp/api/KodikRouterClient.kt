@@ -1,5 +1,6 @@
 package com.llmapp.api
 
+import com.llmapp.model.ModelList
 import com.llmapp.model.RouterRequest
 import com.llmapp.model.RouterResponse
 import io.ktor.client.HttpClient
@@ -30,29 +31,7 @@ class KodikRouterClient(
 
     private val baseUrl = "https://api.kodikrouter.ru/v1"
 
-    private val fallbackModels = listOf(
-        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-        "meta-llama/llama-3.2-3b-instruct:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-4-31b-it:free",
-        "qwen/qwen3-coder:free",
-        "openai/gpt-oss-120b:free",
-        "liquid/lfm-2.5-1.2b-thinking:free",
-        "moonshotai/kimi-k2.6:free",
-        "nvidia/nemotron-3-nano-30b-a3b:free",
-        "poolside/laguna-m.1:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
-        "openai/gpt-oss-20b:free",
-        "poolside/laguna-xs.2:free",
-        "google/gemma-4-26b-a4b-it:free",
-        "z-ai/glm-4.5-air:free",
-        "liquid/lfm-2.5-1.2b-instruct:free",
-        "tencent/hy3-preview:free",
-        "minimax/minimax-m2.5:free",
-        "arcee-ai/trinity-large-thinking:free",
-        "deepseek/deepseek-v4-flash:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free"
-    )
+    private val fallbackModels = ModelList.ids
 
     override fun updateApiKey(newApiKey: String) {
         if (apiKey != newApiKey) {

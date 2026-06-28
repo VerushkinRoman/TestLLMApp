@@ -1,6 +1,7 @@
 package com.llmapp.mcp
 
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -9,21 +10,22 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class McpIntegration(
+    private val name: String = "mcp",
+    serverUrl: String = "https://alcoserver.ru:4456/mcp",
     private val onLog: ((String) -> Unit)? = null
 ) {
-    private val client = McpClient(onLog)
+    private val client = McpClient(serverUrl, onLog)
     private var connected = false
     private var tools: List<McpToolInfo> = emptyList()
-    private val pipelineTools = setOf("search_data", "summarize_data", "save_data")
+    private val pipelineTools = setOf("save_data")
 
     fun getToolNames(): List<String> = tools.map { it.name }
+    fun getTools(): List<McpToolInfo> = tools
     fun hasPipelineTools(): Boolean = tools.map { it.name }.toSet().containsAll(pipelineTools)
 
     private fun log(msg: String) = onLog?.invoke(msg)
 
-    suspend fun connect(): InitResult {
-        val result = client.initialize()
-        val rawTools = client.listTools()
+    private fun parseTools(rawTools: List<Tool>) {
         tools = rawTools.map { tool ->
             val paramList = mutableListOf<McpToolParam>()
             tool.inputSchema.properties?.forEach { (key, value) ->
@@ -43,8 +45,26 @@ class McpIntegration(
                 requiredParams = tool.inputSchema.required
             )
         }
+    }
+
+    suspend fun connect(): InitResult {
+        val result = client.initialize()
+        val rawTools = client.listTools()
+        parseTools(rawTools)
         connected = true
         return result
+    }
+
+    suspend fun refreshTools(): Boolean {
+        if (!connected) return false
+        return try {
+            val rawTools = client.listTools()
+            parseTools(rawTools)
+            true
+        } catch (e: Exception) {
+            println("⚠️ MCP refresh failed for $name: ${e.message?.take(100)}")
+            false
+        }
     }
 
     fun disconnect() {
@@ -55,93 +75,26 @@ class McpIntegration(
 
     fun isConnected(): Boolean = connected
 
-    fun getToolDescriptions(): String {
-        if (tools.isEmpty()) return ""
-        val sb = StringBuilder()
-        val firstTool = tools.first()
-        val firstArg = firstTool.parameters.firstOrNull()
-        val exampleCall = if (firstArg != null) {
-            "{\"tool\": \"${firstTool.name}\", \"arguments\": {\"${firstArg.name}\": \"${exampleValue(firstArg)}\"}}"
-        } else {
-            "{\"tool\": \"${firstTool.name}\", \"arguments\": {}}"
-        }
-
-        sb.appendLine("You have access to the following MCP tools. Call ONE tool per response.")
-        sb.appendLine()
-        sb.appendLine("FORMAT: Your ENTIRE response must be EXACTLY this (nothing before, nothing after):")
-        sb.appendLine("[MCP_CALL]")
-        sb.appendLine(exampleCall)
-        sb.appendLine("[/MCP_CALL]")
-        sb.appendLine()
-        sb.appendLine("Do NOT add any text before or after. Do NOT think out loud. Do NOT explain. Just the block above. The [/MCP_CALL] tag is REQUIRED.")
-        sb.appendLine()
-        sb.appendLine("Available tools:")
-        sb.appendLine()
-        for (tool in tools) {
-            val reqCount = tool.parameters.count { it.name in (tool.requiredParams ?: emptyList()) }
-            val optCount = tool.parameters.size - reqCount
-            sb.appendLine("=== ${tool.name} (${reqCount} required, $optCount optional) ===")
-            sb.appendLine("  Description: ${tool.description}")
-            if (tool.parameters.isNotEmpty()) {
-                sb.appendLine("  Parameters:")
-                for (p in tool.parameters) {
-                    val req = if (p.name in (tool.requiredParams
-                            ?: emptyList())
-                    ) " (required)" else " (optional)"
-                    sb.appendLine("    - ${p.name}: ${p.type}$req — ${p.description}")
-                }
-                val example = buildExampleCall(tool)
-                if (example != null) sb.appendLine("  Example: $example")
-            } else {
-                sb.appendLine("  Parameters: NONE")
-                sb.appendLine("  Example: {\"tool\": \"${tool.name}\", \"arguments\": {}}")
-            }
-            sb.appendLine()
-        }
-        sb.appendLine("CRITICAL RULES:")
-        sb.appendLine("- Your FIRST response MUST be ONLY the [MCP_CALL] block shown above. No thinking, no English text.")
-        sb.appendLine("- Do NOT call any tool twice with the same arguments.")
-        sb.appendLine("- Once you have all the data to answer the user, stop calling tools and just answer in Russian.")
-        sb.appendLine("- The JSON MUST be valid — every quote and brace MUST be closed.")
-        sb.appendLine()
-        sb.appendLine("After calling a tool, you will receive the result. Use the data to continue or answer in Russian.")
-        return sb.toString()
-    }
-
-    fun getToolFormatReminder(): String {
-        return "REMINDER: To call a tool, respond with EXACTLY:\n[MCP_CALL]{\"tool\": \"tool_name\", \"arguments\": {}}[/MCP_CALL]\nNo other text. No thinking. The [/MCP_CALL] tag is REQUIRED."
-    }
-
-    private fun buildExampleCall(tool: McpToolInfo): String? {
-        val req = tool.parameters.filter { it.name in (tool.requiredParams ?: emptyList()) }
-        if (req.isEmpty()) return null
-        val args = req.joinToString(", ") { "\"${it.name}\": \"${exampleValue(it)}\"" }
-        return "{\"tool\": \"${tool.name}\", \"arguments\": {$args}}"
-    }
-
-    private fun exampleValue(param: McpToolParam): String = when (param.name.lowercase()) {
-        "name" -> "example"
-        "id" -> "123"
-        "data_type" -> "all"
-        "format" -> "json"
-        "raw_data", "summary_data", "raw_json", "summary_json" -> "<output from previous step>"
-        else -> "value"
-    }
-
     suspend fun executeToolCall(jsonString: String): String {
         val json = Json { ignoreUnknownKeys = true }
         println("🔧 MCP -> server: $jsonString")
         val obj = json.parseToJsonElement(jsonString).jsonObject
         val toolName =
             obj["tool"]?.jsonPrimitive?.content ?: throw McpException("Missing 'tool' in MCP call")
-        val args =
-            obj["arguments"]?.jsonObject?.mapValues { (_, v) ->
+        val rawArgs =
+            (obj["arguments"]?.jsonObject ?: obj["args"]?.jsonObject)?.mapValues { (_, v) ->
                 when (v) {
                     is JsonPrimitive -> v.content
                     is JsonObject -> json.encodeToString(v)
                     is JsonArray -> json.encodeToString(v)
                 }
             } ?: emptyMap()
+
+        val args = if (toolName == "get_group" && "name" !in rawArgs && "group" in rawArgs) {
+            println("🔧 MCP: auto-remap group→name for get_group")
+            rawArgs.mapKeys { (k, _) -> if (k == "group") "name" else k }
+        } else rawArgs
+
         log("🔧 MCP вызов: $toolName $args")
         println("🔧 MCP -> server: $toolName($args)")
         val result = client.callTool(toolName, args)

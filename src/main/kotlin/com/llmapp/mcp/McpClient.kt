@@ -12,6 +12,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration.Companion.seconds
 
 class McpClient(
+    private val serverUrl: String = "https://alcoserver.ru:4456/mcp",
     private val onLog: ((String) -> Unit)? = null
 ) {
     private var client: Client? = null
@@ -21,7 +22,7 @@ class McpClient(
     private fun log(msg: String) = onLog?.invoke(msg)
 
     suspend fun initialize(timeoutSeconds: Long = 15): InitResult {
-        val url = "https://alcoserver.ru:4456/mcp"
+        val url = serverUrl
         log("🔗 Подключение к $url")
 
         val httpClient = HttpClient {

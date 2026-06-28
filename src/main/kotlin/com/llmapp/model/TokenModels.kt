@@ -41,35 +41,8 @@ data class TokenStats(
 }
 
 object ModelPricing {
-    private val PRICES = mapOf(
-        "nvidia/nemotron-3-super-120b-a12b:free" to Pricing(0.0, 0.0),
-        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free" to Pricing(0.0, 0.0),
-        "meta-llama/llama-3.2-3b-instruct:free" to Pricing(0.0, 0.0),
-        "meta-llama/llama-3.3-70b-instruct:free" to Pricing(0.0, 0.0),
-        "google/gemma-4-31b-it:free" to Pricing(0.0, 0.0),
-        "qwen/qwen3-coder:free" to Pricing(0.0, 0.0),
-        "openai/gpt-oss-120b:free" to Pricing(0.0, 0.0),
-        "liquid/lfm-2.5-1.2b-thinking:free" to Pricing(0.0, 0.0),
-        "moonshotai/kimi-k2.6:free" to Pricing(0.0, 0.0),
-        "nvidia/nemotron-3-nano-30b-a3b:free" to Pricing(0.0, 0.0),
-        "poolside/laguna-m.1:free" to Pricing(0.0, 0.0),
-        "nousresearch/hermes-3-llama-3.1-405b:free" to Pricing(0.0, 0.0),
-        "openai/gpt-oss-20b:free" to Pricing(0.0, 0.0),
-        "poolside/laguna-xs.2:free" to Pricing(0.0, 0.0),
-        "google/gemma-4-26b-a4b-it:free" to Pricing(0.0, 0.0),
-        "z-ai/glm-4.5-air:free" to Pricing(0.0, 0.0),
-        "liquid/lfm-2.5-1.2b-instruct:free" to Pricing(0.0, 0.0),
-        "tencent/hy3-preview:free" to Pricing(0.0, 0.0),
-        "minimax/minimax-m2.5:free" to Pricing(0.0, 0.0),
-        "arcee-ai/trinity-large-thinking:free" to Pricing(0.0, 0.0),
-        "deepseek/deepseek-v4-flash:free" to Pricing(0.0, 0.0),
-        "qwen/qwen3-next-80b-a3b-instruct:free" to Pricing(0.0, 0.0)
-    )
-
-    private val DEFAULT_PRICE = Pricing(0.0, 0.0)
-
     fun getPricing(modelId: String): Pricing {
-        return PRICES[modelId] ?: DEFAULT_PRICE
+        return ModelList.pricing[modelId] ?: Pricing(0.0, 0.0)
     }
 }
 

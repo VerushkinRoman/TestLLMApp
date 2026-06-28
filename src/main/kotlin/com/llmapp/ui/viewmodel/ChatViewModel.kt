@@ -43,7 +43,16 @@ class ChatViewModel : ViewModel() {
 
     private val invariantManager = InvariantManager()
     private lateinit var chatSession: ChatSession
-    private val mcpIntegration = McpIntegration(onLog = { handleEvent(ViewEvent.OnMcpLog(it)) })
+    private val dataMcpIntegration = McpIntegration(
+        name = "data",
+        serverUrl = "https://alcoserver.ru:4454/mcp",
+        onLog = { handleEvent(ViewEvent.OnMcpLog(it)) }
+    )
+    private val pipelineMcpIntegration = McpIntegration(
+        name = "pipeline",
+        serverUrl = "https://alcoserver.ru:4456/mcp",
+        onLog = { handleEvent(ViewEvent.OnMcpLog(it)) }
+    )
     private lateinit var statefulAgent: StatefulMemoryAgent
     private lateinit var profileManager: ProfileManager
     private var chatMemoryService: ChatMemoryAgent? = null
@@ -102,7 +111,11 @@ class ChatViewModel : ViewModel() {
             compressionEnabled = _state.value.compressionEnabled,
             keepLastMessages = _state.value.keepLastMessages,
             summarizeEvery = _state.value.summarizeEvery
-        ).also { it.mcpIntegration = mcpIntegration }
+        ).also {
+            it.dataIntegration = dataMcpIntegration
+            it.pipelineIntegration = pipelineMcpIntegration
+            it.logListener = { msg -> addLogMessage(msg) }
+        }
         statefulAgent = StatefulMemoryAgent(apiKey = apiKey)
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
@@ -500,25 +513,46 @@ class ChatViewModel : ViewModel() {
                 chatSession.rebuildHistoryFromUiMessages(event.messages)
             }
 
-            ViewEvent.ConnectMcp -> {
+            ViewEvent.ConnectDataMcp -> {
                 viewModelScope.launch {
-                    updateState { copy(mcpConnected = true) }
-                    addLogMessage("🔄 Подключение к MCP серверу...")
+                    updateState { copy(dataMcpConnected = true) }
+                    addLogMessage("🔄 Подключение к MCP Data серверу (alcoserver.ru:4454)...")
                     try {
-                        val result = mcpIntegration.connect()
-                        addLogMessage("✅ MCP подключен: ${result.name} v${result.version}")
-                        updateState { copy(mcpServerName = "${result.name} v${result.version}") }
+                        val result = dataMcpIntegration.connect()
+                        addLogMessage("✅ MCP Data подключен: ${result.name} v${result.version}")
+                        updateState { copy(dataMcpServerName = "${result.name} v${result.version}") }
                     } catch (e: Exception) {
-                        addLogMessage("❌ MCP: ${e.message}")
-                        updateState { copy(mcpConnected = false) }
+                        addLogMessage("❌ MCP Data: ${e.message}")
+                        updateState { copy(dataMcpConnected = false) }
                     }
                 }
             }
 
-            ViewEvent.DisconnectMcp -> {
-                mcpIntegration.disconnect()
-                addLogMessage("🔌 MCP отключен")
-                updateState { copy(mcpConnected = false, mcpServerName = null) }
+            ViewEvent.DisconnectDataMcp -> {
+                dataMcpIntegration.disconnect()
+                addLogMessage("🔌 MCP Data отключен")
+                updateState { copy(dataMcpConnected = false, dataMcpServerName = null) }
+            }
+
+            ViewEvent.ConnectPipelineMcp -> {
+                viewModelScope.launch {
+                    updateState { copy(pipelineMcpConnected = true) }
+                    addLogMessage("🔄 Подключение к MCP Pipeline серверу (alcoserver.ru:4456)...")
+                    try {
+                        val result = pipelineMcpIntegration.connect()
+                        addLogMessage("✅ MCP Pipeline подключен: ${result.name} v${result.version}")
+                        updateState { copy(pipelineMcpServerName = "${result.name} v${result.version}") }
+                    } catch (e: Exception) {
+                        addLogMessage("❌ MCP Pipeline: ${e.message}")
+                        updateState { copy(pipelineMcpConnected = false) }
+                    }
+                }
+            }
+
+            ViewEvent.DisconnectPipelineMcp -> {
+                pipelineMcpIntegration.disconnect()
+                addLogMessage("🔌 MCP Pipeline отключен")
+                updateState { copy(pipelineMcpConnected = false, pipelineMcpServerName = null) }
             }
 
             is ViewEvent.OnMcpLog -> {
