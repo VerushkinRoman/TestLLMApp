@@ -256,11 +256,12 @@ class DemoManager(
         }
     }
 
-    fun startRagDemo() {
+    fun startRagDemo(query: String) {
         runDemo(DemoType.RagPipeline) {
             RagDemoRunner(
                 onMessageAdded = onMessageAdded,
-                onTypingStateChanged = onTypingStateChanged
+                onTypingStateChanged = onTypingStateChanged,
+                query = query
             )
         }
     }

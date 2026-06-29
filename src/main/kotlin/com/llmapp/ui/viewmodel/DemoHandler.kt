@@ -107,7 +107,7 @@ class DemoHandler(
     fun startStatefulDemo() = demoManager?.startStatefulDemo()
     fun startInvariantDemo() = demoManager?.startInvariantDemo()
     fun startTransitionDemo() = demoManager?.startTransitionDemo()
-    fun startRagDemo() = demoManager?.startRagDemo()
+    fun startRagDemo(query: String) = demoManager?.startRagDemo(query)
     fun cancelDemo() = demoManager?.cancelDemo()
 
 }

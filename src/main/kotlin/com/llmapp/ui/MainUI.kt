@@ -463,11 +463,14 @@ fun MainScreen(
                     currentScreen = Screen.Chat
                 },
                 onStartRagDemo = {
+                    val lastQuery = state.messages
+                        .lastOrNull { it.role == "user" }?.content
+                        ?: "Кто выиграл мужской финал чемпионата мира 2022 года"
                     sendEvent(ViewEvent.ClearHistory)
                     sendEvent(ViewEvent.InitDemoManager { message ->
                         sendEvent(ViewEvent.AddDemoMessage(message))
                     })
-                    sendEvent(ViewEvent.StartRagDemo)
+                    sendEvent(ViewEvent.StartRagDemo(lastQuery))
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = state.isDemoRunning,
