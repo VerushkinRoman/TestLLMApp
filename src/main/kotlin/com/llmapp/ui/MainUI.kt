@@ -43,6 +43,7 @@ import com.llmapp.ui.screens.ChatScreen
 import com.llmapp.ui.screens.CollectorScreen
 import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.screens.McpScreen
+import com.llmapp.rag.ui.IndexScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
 import com.llmapp.ui.viewmodel.ViewEvent
 import java.util.prefs.Preferences
@@ -461,6 +462,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartTransitionDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartRagDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartRagDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,
@@ -516,6 +525,8 @@ fun MainScreen(
             )
 
             Screen.Mcp -> McpScreen()
+
+            Screen.Index -> IndexScreen()
 
             Screen.Collector -> CollectorScreen(
                 isRunning = state.collectorRunning,

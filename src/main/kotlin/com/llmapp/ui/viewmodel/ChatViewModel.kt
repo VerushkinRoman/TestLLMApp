@@ -367,6 +367,7 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartStatefulDemo -> demoHandler.startStatefulDemo()
             ViewEvent.StartInvariantDemo -> demoHandler.startInvariantDemo()
             ViewEvent.StartTransitionDemo -> demoHandler.startTransitionDemo()
+            ViewEvent.StartRagDemo -> demoHandler.startRagDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {

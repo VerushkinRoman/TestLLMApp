@@ -90,6 +90,7 @@ sealed class ViewEvent {
     object StartStatefulDemo : ViewEvent()
     object StartInvariantDemo : ViewEvent()
     object StartTransitionDemo : ViewEvent()
+    object StartRagDemo : ViewEvent()
     object CancelDemo : ViewEvent()
 
     // ============================================================

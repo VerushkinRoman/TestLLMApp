@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -55,6 +56,7 @@ fun DemoScreen(
     onStartStatefulDemo: () -> Unit,
     onStartInvariantDemo: () -> Unit,
     onStartTransitionDemo: () -> Unit,
+    onStartRagDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -133,6 +135,15 @@ fun DemoScreen(
             features = listOf("Переходы", "Валидация", "Контроль"),
             color = Color(0xFF4CAF50),
             onStart = onStartTransitionDemo
+        ),
+        DemoItem(
+            id = "rag",
+            title = "🔍 RAG Pipeline",
+            icon = Icons.Default.TravelExplore,
+            description = "Индексация документов ЧМ: чанкинг, эмбеддинги, поиск, сравнение 2 стратегий",
+            features = listOf("Чанкинг", "Эмбеддинги", "Поиск"),
+            color = Color(0xFF43A047),
+            onStart = onStartRagDemo
         ),
     )
 

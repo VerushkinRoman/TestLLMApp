@@ -12,6 +12,7 @@ import com.llmapp.demo.manager.StatefulDemoRunner
 import com.llmapp.demo.manager.StrategyDemoRunner
 import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
+import com.llmapp.demo.manager.RagDemoRunner
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,7 @@ sealed class DemoType {
     object StatefulAgent : DemoType()
     object InvariantDemo : DemoType()
     object TransitionDemo : DemoType()
+    object RagPipeline : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -42,6 +44,7 @@ sealed class DemoType {
             StatefulAgent -> "Stateful Agent"
             InvariantDemo -> "Инварианты"
             TransitionDemo -> "Управление переходами"
+            RagPipeline -> "RAG Pipeline"
         }
 }
 
@@ -249,6 +252,15 @@ class DemoManager(
                 onTypingStateChanged = onTypingStateChanged,
                 statefulAgent = statefulAgent,
                 onTaskStateUpdated = onTaskStateUpdated
+            )
+        }
+    }
+
+    fun startRagDemo() {
+        runDemo(DemoType.RagPipeline) {
+            RagDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged
             )
         }
     }

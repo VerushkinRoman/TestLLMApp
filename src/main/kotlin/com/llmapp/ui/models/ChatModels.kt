@@ -23,5 +23,5 @@ data class ChatMessageUI(
 }
 
 enum class Screen {
-    Chat, Models, Settings, Agents, Demo, Mcp, Collector
+    Chat, Models, Settings, Agents, Demo, Mcp, Collector, Index
 }

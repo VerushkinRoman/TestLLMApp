@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -83,6 +84,13 @@ fun AppNavigationRail(
                 onClick = { onScreenSelected(Screen.Collector) },
                 icon = { Icon(Icons.Default.Schedule, "Сбор") },
                 label = { Text("Сбор", fontSize = 10.sp) }
+            )
+
+            NavigationRailItem(
+                selected = currentScreen == Screen.Index,
+                onClick = { onScreenSelected(Screen.Index) },
+                icon = { Icon(Icons.Default.TravelExplore, "Индекс") },
+                label = { Text("Индекс", fontSize = 10.sp) }
             )
 
             NavigationRailItem(
