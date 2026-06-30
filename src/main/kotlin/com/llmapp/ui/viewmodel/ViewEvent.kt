@@ -91,7 +91,13 @@ sealed class ViewEvent {
     object StartInvariantDemo : ViewEvent()
     object StartTransitionDemo : ViewEvent()
     data class StartRagDemo(val query: String) : ViewEvent()
+    object StartRagComparisonDemo : ViewEvent()
     object CancelDemo : ViewEvent()
+
+    // ============================================================
+    // RAG
+    // ============================================================
+    data class ToggleRagMode(val enabled: Boolean) : ViewEvent()
 
     // ============================================================
     // ИНВАРИАНТЫ

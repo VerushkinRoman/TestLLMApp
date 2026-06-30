@@ -12,6 +12,7 @@ import com.llmapp.model.ChatMessage
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.RouterRequest
 import com.llmapp.model.TokenStats
+import com.llmapp.rag.RAGEnhancer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -64,6 +65,9 @@ class ChatSession(
 
     var dataIntegration: McpIntegration? = null
     var pipelineIntegration: McpIntegration? = null
+
+    var ragEnabled: Boolean = false
+    private val ragEnhancer: RAGEnhancer by lazy { RAGEnhancer() }
 
     private val dataToolNames = setOf(
         "get_groups", "get_group", "get_teams", "get_team",
@@ -239,9 +243,23 @@ class ChatSession(
             }
         }
 
+        var augmentedUserPrompt = userPrompt
+        if (ragEnabled && !mcpConnected) {
+            try {
+                ragEnhancer.ensureIndexLoaded()
+                val ragPrompt = ragEnhancer.searchWithContext(userPrompt)
+                if (userPrompt != ragPrompt) {
+                    log("📚 RAG: Промт обогащён контекстом из базы знаний")
+                    augmentedUserPrompt = ragPrompt
+                }
+            } catch (e: Exception) {
+                log("⚠️ RAG: Ошибка обогащения: ${e.message}")
+            }
+        }
+
         val effectivePrompt = if (mcpConnected) {
-            "START WITH [MCP_CALL] IMMEDIATELY. NO TEXT BEFORE IT.\n\n$userPrompt"
-        } else userPrompt
+            "START WITH [MCP_CALL] IMMEDIATELY. NO TEXT BEFORE IT.\n\n$augmentedUserPrompt"
+        } else augmentedUserPrompt
 
         val savedControl = if (mcpConnected && responseControl.enabled) {
             responseControl

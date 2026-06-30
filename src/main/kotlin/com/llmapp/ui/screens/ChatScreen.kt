@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -143,6 +144,11 @@ fun ChatScreen(
             useShortTerm = true,
             useWorkingMemory = true,
             useLongTerm = true
+        )
+
+        RagModeBar(
+            enabled = viewState.ragModeEnabled,
+            onToggle = { onEvent(ViewEvent.ToggleRagMode(!viewState.ragModeEnabled)) }
         )
 
         Row(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -327,6 +333,56 @@ fun MemoryLayerChip(
             fontSize = 10.sp,
             color = if (active) color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
+    }
+}
+
+@Composable
+fun RagModeBar(
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .clickable(onClick = onToggle),
+        color = if (enabled)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        else
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    if (enabled) "📚" else "📄",
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = if (enabled) "RAG: активен (поиск по базе знаний)" else "RAG: выключен",
+                    fontSize = 11.sp,
+                    color = if (enabled)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            Text(
+                text = if (enabled) "🔛" else "🔘",
+                fontSize = 10.sp,
+                color = if (enabled)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
     }
 }
 

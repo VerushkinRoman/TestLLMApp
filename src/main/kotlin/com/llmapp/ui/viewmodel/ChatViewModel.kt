@@ -339,6 +339,10 @@ class ChatViewModel : ViewModel() {
                 _state.value = modelUseCase.changeModel(_state.value, event.modelId)
             }
 
+            is ViewEvent.ToggleRagMode -> {
+                updateState { copy(ragModeEnabled = event.enabled) }
+            }
+
             is ViewEvent.ToggleCompression -> {
                 _state.value = compressionUseCase.toggleCompression(_state.value, event.enabled)
             }
@@ -368,6 +372,7 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartInvariantDemo -> demoHandler.startInvariantDemo()
             ViewEvent.StartTransitionDemo -> demoHandler.startTransitionDemo()
             is ViewEvent.StartRagDemo -> demoHandler.startRagDemo(event.query)
+            ViewEvent.StartRagComparisonDemo -> demoHandler.startRagComparisonDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {

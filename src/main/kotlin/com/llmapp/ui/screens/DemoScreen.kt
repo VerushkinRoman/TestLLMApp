@@ -57,6 +57,7 @@ fun DemoScreen(
     onStartInvariantDemo: () -> Unit,
     onStartTransitionDemo: () -> Unit,
     onStartRagDemo: () -> Unit,
+    onStartRagComparisonDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -144,6 +145,15 @@ fun DemoScreen(
             features = listOf("Чанкинг", "Эмбеддинги", "Поиск"),
             color = Color(0xFF43A047),
             onStart = onStartRagDemo
+        ),
+        DemoItem(
+            id = "rag_compare",
+            title = "📊 RAG vs Без RAG",
+            icon = Icons.Default.TravelExplore,
+            description = "Сравнение ответов модели с RAG и без RAG на 10 контрольных вопросах по базе знаний ЧМ",
+            features = listOf("10 вопросов", "Сравнение", "Оценка"),
+            color = Color(0xFF2E7D32),
+            onStart = onStartRagComparisonDemo
         ),
     )
 

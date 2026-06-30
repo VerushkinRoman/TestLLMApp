@@ -473,6 +473,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartRagDemo(lastQuery))
                     currentScreen = Screen.Chat
                 },
+                onStartRagComparisonDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartRagComparisonDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

@@ -2,7 +2,7 @@ package com.llmapp.rag.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.llmapp.rag.data.HashingEmbeddingService
+import com.llmapp.rag.data.HuggingFaceEmbeddingService
 import com.llmapp.rag.data.JsonIndexRepository
 import com.llmapp.rag.data.WorldCupDocuments
 import com.llmapp.rag.domain.ChunkerFactory
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class IndexViewModel(
-    private val embeddingService: HashingEmbeddingService = HashingEmbeddingService(),
+    private val embeddingService: HuggingFaceEmbeddingService = HuggingFaceEmbeddingService(),
     private val repository: JsonIndexRepository = JsonIndexRepository(),
 ) : ViewModel() {
 
@@ -57,33 +57,42 @@ class IndexViewModel(
                 error = null,
                 log = emptyList(),
             )
-            appendLog("Starting index build...")
-            appendLog("Documents: ${documents.size}")
-            appendLog("Total chars: ${documents.sumOf { it.content.length }}")
+            println("═══════════════════════════════════════")
+            println("📚 INDEX: Начало построения индекса")
+            println("📚 INDEX: Документов: ${documents.size}")
+            println("📚 INDEX: Всего символов: ${documents.sumOf { it.content.length }}")
+            appendLog("Построение индекса...")
+            appendLog("Документов: ${documents.size}")
+            appendLog("Всего символов: ${documents.sumOf { it.content.length }}")
 
             val fixedStrategy = ChunkingStrategy.FixedSize()
             val structuralStrategy = ChunkingStrategy.Structural()
 
-            appendLog("Building fixed-size index (chunk=${fixedStrategy.chunkSize}, overlap=${fixedStrategy.overlap})...")
+            println("📚 INDEX: Строю fixed-size индекс (chunk=${fixedStrategy.chunkSize}, overlap=${fixedStrategy.overlap})...")
+            appendLog("Fixed-size: chunk=${fixedStrategy.chunkSize}, overlap=${fixedStrategy.overlap}")
             val fixedResult = buildSingleIndex(fixedStrategy, "fixed")
             _state.value = _state.value.copy(fixedSizeStats = fixedResult?.let { computeStats(it) })
             if (fixedResult != null) {
-                appendLog("Fixed-size index: ${fixedResult.chunks.size} chunks")
+                println("📚 INDEX: Fixed-size индекс готов: ${fixedResult.chunks.size} чанков")
+                appendLog("Fixed-size: ${fixedResult.chunks.size} чанков")
             }
 
-            appendLog("Building structural index (by sections)...")
+            println("📚 INDEX: Строю structural индекс (по секциям)...")
+            appendLog("Structural: по секциям документов")
             val structuralResult = buildSingleIndex(structuralStrategy, "structural")
             _state.value =
                 _state.value.copy(structuralStats = structuralResult?.let { computeStats(it) })
             if (structuralResult != null) {
-                appendLog("Structural index: ${structuralResult.chunks.size} chunks")
+                println("📚 INDEX: Structural индекс готов: ${structuralResult.chunks.size} чанков")
+                appendLog("Structural: ${structuralResult.chunks.size} чанков")
             }
 
             _state.value = _state.value.copy(
                 isBuilding = false,
                 isIndexed = fixedResult != null || structuralResult != null,
             )
-            appendLog("Index build complete!")
+            println("📚 INDEX: Построение индекса завершено!")
+            appendLog("Готово!")
         }
     }
 
@@ -93,19 +102,18 @@ class IndexViewModel(
     ): IndexResult? = withContext(Dispatchers.Default) {
         try {
             val chunker = ChunkerFactory.create(strategy)
+            println("  📚 INDEX: Стратегия '$strategyName' — разбиваю ${documents.size} документов на чанки...")
 
             val allChunks = documents.flatMap { doc ->
                 chunker.chunk(doc, strategy)
             }
+            println("  📚 INDEX: Получено ${allChunks.size} чанков")
 
-            appendLog("Generating embeddings for ${allChunks.size} chunks...")
+            println("  📚 INDEX: Генерирую эмбеддинги для ${allChunks.size} чанков через HuggingFace (dim=${embeddingService.dimension})...")
+            appendLog("Эмбеддинги: ${allChunks.size} чанков, размерность ${embeddingService.dimension}")
             val texts = allChunks.map { it.content }
-            val batchSize = 50
-            val embeddings = mutableListOf<List<Float>>()
-            for (i in texts.indices step batchSize) {
-                val batch = texts.subList(i, minOf(i + batchSize, texts.size))
-                embeddings.addAll(embeddingService.embedBatch(batch))
-            }
+            val embeddings = embeddingService.embedBatch(texts)
+            println("  ✅ 📚 INDEX: Эмбеддинги получены: ${embeddings.size} векторов, dim=${embeddings.firstOrNull()?.size}")
 
             val chunksWithEmbeddings = allChunks.zip(embeddings) { chunk, emb ->
                 chunk.copy(embedding = emb)
@@ -120,13 +128,16 @@ class IndexViewModel(
                 indexedAt = System.currentTimeMillis(),
             )
 
+            println("  📚 INDEX: Сохраняю index_${strategyName}.json...")
             repository.saveIndex(result)
-            appendLog("Saved index_${strategyName}.json")
+            println("  ✅ 📚 INDEX: index_${strategyName}.json сохранён")
+            appendLog("Сохранён index_${strategyName}.json")
             result
         } catch (e: Exception) {
-            appendLog("Error building $strategyName index: ${e.message}")
+            println("  ❌ 📚 INDEX: Ошибка при построении $strategyName: ${e.message}")
+            appendLog("Ошибка $strategyName: ${e.message}")
             _state.value =
-                _state.value.copy(error = "Failed to build $strategyName index: ${e.message}")
+                _state.value.copy(error = "Ошибка построения $strategyName: ${e.message}")
             null
         }
     }

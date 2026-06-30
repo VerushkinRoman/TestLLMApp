@@ -62,14 +62,14 @@ fun IndexScreen(
             .padding(16.dp),
     ) {
         Text(
-            text = "RAG Index Pipeline",
+            text = "Построение RAG-индекса",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Индексация документов ЧМ-2026 с эмбеддингами и сравнение стратегий chunking",
+            text = "Индексация документов ЧМ-2026 через HuggingFace с двумя стратегиями разбивки",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -90,7 +90,7 @@ fun IndexScreen(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(if (state.isBuilding) "Building..." else "Build Index")
+                Text(if (state.isBuilding) "Построение..." else "Построить индекс")
             }
 
             OutlinedButton(
@@ -103,7 +103,7 @@ fun IndexScreen(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Fixed")
+                Text("Fixed-size")
             }
 
             OutlinedButton(
@@ -116,7 +116,7 @@ fun IndexScreen(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Struct")
+                Text("Structural")
             }
         }
 
@@ -133,14 +133,14 @@ fun IndexScreen(
         ) {
             state.fixedSizeStats?.let { stats ->
                 StatsCard(
-                    title = "Fixed-Size Chunking",
+                    title = "Fixed-Size (по символам)",
                     stats = stats,
                     modifier = Modifier.weight(1f),
                 )
             }
             state.structuralStats?.let { stats ->
                 StatsCard(
-                    title = "Structural Chunking",
+                    title = "Structural (по секциям)",
                     stats = stats,
                     modifier = Modifier.weight(1f),
                 )
@@ -192,12 +192,12 @@ private fun StatsCard(
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(6.dp))
-            StatRow("Documents", "${stats.totalDocuments}")
-            StatRow("Chunks", "${stats.totalChunks}")
-            StatRow("Avg chunk", "${stats.avgChunkChars} chars")
-            StatRow("Min chunk", "${stats.minChunkChars} chars")
-            StatRow("Max chunk", "${stats.maxChunkChars} chars")
-            StatRow("Total chars", "${stats.totalChars}")
+            StatRow("Документов", "${stats.totalDocuments}")
+            StatRow("Чанков", "${stats.totalChunks}")
+            StatRow("Средний чанк", "${stats.avgChunkChars} симв.")
+            StatRow("Мин. чанк", "${stats.minChunkChars} симв.")
+            StatRow("Макс. чанк", "${stats.maxChunkChars} симв.")
+            StatRow("Всего символов", "${stats.totalChars}")
         }
     }
 }
@@ -234,7 +234,7 @@ private fun ComparisonCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "Comparison: Fixed-Size vs Structural Chunking",
+                text = "Сравнение: Fixed-Size vs Structural",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -242,35 +242,35 @@ private fun ComparisonCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             val diffChunks = fixed.totalChunks - structural.totalChunks
-            val chunksText = if (diffChunks > 0) "fixed creates $diffChunks more chunks"
-            else if (diffChunks < 0) "structural creates ${-diffChunks} more chunks"
-            else "same number of chunks"
+            val chunksText = if (diffChunks > 0) "fixed создаёт на $diffChunks чанков больше"
+            else if (diffChunks < 0) "structural создаёт на ${-diffChunks} чанков больше"
+            else "одинаковое количество чанков"
 
             val diffAvg = fixed.avgChunkChars - structural.avgChunkChars
-            val avgText = if (diffAvg > 0) "fixed chunks are $diffAvg chars larger on average"
-            else if (diffAvg < 0) "structural chunks are ${-diffAvg} chars larger on average"
-            else "same average size"
+            val avgText = if (diffAvg > 0) "fixed чанки в среднем на $diffAvg символов длиннее"
+            else if (diffAvg < 0) "structural чанки в среднем на ${-diffAvg} символов длиннее"
+            else "одинаковый средний размер"
 
             val totalFixed = fixed.totalChars
             val totalStruct = structural.totalChars
             val coverageText = if (totalFixed > totalStruct) {
-                "fixed covers ${totalFixed - totalStruct} more chars (less overlap loss)"
+                "fixed покрывает на ${totalFixed - totalStruct} символов больше (меньше потерь при наложении)"
             } else {
-                "structural covers ${totalStruct - totalFixed} more chars (better coverage)"
+                "structural покрывает на ${totalStruct - totalFixed} символов больше (лучшее покрытие)"
             }
 
             Text(
-                text = "• Chunks: $chunksText",
+                text = "• Чанки: $chunksText",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "• Size: $avgText",
+                text = "• Размер: $avgText",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "• Coverage: $coverageText",
+                text = "• Покрытие: $coverageText",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -279,19 +279,19 @@ private fun ComparisonCard(
 
             val recommendation = when {
                 fixed.totalChunks < structural.totalChunks * 0.7 ->
-                    "Fixed-size creates fewer, larger chunks — good for general retrieval"
+                    "Fixed-size даёт меньше, но крупнее чанков — хорошо для общего поиска"
 
                 structural.totalChunks < fixed.totalChunks * 0.7 ->
-                    "Structural creates fewer, semantically coherent chunks — good for Q&A"
+                    "Structural даёт меньше семантически связных чанков — хорошо для Q&A"
 
                 structural.totalChunks > fixed.totalChunks * 1.5 ->
-                    "Fixed-size is more compact. Consider merging small sections."
+                    "Fixed-size компактнее. Попробуй объединить мелкие секции."
 
                 else ->
-                    "Both strategies produce similar granularity. Choose based on use case."
+                    "Обе стратегии дают похожую гранулярность. Выбирай по задаче."
             }
             Text(
-                text = "Recommendation: $recommendation",
+                text = "Рекомендация: $recommendation",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.tertiary,
@@ -317,7 +317,7 @@ private fun SearchSection(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "Search Index",
+                text = "Поиск по индексу",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -332,7 +332,7 @@ private fun SearchSection(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
-                    placeholder = { Text("Search query...", fontSize = 12.sp) },
+                    placeholder = { Text("Поисковый запрос...", fontSize = 12.sp) },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     enabled = isIndexed,
@@ -348,7 +348,7 @@ private fun SearchSection(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Search", fontSize = 12.sp)
+                    Text("Найти", fontSize = 12.sp)
                 }
             }
 
@@ -372,13 +372,13 @@ private fun SearchSection(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
-                                    text = "Rank #${result.rank}",
+                                    text = "Место #${result.rank}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "Score: ${"%.4f".format(result.score)}",
+                                    text = "Релевантность: ${"%.4f".format(result.score)}",
                                     fontSize = 10.sp,
                                     fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.tertiary,
@@ -393,7 +393,7 @@ private fun SearchSection(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "Section: ${result.chunk.section}",
+                                text = "Раздел: ${result.chunk.section}",
                                 fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -425,7 +425,7 @@ private fun LogSection(log: List<String>) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "Build Log",
+                text = "Лог построения",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,

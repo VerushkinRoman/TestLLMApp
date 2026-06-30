@@ -80,6 +80,9 @@ data class ChatViewState(
     val pipelineMcpServerName: String? = null,
     val mcpLog: List<String> = emptyList(),
 
+    // RAG
+    val ragModeEnabled: Boolean = false,
+
     // Коллектор матчей
     val collectorRunning: Boolean = false,
     val collectorInterval: Double = 15.0,
