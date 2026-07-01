@@ -14,6 +14,7 @@ import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
 import com.llmapp.demo.manager.RagDemoRunner
 import com.llmapp.demo.manager.RAGComparisonDemoRunner
+import com.llmapp.demo.manager.RAGImprovedDemoRunner
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,7 @@ sealed class DemoType {
     object TransitionDemo : DemoType()
     object RagPipeline : DemoType()
     object RagComparison : DemoType()
+    object RagImprovedComparison : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -48,6 +50,7 @@ sealed class DemoType {
             TransitionDemo -> "Управление переходами"
             RagPipeline -> "RAG Pipeline"
             RagComparison -> "RAG сравнение"
+            RagImprovedComparison -> "RAG улучшенный"
         }
 }
 
@@ -272,6 +275,15 @@ class DemoManager(
     fun startRagComparisonDemo() {
         runDemo(DemoType.RagComparison) {
             RAGComparisonDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+            )
+        }
+    }
+
+    fun startRagImprovedComparisonDemo() {
+        runDemo(DemoType.RagImprovedComparison) {
+            RAGImprovedDemoRunner(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
             )

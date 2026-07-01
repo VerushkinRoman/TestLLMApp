@@ -67,7 +67,27 @@ class ChatSession(
     var pipelineIntegration: McpIntegration? = null
 
     var ragEnabled: Boolean = false
-    private val ragEnhancer: RAGEnhancer by lazy { RAGEnhancer() }
+    val ragEnhancer: RAGEnhancer by lazy { RAGEnhancer() }
+
+    fun configureRag(
+        enabled: Boolean,
+        mode: com.llmapp.rag.RagMode = com.llmapp.rag.RagMode.BASIC,
+        rerankerType: com.llmapp.rag.domain.RerankerType = com.llmapp.rag.domain.RerankerType.SIMILARITY_THRESHOLD,
+        threshold: Float = 0.3f,
+        topK: Int = 5,
+        topKBefore: Int = 20,
+        topKAfter: Int = 5,
+    ) {
+        ragEnabled = enabled
+        ragEnhancer.mode = mode
+        ragEnhancer.topK = topK
+        ragEnhancer.rerankerConfig = com.llmapp.rag.domain.RerankerConfig(
+            type = rerankerType,
+            similarityThreshold = threshold,
+            topKBefore = topKBefore,
+            topKAfter = topKAfter,
+        )
+    }
 
     private val dataToolNames = setOf(
         "get_groups", "get_group", "get_teams", "get_team",

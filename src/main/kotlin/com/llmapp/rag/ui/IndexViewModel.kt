@@ -2,12 +2,15 @@ package com.llmapp.rag.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.llmapp.rag.RAGEnhancer
 import com.llmapp.rag.data.HuggingFaceEmbeddingService
 import com.llmapp.rag.data.JsonIndexRepository
 import com.llmapp.rag.data.WorldCupDocuments
 import com.llmapp.rag.domain.ChunkerFactory
 import com.llmapp.rag.domain.ChunkingStrategy
 import com.llmapp.rag.domain.IndexResult
+import com.llmapp.rag.RagMode
+import com.llmapp.rag.domain.RerankerType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +36,7 @@ class IndexViewModel(
     val actions: SharedFlow<IndexAction?> = _actions.asSharedFlow()
 
     private val documents = WorldCupDocuments.getAll()
+    private val enhancer = RAGEnhancer(repository = repository)
 
     fun obtainEvent(event: IndexEvent) {
         when (event) {
@@ -43,11 +47,47 @@ class IndexViewModel(
             is IndexEvent.ClearSearch -> clearSearch()
             is IndexEvent.ShowFixedIndex -> showIndex("fixed")
             is IndexEvent.ShowStructuralIndex -> showIndex("structural")
+            is IndexEvent.SetRagMode -> setRagMode(event.mode)
+            is IndexEvent.SetRerankerType -> setRerankerType(event.type)
+            is IndexEvent.SetThreshold -> setThreshold(event.threshold)
+            is IndexEvent.SetTopKBefore -> setTopKBefore(event.topK)
+            is IndexEvent.SetTopKAfter -> setTopKAfter(event.topK)
+            is IndexEvent.CompareModes -> compareModes()
+            is IndexEvent.ClearComparison -> clearComparison()
         }
     }
 
     private fun selectStrategy(strategy: ChunkingStrategy) {
         _state.value = _state.value.copy(currentStrategy = strategy, searchResults = emptyList())
+    }
+
+    private fun setRagMode(mode: RagMode) {
+        _state.value = _state.value.copy(ragMode = mode)
+        enhancer.mode = mode
+    }
+
+    private fun setRerankerType(type: RerankerType) {
+        val newConfig = _state.value.rerankerConfig.copy(type = type)
+        _state.value = _state.value.copy(rerankerConfig = newConfig)
+        enhancer.rerankerConfig = newConfig
+    }
+
+    private fun setThreshold(threshold: Float) {
+        val newConfig = _state.value.rerankerConfig.copy(similarityThreshold = threshold)
+        _state.value = _state.value.copy(rerankerConfig = newConfig)
+        enhancer.rerankerConfig = newConfig
+    }
+
+    private fun setTopKBefore(topK: Int) {
+        val newConfig = _state.value.rerankerConfig.copy(topKBefore = topK)
+        _state.value = _state.value.copy(rerankerConfig = newConfig)
+        enhancer.rerankerConfig = newConfig
+    }
+
+    private fun setTopKAfter(topK: Int) {
+        val newConfig = _state.value.rerankerConfig.copy(topKAfter = topK)
+        _state.value = _state.value.copy(rerankerConfig = newConfig)
+        enhancer.rerankerConfig = newConfig
     }
 
     private fun buildIndex() {
@@ -164,43 +204,14 @@ class IndexViewModel(
 
         viewModelScope.launch {
             try {
-                appendLog("Searching for: \"$query\"")
-                val queryEmbedding = embeddingService.embed(query)
-                val fixedResult = repository.loadIndexForStrategy("fixed")
-                val structuralResult = repository.loadIndexForStrategy("structural")
-
-                val fixedResults = fixedResult?.let { res ->
-                    res.chunks.mapNotNull { chunk ->
-                        chunk.embedding?.let { emb ->
-                            val score = repository.cosineSimilarity(queryEmbedding, emb)
-                            chunk to score
-                        }
-                    }.sortedByDescending { (_, s) -> s }.take(5).mapIndexed { i, (c, s) ->
-                        com.llmapp.rag.domain.SearchResult(chunk = c, score = s, rank = i + 1)
-                    }
-                } ?: emptyList()
-
-                val structuralResults = structuralResult?.let { res ->
-                    res.chunks.mapNotNull { chunk ->
-                        chunk.embedding?.let { emb ->
-                            val score = repository.cosineSimilarity(queryEmbedding, emb)
-                            chunk to score
-                        }
-                    }.sortedByDescending { (_, s) -> s }.take(5).mapIndexed { i, (c, s) ->
-                        com.llmapp.rag.domain.SearchResult(chunk = c, score = s, rank = i + 1)
-                    }
-                } ?: emptyList()
-
-                val combined = (fixedResults + structuralResults)
-                    .distinctBy { it.chunk.chunkId }
-                    .sortedByDescending { it.score }
-                    .take(10)
-
+                appendLog("Поиск [$ragModeLabel]: \"$query\"")
+                val ragContext = enhancer.search(query)
                 _state.value = _state.value.copy(
-                    searchResults = combined,
+                    searchResults = ragContext.chunks,
                     isSearching = false,
                 )
-                appendLog("Found ${combined.size} results")
+                val removed = ragContext.rerankerResult?.removedCount ?: 0
+                appendLog("Найдено ${ragContext.chunks.size} результатов${if (removed > 0) " (отсеяно $removed)" else ""}")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     isSearching = false,
@@ -208,6 +219,53 @@ class IndexViewModel(
                 )
             }
         }
+    }
+
+    private fun compareModes() {
+        val query = _state.value.searchQuery
+        if (query.isBlank()) return
+        _state.value = _state.value.copy(isComparing = true)
+
+        viewModelScope.launch {
+            try {
+                appendLog("Сравнение режимов для: \"$query\"")
+                val multi = enhancer.compareModes(query)
+
+                val result = RagComparisonResult(
+                    basicResults = multi.basic.chunks,
+                    basicTimeMs = multi.basic.searchTimeMs,
+                    basicChunksCount = multi.basic.chunks.size,
+                    filteredResults = multi.filtered?.chunks ?: emptyList(),
+                    filteredTimeMs = multi.filtered?.searchTimeMs ?: 0,
+                    filteredChunksCount = multi.filtered?.chunks?.size ?: 0,
+                    filteredRemoved = multi.filtered?.rerankerResult?.removedCount ?: 0,
+                    filteredThreshold = multi.filtered?.rerankerResult?.config?.similarityThreshold ?: 0f,
+                    rewriteFilterResults = multi.rewriteFilter?.chunks ?: emptyList(),
+                    rewriteFilterTimeMs = multi.rewriteFilter?.searchTimeMs ?: 0,
+                    rewriteFilterChunksCount = multi.rewriteFilter?.chunks?.size ?: 0,
+                    rewriteFilterRemoved = multi.rewriteFilter?.rerankerResult?.removedCount ?: 0,
+                    rewriteFilterThreshold = multi.rewriteFilter?.rerankerResult?.config?.similarityThreshold ?: 0f,
+                    originalQuery = query,
+                    rewrittenQuery = multi.rewriteFilter?.rewrittenQuery ?: query,
+                    totalComparisonTimeMs = multi.comparisonTimeMs,
+                )
+
+                _state.value = _state.value.copy(
+                    comparisonResult = result,
+                    isComparing = false,
+                )
+                appendLog("Сравнение завершено за ${multi.comparisonTimeMs}мс")
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isComparing = false,
+                    error = "Comparison failed: ${e.message}",
+                )
+            }
+        }
+    }
+
+    private fun clearComparison() {
+        _state.value = _state.value.copy(comparisonResult = null)
     }
 
     private fun clearSearch() {
@@ -235,4 +293,11 @@ class IndexViewModel(
         val current = _state.value.log
         _state.value = _state.value.copy(log = current + msg)
     }
+
+    private val ragModeLabel: String
+        get() = when (_state.value.ragMode) {
+            RagMode.BASIC -> "Базовый"
+            RagMode.FILTERED -> "Фильтр"
+            RagMode.REWRITE_FILTER -> "Rewrite+Фильтр"
+        }
 }

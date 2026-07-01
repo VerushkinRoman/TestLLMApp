@@ -340,7 +340,45 @@ class ChatViewModel : ViewModel() {
             }
 
             is ViewEvent.ToggleRagMode -> {
-                updateState { copy(ragModeEnabled = event.enabled) }
+                updateState { copy(ragEnabled = event.enabled) }
+                chatSession.configureRag(
+                    enabled = event.enabled,
+                    mode = _state.value.ragMode,
+                    rerankerType = _state.value.rerankerType,
+                    threshold = _state.value.similarityThreshold,
+                    topK = _state.value.topKBefore,
+                    topKBefore = _state.value.topKBefore,
+                    topKAfter = _state.value.topKAfter,
+                )
+            }
+
+            ViewEvent.ToggleRagSettings -> {
+                updateState { copy(ragSettingsExpanded = !_state.value.ragSettingsExpanded) }
+            }
+
+            is ViewEvent.SetRagMode -> {
+                updateState { copy(ragMode = event.mode) }
+                if (_state.value.ragEnabled) applyCurrentRagConfig()
+            }
+
+            is ViewEvent.SetRerankerType -> {
+                updateState { copy(rerankerType = event.type) }
+                if (_state.value.ragEnabled) applyCurrentRagConfig()
+            }
+
+            is ViewEvent.SetSimilarityThreshold -> {
+                updateState { copy(similarityThreshold = event.threshold) }
+                if (_state.value.ragEnabled) applyCurrentRagConfig()
+            }
+
+            is ViewEvent.SetTopKBefore -> {
+                updateState { copy(topKBefore = event.topK) }
+                if (_state.value.ragEnabled) applyCurrentRagConfig()
+            }
+
+            is ViewEvent.SetTopKAfter -> {
+                updateState { copy(topKAfter = event.topK) }
+                if (_state.value.ragEnabled) applyCurrentRagConfig()
             }
 
             is ViewEvent.ToggleCompression -> {
@@ -373,6 +411,7 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartTransitionDemo -> demoHandler.startTransitionDemo()
             is ViewEvent.StartRagDemo -> demoHandler.startRagDemo(event.query)
             ViewEvent.StartRagComparisonDemo -> demoHandler.startRagComparisonDemo()
+            ViewEvent.StartRagImprovedDemo -> demoHandler.startRagImprovedComparisonDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {
@@ -649,5 +688,18 @@ class ChatViewModel : ViewModel() {
     private fun addCollectorLog(msg: String) {
         val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
         updateState { copy(collectorLog = collectorLog + entry) }
+    }
+
+    private fun applyCurrentRagConfig() {
+        val s = _state.value
+        chatSession.configureRag(
+            enabled = s.ragEnabled,
+            mode = s.ragMode,
+            rerankerType = s.rerankerType,
+            threshold = s.similarityThreshold,
+            topK = s.topKBefore,
+            topKBefore = s.topKBefore,
+            topKAfter = s.topKAfter,
+        )
     }
 }

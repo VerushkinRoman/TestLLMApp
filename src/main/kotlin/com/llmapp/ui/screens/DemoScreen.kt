@@ -58,6 +58,7 @@ fun DemoScreen(
     onStartTransitionDemo: () -> Unit,
     onStartRagDemo: () -> Unit,
     onStartRagComparisonDemo: () -> Unit,
+    onStartRagImprovedDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -154,6 +155,15 @@ fun DemoScreen(
             features = listOf("10 вопросов", "Сравнение", "Оценка"),
             color = Color(0xFF2E7D32),
             onStart = onStartRagComparisonDemo
+        ),
+        DemoItem(
+            id = "rag_improved",
+            title = "🔬 RAG Улучшенный",
+            icon = Icons.Default.TravelExplore,
+            description = "Сравнение 3 режимов: базовый vs фильтр релевантности vs rewrite+фильтр. Демонстрация реранкера и query rewriting.",
+            features = listOf("3 режима", "Фильтрация", "Rewrite"),
+            color = Color(0xFF43A047),
+            onStart = onStartRagImprovedDemo
         ),
     )
 

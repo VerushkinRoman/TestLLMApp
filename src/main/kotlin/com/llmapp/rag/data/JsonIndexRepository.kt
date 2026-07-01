@@ -108,7 +108,7 @@ class JsonIndexRepository(
         }
     }
 
-    fun loadIndexForStrategy(strategyName: String): IndexResult? {
+    override suspend fun loadIndexForStrategy(strategyName: String): IndexResult? {
         val dir = File(indexDir)
         val file = File(dir, "index_${strategyName}.json")
         if (!file.exists()) return null
@@ -174,6 +174,12 @@ class JsonIndexRepository(
 
             else -> ChunkingStrategy.FixedSize()
         }
+    }
+
+    override fun isIndexAvailable(): Boolean {
+        val fixed = File(indexDir, "index_fixed.json")
+        val structural = File(indexDir, "index_structural.json")
+        return fixed.exists() || structural.exists()
     }
 
     private fun ChunkData.toChunk() = Chunk(

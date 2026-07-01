@@ -6,6 +6,8 @@ import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.UserProfile
 import com.llmapp.state.TaskPhase
+import com.llmapp.rag.RagMode
+import com.llmapp.rag.domain.RerankerType
 import com.llmapp.ui.components.MemorySettings
 import com.llmapp.ui.components.NamedProfile
 import com.llmapp.ui.models.ChatMessageUI
@@ -92,12 +94,19 @@ sealed class ViewEvent {
     object StartTransitionDemo : ViewEvent()
     data class StartRagDemo(val query: String) : ViewEvent()
     object StartRagComparisonDemo : ViewEvent()
+    object StartRagImprovedDemo : ViewEvent()
     object CancelDemo : ViewEvent()
 
     // ============================================================
     // RAG
     // ============================================================
     data class ToggleRagMode(val enabled: Boolean) : ViewEvent()
+    data object ToggleRagSettings : ViewEvent()
+    data class SetRagMode(val mode: RagMode) : ViewEvent()
+    data class SetRerankerType(val type: RerankerType) : ViewEvent()
+    data class SetSimilarityThreshold(val threshold: Float) : ViewEvent()
+    data class SetTopKBefore(val topK: Int) : ViewEvent()
+    data class SetTopKAfter(val topK: Int) : ViewEvent()
 
     // ============================================================
     // ИНВАРИАНТЫ

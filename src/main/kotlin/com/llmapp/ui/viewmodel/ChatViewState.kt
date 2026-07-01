@@ -10,6 +10,8 @@ import com.llmapp.model.ModelInfo
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
 import com.llmapp.model.freeModels
+import com.llmapp.rag.RagMode
+import com.llmapp.rag.domain.RerankerType
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
 
@@ -81,7 +83,13 @@ data class ChatViewState(
     val mcpLog: List<String> = emptyList(),
 
     // RAG
-    val ragModeEnabled: Boolean = false,
+    val ragEnabled: Boolean = false,
+    val ragMode: RagMode = RagMode.BASIC,
+    val rerankerType: RerankerType = RerankerType.SIMILARITY_THRESHOLD,
+    val similarityThreshold: Float = 0.3f,
+    val topKBefore: Int = 20,
+    val topKAfter: Int = 5,
+    val ragSettingsExpanded: Boolean = false,
 
     // Коллектор матчей
     val collectorRunning: Boolean = false,

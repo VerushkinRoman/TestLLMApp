@@ -109,6 +109,7 @@ class DemoHandler(
     fun startTransitionDemo() = demoManager?.startTransitionDemo()
     fun startRagDemo(query: String) = demoManager?.startRagDemo(query)
     fun startRagComparisonDemo() = demoManager?.startRagComparisonDemo()
+    fun startRagImprovedComparisonDemo() = demoManager?.startRagImprovedComparisonDemo()
     fun cancelDemo() = demoManager?.cancelDemo()
 
 }

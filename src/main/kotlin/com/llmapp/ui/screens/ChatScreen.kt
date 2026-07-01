@@ -4,15 +4,16 @@ package com.llmapp.ui.screens
 
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -22,8 +23,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +41,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.llmapp.rag.RagMode
+import com.llmapp.rag.domain.RerankerType
 import com.llmapp.state.TaskPhase
 import com.llmapp.ui.components.ChatTopBar
 import com.llmapp.ui.components.ConstraintsEditDialog
@@ -146,9 +152,21 @@ fun ChatScreen(
             useLongTerm = true
         )
 
-        RagModeBar(
-            enabled = viewState.ragModeEnabled,
-            onToggle = { onEvent(ViewEvent.ToggleRagMode(!viewState.ragModeEnabled)) }
+        RagSettingsPanel(
+            ragEnabled = viewState.ragEnabled,
+            ragMode = viewState.ragMode,
+            rerankerType = viewState.rerankerType,
+            similarityThreshold = viewState.similarityThreshold,
+            topKBefore = viewState.topKBefore,
+            topKAfter = viewState.topKAfter,
+            expanded = viewState.ragSettingsExpanded,
+            onToggle = { onEvent(ViewEvent.ToggleRagSettings) },
+            onToggleRag = { onEvent(ViewEvent.ToggleRagMode(it)) },
+            onSetRagMode = { onEvent(ViewEvent.SetRagMode(it)) },
+            onSetRerankerType = { onEvent(ViewEvent.SetRerankerType(it)) },
+            onSetThreshold = { onEvent(ViewEvent.SetSimilarityThreshold(it)) },
+            onSetTopKBefore = { onEvent(ViewEvent.SetTopKBefore(it)) },
+            onSetTopKAfter = { onEvent(ViewEvent.SetTopKAfter(it)) },
         )
 
         Row(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -337,51 +355,136 @@ fun MemoryLayerChip(
 }
 
 @Composable
-fun RagModeBar(
-    enabled: Boolean,
+fun RagSettingsPanel(
+    ragEnabled: Boolean,
+    ragMode: RagMode,
+    rerankerType: RerankerType,
+    similarityThreshold: Float,
+    topKBefore: Int,
+    topKAfter: Int,
+    expanded: Boolean,
     onToggle: () -> Unit,
+    onToggleRag: (Boolean) -> Unit,
+    onSetRagMode: (RagMode) -> Unit,
+    onSetRerankerType: (RerankerType) -> Unit,
+    onSetThreshold: (Float) -> Unit,
+    onSetTopKBefore: (Int) -> Unit,
+    onSetTopKAfter: (Int) -> Unit,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp)
-            .clickable(onClick = onToggle),
-        color = if (enabled)
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        color = if (ragEnabled)
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
         else
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(if (ragEnabled) "📚" else "📄", fontSize = 12.sp)
+                    Text(
+                        text = if (ragEnabled) "RAG: вкл" else "RAG: выкл",
+                        fontSize = 11.sp,
+                        color = if (ragEnabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = ragEnabled,
+                        onCheckedChange = onToggleRag,
+                        modifier = Modifier.height(20.dp)
+                    )
+                    Text(
+                        text = if (expanded) "▲" else "▼",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (expanded) {
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    if (enabled) "📚" else "📄",
-                    fontSize = 12.sp
+                    "Режим поиска:",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = if (enabled) "RAG: активен (поиск по базе знаний)" else "RAG: выключен",
-                    fontSize = 11.sp,
-                    color = if (enabled)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    RagMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = ragMode == mode,
+                            onClick = { onSetRagMode(mode) },
+                            label = { Text(mode.label, fontSize = 9.sp) },
+                            modifier = Modifier.height(26.dp)
+                        )
+                    }
+                }
+
+                if (ragMode != RagMode.BASIC) {
+                    Text(
+                        "Тип реранкера:",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        listOf(
+                            RerankerType.SIMILARITY_THRESHOLD,
+                            RerankerType.HEURISTIC
+                        ).forEach { type ->
+                            FilterChip(
+                                selected = rerankerType == type,
+                                onClick = { onSetRerankerType(type) },
+                                label = { Text(type.name, fontSize = 9.sp) },
+                                modifier = Modifier.height(26.dp)
+                            )
+                        }
+                    }
+
+                    Text("Порог сходства: ${"%.2f".format(similarityThreshold)}", fontSize = 10.sp)
+                    Slider(
+                        value = similarityThreshold,
+                        onValueChange = onSetThreshold,
+                        valueRange = 0f..0.9f,
+                        modifier = Modifier.height(20.dp)
+                    )
+
+                    Text("Top-K (до/базовый): $topKBefore", fontSize = 10.sp)
+                    Slider(
+                        value = topKBefore.toFloat(),
+                        onValueChange = { onSetTopKBefore(it.toInt()) },
+                        valueRange = 5f..50f,
+                        modifier = Modifier.height(20.dp)
+                    )
+                }
+
+                Text("Top-K после фильтрации: $topKAfter", fontSize = 10.sp)
+                Slider(
+                    value = topKAfter.toFloat(),
+                    onValueChange = { onSetTopKAfter(it.toInt()) },
+                    valueRange = 1f..20f,
+                    modifier = Modifier.height(20.dp)
                 )
             }
-            Text(
-                text = if (enabled) "🔛" else "🔘",
-                fontSize = 10.sp,
-                color = if (enabled)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
         }
     }
 }
