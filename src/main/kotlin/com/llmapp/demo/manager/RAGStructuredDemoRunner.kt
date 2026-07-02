@@ -8,6 +8,7 @@ import com.llmapp.rag.domain.RerankerConfig
 import com.llmapp.rag.domain.RerankerType
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration.Companion.seconds
 
 private data class StructuredTestQuestion(
@@ -146,7 +147,12 @@ class RAGStructuredDemoRunner(
             appendLine("1. Отвечай ТОЛЬКО на русском языке")
             appendLine("2. Используй ТОЛЬКО факты из контекста выше — НЕ придумывай ничего")
             appendLine("3. ОБЯЗАТЕЛЬНО указывай источники в тексте ответа в формате [1], [2], [3]...")
-            appendLine("4. Используй цитаты из раздела ЦИТАТЫ для подтверждения важных фактов")
+            appendLine("4. Если в контексте есть ответ:")
+            appendLine("   — Сначала напиши краткий ответ с inline-ссылками на источники [1], [2]...")
+            appendLine("   — Затем на новой строке напиши «**Источники:**»")
+            appendLine("   — После этого для каждого фрагмента, который ты использовал, добавь:")
+            appendLine("     «> **Фрагмент N** (название источника / раздел): текст цитаты»")
+            appendLine("   — Используй ТОЛЬКО цитаты из раздела ЦИТАТЫ выше, не придумывай свои")
             appendLine("5. Если в контексте НЕТ ответа на вопрос — напиши ровно: \"В предоставленном контексте нет информации об этом. Уточните вопрос или задайте другой.\"")
             appendLine("6. НЕ пиши вводные фразы вроде \"Получил контекст, чем могу помочь\" — отвечай сразу по существу")
             appendLine()
@@ -254,96 +260,62 @@ class RAGStructuredDemoRunner(
 
             val ragAnswer = enhancer.searchWithStructuredContext(question.question, threshold)
 
-            // Определяем ожидаемое поведение
-            val expectedBehavior = question.expectedBehavior
-
-            // Check if RAG returned "don't know" (isUnknown)
-            if (ragAnswer.isUnknown) {
-                val isCorrectBehavior = when (expectedBehavior) {
-                    ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> true   // ожидаемо не знаем
-                    ExpectedBehavior.NO_CONTEXT -> true              // ожидаемо нет контекста
-                    ExpectedBehavior.SHOULD_ANSWER -> false          // а вот тут должно было найти!
-                }
-
-                val result = QuestionResult(
-                    questionId = question.id,
-                    question = question.question,
-                    answer = ragAnswer.iDontKnowMessage ?: "Я не знаю",
-                    sources = emptyList(),
-                    quotes = emptyList(),
-                    isUnknown = true,
-                    unknownReason = ragAnswer.unknownReason,
-                    topScore = ragAnswer.chunks.firstOrNull()?.score,
-                    chunksFound = ragAnswer.chunks.size,
-                    responseTimeMs = 0,
-                    passed = isCorrectBehavior,
-                    expectedBehavior = expectedBehavior,
-                )
-                results.add(result)
-
-                val statusIcon = if (isCorrectBehavior) "✅" else "❌"
-                val behaviorText = when (expectedBehavior) {
-                    ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> "ОЖИДАЕМО: низкая релевантность"
-                    ExpectedBehavior.NO_CONTEXT -> "ОЖИДАЕМО: нет контекста"
-                    ExpectedBehavior.SHOULD_ANSWER -> "ОШИБКА: должно было найти ответ!"
-                }
-
-                addMessage(
-                    "assistant",
-                    buildString {
-                        appendLine("$statusIcon **Режим 'НЕ ЗНАЮ' активирован**")
-                        appendLine("Причина: ${ragAnswer.unknownReason}")
-                        appendLine()
-                        appendLine("**Ожидаемое поведение:** $behaviorText")
-                        appendLine()
-                        appendLine("**Ответ системы:**")
-                        appendLine(ragAnswer.iDontKnowMessage ?: "Я не нашёл информации")
-                        appendLine()
-                        if (isCorrectBehavior) {
-                            appendLine("✅ **Правильное поведение** — система честно признала, что не может ответить")
-                        } else {
-                            appendLine("❌ **Проблема** — система должна была найти релевантный контент!")
-                        }
-                    },
-                    metadata = "Вопрос ${question.id} — ${if (isCorrectBehavior) "НЕ ЗНАЮ (верно)" else "НЕ ЗНАЮ (ошибка)"}"
-                )
-                delay(4.seconds)
-                continue
-            }
-
-            // RAG нашел чанки (isUnknown = false), но проверяем поведение
-            val isCorrectBehavior = when (expectedBehavior) {
-                ExpectedBehavior.SHOULD_ANSWER -> true  // нашли контент — отлично!
-                ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> false  // нашли, но должны были сказать "не знаю"
-                ExpectedBehavior.NO_CONTEXT -> false  // нашли, но контекст не по теме
-            }
-
-            // We have relevant chunks, now ask LLM to generate answer
-            val client = ClientFactory.create(apiKey)
+            // Ask LLM to generate answer from RAG context
             val structuredPrompt = buildStructuredPrompt(question.question, ragAnswer)
-            val request = RouterRequest(
-                model = testModel,
-                messages = listOf(
-                    ChatMessage("system", systemPrompt),
-                    ChatMessage("user", structuredPrompt),
-                ),
-                maxTokens = 500,
-                temperature = 0.3,
-            )
+            val modelsToTry = modelsByPower.drop(modelsByPower.indexOf(testModel))
 
-            val responseStart = System.currentTimeMillis()
-            val response = client.sendRequest(request)
-            val responseTimeMs = System.currentTimeMillis() - responseStart
+            var llmAnswer = ""
+            var responseTimeMs = 0L
 
-            var llmAnswer =
-                response.choices?.firstOrNull()?.message?.content?.trim() ?: "Ошибка: пустой ответ"
-            response.error?.let { llmAnswer = "Ошибка API: ${it.message}" }
+            for (model in modelsToTry) {
+                val client = ClientFactory.create(apiKey)
+                val request = RouterRequest(
+                    model = model,
+                    messages = listOf(
+                        ChatMessage("system", systemPrompt),
+                        ChatMessage("user", structuredPrompt),
+                    ),
+                    maxTokens = 2048,
+                    temperature = 0.3,
+                )
+
+                val responseStart = System.currentTimeMillis()
+                try {
+                    val response = withTimeout(120.seconds) {
+                        client.sendRequest(request)
+                    }
+                    responseTimeMs = System.currentTimeMillis() - responseStart
+
+                    llmAnswer = response.choices?.firstOrNull()?.message?.content?.trim()
+                        ?: "Ошибка: пустой ответ"
+                    response.error?.let { llmAnswer = "Ошибка API: ${it.message}" }
+                } catch (e: Exception) {
+                    responseTimeMs = System.currentTimeMillis() - responseStart
+                    llmAnswer = "Ошибка: ${e.message}"
+                }
+
+                if (!isGarbageResponse(llmAnswer)) {
+                    if (model != currentModel) {
+                        currentModel = model
+                        modelFallbackIndex = modelsByPower.indexOf(model).coerceAtLeast(0)
+                    }
+                    break
+                }
+                println("📊 ДЕМО RAG Structured:   ⚠️ Модель $model вернула мусор, пробую следующую...")
+            }
 
             // Validate: check if answer contains sources [1], [2] and has quotes
             val hasSourceRefs = Regex("\\[\\d+]").containsMatchIn(llmAnswer)
             val hasKeywords = question.expectedKeywords.any { keyword ->
                 llmAnswer.contains(keyword, ignoreCase = true)
             }
+
+            // Detect if LLM said "don't know" — no source refs and a refusal phrase
+            val isIDontKnow = !hasSourceRefs && (
+                    llmAnswer.contains("не знаю", ignoreCase = true)
+                            || llmAnswer.contains("нет информации", ignoreCase = true)
+                            || llmAnswer.contains("не может", ignoreCase = true)
+                    )
 
             val sourceStrings = ragAnswer.sources.map {
                 "[${ragAnswer.sources.indexOf(it) + 1}] ${it.title} — ${it.section} (score: ${
@@ -364,9 +336,9 @@ class RAGStructuredDemoRunner(
 
             // Определяем passed на основе expectedBehavior
             val passed = when (question.expectedBehavior) {
-                ExpectedBehavior.SHOULD_ANSWER -> hasSourceRefs && hasKeywords  // Должен ответить с источниками и ключевыми словами
-                ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> false  // Нашел контент, но должен был сказать "не знаю" — это провал
-                ExpectedBehavior.NO_CONTEXT -> false  // Нашел контент, но не по теме — провал
+                ExpectedBehavior.SHOULD_ANSWER -> hasSourceRefs && hasKeywords
+                ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> isIDontKnow
+                ExpectedBehavior.NO_CONTEXT -> isIDontKnow
             }
 
             val result = QuestionResult(
@@ -377,8 +349,8 @@ class RAGStructuredDemoRunner(
                 quotes = usedQuotes,    // Only quotes actually used
                 isUnknown = false,
                 unknownReason = null,
-                topScore = ragAnswer.chunks.firstOrNull()?.score,
-                chunksFound = ragAnswer.chunks.size,
+                topScore = ragAnswer.topScore,
+                chunksFound = ragAnswer.totalChunks,
                 responseTimeMs = responseTimeMs,
                 passed = passed,
                 expectedBehavior = question.expectedBehavior,
@@ -401,31 +373,25 @@ class RAGStructuredDemoRunner(
                         }"
                     )
                     appendLine()
-                    appendLine("**Использованные источники (${usedSources.size} из ${sourceStrings.size}):**")
-                    if (usedSources.isNotEmpty()) {
-                        usedSources.forEach { appendLine("  $it") }
-                    } else {
-                        appendLine("  (модель не сослалась ни на один источник)")
-                    }
-                    appendLine()
-                    appendLine("**Использованные цитаты (${usedQuotes.size}):**")
-                    if (usedQuotes.isNotEmpty()) {
-                        usedQuotes.forEach { appendLine("  $it") }
-                    } else {
-                        appendLine("  (модель не использовала цитаты)")
-                    }
-                    appendLine()
                     appendLine("**Проверка качества:**")
-                    appendLine("• Ссылки на источники [1], [2]...: ${if (hasSourceRefs) "✅ ЕСТЬ" else "❌ НЕТ"}")
-                    appendLine(
-                        "• Ожидаемые ключевые слова: ${if (hasKeywords) "✅ ЕСТЬ" else "❌ НЕТ"} (${
-                            question.expectedKeywords.joinToString(
-                                ", "
-                            )
-                        })"
-                    )
+                    if (question.expectedBehavior == ExpectedBehavior.SHOULD_ANSWER) {
+                        appendLine("• Ссылки на источники [1], [2]...: ${if (hasSourceRefs) "✅ ЕСТЬ" else "❌ НЕТ"}")
+                        appendLine(
+                            "• Ожидаемые ключевые слова: ${if (hasKeywords) "✅ ЕСТЬ" else "❌ НЕТ"} (${
+                                question.expectedKeywords.joinToString(", ")
+                            })"
+                        )
+                    } else {
+                        appendLine("• Сказал 'не знаю': ${if (isIDontKnow) "✅ ДА" else "❌ НЕТ, ответил без контекста"}")
+                    }
                     appendLine("• Топ score: ${"%.3f".format(result.topScore ?: 0f)}")
-                    appendLine("• Чанков найдено: ${result.chunksFound}")
+                    val afterFilter = ragAnswer.chunks.size
+                    val beforeFilter = ragAnswer.totalChunks
+                    if (afterFilter < beforeFilter) {
+                        appendLine("• Чанков найдено: $beforeFilter всего, $afterFilter после фильтрации")
+                    } else {
+                        appendLine("• Чанков найдено: $beforeFilter")
+                    }
                     appendLine("• Время ответа: ${result.responseTimeMs}мс")
                     appendLine("• **Итог: ${if (result.passed) "✅ ПРОЙДЕН" else "❌ НЕ ПРОЙДЕН"}**")
                 },
@@ -445,12 +411,9 @@ class RAGStructuredDemoRunner(
     ) {
         val total = results.size
         val passed = results.count { it.passed }
-        val unknownCount = results.count { it.isUnknown }
         val avgTime = results.map { it.responseTimeMs }.average().toLong()
-        val avgScore =
-            results.filter { !it.isUnknown }.map { it.topScore?.toDouble() ?: 0.0 }.average()
+        val avgScore = results.map { it.topScore?.toDouble() ?: 0.0 }.average()
 
-        // Breakdown by expected behavior
         val shouldAnswer = results.filter { it.expectedBehavior == ExpectedBehavior.SHOULD_ANSWER }
         val shouldSayIdontknow =
             results.filter { it.expectedBehavior == ExpectedBehavior.SHOULD_SAY_IDONTKNOW }
@@ -470,7 +433,6 @@ class RAGStructuredDemoRunner(
             appendLine("|---|---|")
             appendLine("| Всего вопросов | $total |")
             appendLine("| Пройдено (всего) | **$passed** (${"%.0f".format(passed.toDouble() / total * 100)}%) |")
-            appendLine("| Режим 'не знаю' (корректный) | $unknownCount |")
             appendLine("| Средний топ score | ${"%.3f".format(avgScore)} |")
             appendLine("| Среднее время ответа | ${avgTime}мс |")
             appendLine("| Модель | $model |")
@@ -504,8 +466,8 @@ class RAGStructuredDemoRunner(
             appendLine()
             appendLine("**Детализация по вопросам:**")
             appendLine()
-            appendLine("| # | Вопрос | Статус | Score | Источники | Ключевые слова | Категория |")
-            appendLine("|---|---|---|---|---|---|---|")
+            appendLine("| # | Вопрос | Статус | Score | Категория |")
+            appendLine("|---|---|---|---|---|")
             results.forEach { r ->
                 val shortQ = if (r.question.length > 50) r.question.take(50) + "..." else r.question
                 val catIcon = when (r.expectedBehavior) {
@@ -514,11 +476,9 @@ class RAGStructuredDemoRunner(
                     ExpectedBehavior.NO_CONTEXT -> "🚫"
                 }
                 appendLine(
-                    "| ${r.questionId} | $shortQ | ${if (r.passed) "✅" else if (r.isUnknown) "⚠️ не знаю" else "❌"} | ${
-                        "%.3f".format(
-                            r.topScore ?: 0f
-                        )
-                    } | ${r.sources.size} | ${if (r.passed) "✅" else "❌"} | $catIcon |"
+                    "| ${r.questionId} | $shortQ | ${if (r.passed) "✅" else "❌"} | ${
+                        "%.3f".format(r.topScore ?: 0f)
+                    } | $catIcon |"
                 )
             }
             appendLine()
@@ -531,13 +491,23 @@ class RAGStructuredDemoRunner(
             } else {
                 appendLine("❌ **Система требует доработки** — только ${"%.0f".format(passed.toDouble() / total * 100)}% прошли проверку")
             }
-            appendLine()
-            appendLine("🔑 **Ключевые фичи демонстрируются:**")
-            appendLine("• Обязательные источники в формате [1], [2] в тексте ответа")
-            appendLine("• Обязательные цитаты из найденных чанков")
-            appendLine("• Режим 'не знаю' при релевантности ниже порога $threshold")
-            appendLine("• Проверка качества: наличие ссылок + ключевых слов")
-            appendLine("• Правильное определение отсутствия контекста (off-topic вопросы)")
         }, metadata = "ИТОГИ")
+    }
+
+    private fun isGarbageResponse(response: String): Boolean {
+        val trimmed = response.trim()
+        if (trimmed.isEmpty()) return true
+        if (trimmed.startsWith("Ошибка")) return true
+        if (trimmed.contains("<unk>")) return true
+
+        // Binary garbage: too many control characters
+        val controlChars = trimmed.count { it.code in 1..31 || it.code in 127..159 }
+        if (controlChars > 5) return true
+
+        // Garbled text: less than 30% alphabetic characters
+        val letterCount = trimmed.count { it.isLetter() }
+        if (letterCount < trimmed.length * 0.3) return true
+
+        return false
     }
 }

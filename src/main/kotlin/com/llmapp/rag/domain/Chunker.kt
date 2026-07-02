@@ -18,7 +18,8 @@ class FixedSizeChunker : Chunker {
             val end = minOf(start + config.chunkSize, text.length)
             val content = text.substring(start, end)
 
-            val sectionName = findSectionForOffset(document.sections, start)
+            val midPoint = (start + end) / 2
+            val sectionName = findSectionForOffset(document.sections, document.content, midPoint)
 
             chunks.add(
                 Chunk(
@@ -41,13 +42,48 @@ class FixedSizeChunker : Chunker {
         return chunks
     }
 
-    private fun findSectionForOffset(sections: List<Section>, offset: Int): String {
-        var cumulative = 0
+    private fun findSectionForOffset(sections: List<Section>, content: String, offset: Int): String {
+        if (sections.isEmpty()) return "main"
+
+        // Find positions of all section headings in the document content
+        // to determine actual section boundaries
+        data class Boundary(val heading: String, val position: Int)
+        val foundBoundaries = mutableListOf<Boundary>()
+
         for (section in sections) {
-            cumulative += section.content.length
-            if (offset < cumulative) return section.heading
+            val headingInContent = "\n${section.heading}\n"
+            val idx = content.indexOf(headingInContent)
+            if (idx >= 0) {
+                foundBoundaries.add(Boundary(section.heading, idx))
+            }
         }
-        return sections.lastOrNull()?.heading ?: "main"
+
+        // For sections not found in content (e.g., "Плей-офф" which spans
+        // "1/8 финала и четвертьфинал" + "Полуфинал против Хорватии" in content),
+        // estimate their position by interpolating between found boundaries
+        if (foundBoundaries.isNotEmpty()) {
+            foundBoundaries.sortBy { it.position }
+
+            // Before first heading → belongs to intro/main section
+            if (offset < foundBoundaries.first().position) {
+                return "main"
+            }
+
+            // Find the nearest preceding boundary
+            var result = foundBoundaries.first().heading
+            for (b in foundBoundaries) {
+                if (b.position <= offset) result = b.heading
+            }
+            return result
+        }
+
+        // If no headings found at all, fall back to the old behavior but use a
+        // more reasonable estimate based on content length distribution
+        if (sections.size == 1) return sections.first().heading
+
+        val avgSectionLength = content.length / sections.size
+        val estimatedSection = (offset / avgSectionLength).coerceAtMost(sections.size - 1)
+        return sections[estimatedSection].heading
     }
 }
 

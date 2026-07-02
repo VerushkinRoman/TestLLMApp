@@ -57,7 +57,7 @@ class HeuristicReranker : Reranker {
             val sectionBonus = if (queryTerms.any { it in sectionLower }) 0.1f else 0f
             val keywordRatio = if (queryTerms.isNotEmpty()) keywordOverlap.toFloat() / queryTerms.size else 0f
             val keywordScore = keywordRatio * 0.3f
-            val heuristicScore = r.score + keywordScore + titleBonus + sectionBonus
+            val heuristicScore = minOf(r.score + keywordScore + titleBonus + sectionBonus, 1.0f)
             r to heuristicScore
         }
         val filtered = scored

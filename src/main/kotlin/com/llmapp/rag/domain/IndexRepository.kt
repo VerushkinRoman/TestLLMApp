@@ -35,6 +35,8 @@ data class RagAnswer(
     val chunks: List<SearchResult> = emptyList(),
     val isUnknown: Boolean = false,
     val unknownReason: String? = null,
+    val topScore: Float = 0f,
+    val totalChunks: Int = 0,
 ) {
     val shouldSayIdontKnow: Boolean
         get() = isUnknown

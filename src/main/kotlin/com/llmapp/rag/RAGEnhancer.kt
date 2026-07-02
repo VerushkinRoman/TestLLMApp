@@ -250,50 +250,22 @@ class RAGEnhancer(
 
     suspend fun searchWithStructuredContext(
         query: String,
-        minRelevanceThreshold: Float = 0.85f,
+        minRelevanceThreshold: Float? = null,
     ): RagAnswer {
         ensureIndexLoaded()
         val rag = searchInternal(query, mode)
 
-        // Check if we have relevant chunks
-        if (rag.chunks.isEmpty()) {
-            return RagAnswer(
-                answer = "Не знаю. В базе знаний нет информации по этому вопросу.",
-                sources = emptyList(),
-                quotes = emptyList(),
-                isUnknown = true,
-                unknownReason = "Ни один чанк не найден в индексе",
-            )
-        }
+        // Prepare query terms for quote extraction
+        val rawTerms = query.lowercase().split("\\s+".toRegex())
+        val queryTerms = rawTerms.map { term ->
+            term.trimStart('(').trimEnd(',', ')', '.', '!', '?', ':', ';', '"', '\'', '«', '»')
+        }.filter { term ->
+            term.length > 2 && term.any { it.isLetter() }
+        }.toSet()
 
-        // Check relevance threshold
-        val topScore = rag.chunks.firstOrNull()?.score ?: 0f
-        if (topScore < minRelevanceThreshold) {
-            return RagAnswer(
-                answer = "Не знаю. Релевантность найденных фрагментов слишком низкая (топ score: ${
-                    "%.3f".format(
-                        topScore
-                    )
-                }, порог: ${"%.2f".format(minRelevanceThreshold)}). Пожалуйста, уточните вопрос.",
-                sources = emptyList(),
-                quotes = emptyList(),
-                isUnknown = true,
-                unknownReason = "Топ score ${"%.3f".format(topScore)} ниже порога ${
-                    "%.2f".format(
-                        minRelevanceThreshold
-                    )
-                }",
-            )
-        }
-
-        // Extract sources and quotes from relevant chunks
+        // Extract sources and quotes from chunks
         val sources = mutableListOf<SourceInfo>()
         val quotes = mutableListOf<Quote>()
-
-        // Prepare query terms for quote extraction
-        val queryTerms = query.lowercase().split("\\s+".toRegex())
-            .filter { it.length > 2 }
-            .toSet()
 
         for (result in rag.chunks) {
             val sourceInfo = SourceInfo(
@@ -305,25 +277,57 @@ class RAGEnhancer(
             )
             sources.add(sourceInfo)
 
-            // Extract a relevant quote - find sentences containing query terms
             val content = result.chunk.content
-            val sentences = content.split("\\.\\s+".toRegex()).filter { it.length > 20 }
+
+            val rawSentences = content.split("""\.\s+|\n+""".toRegex())
+            val sentences = rawSentences
+                .map { it.trim() }
+                .filter {
+                    it.length > 35
+                    && it.firstOrNull()?.isUpperCase() == true
+                }
+
             val relevantSentences = sentences.filter { sent ->
                 val sentLower = sent.lowercase()
                 queryTerms.any { term -> term in sentLower }
             }
+
             val quoteText = if (relevantSentences.isNotEmpty()) {
-                relevantSentences.take(3).joinToString(". ") + "."
-            } else if (content.length > 300) {
-                content.take(300) + "..."
+                val ranked = relevantSentences.sortedByDescending { sent ->
+                    val sentLower = sent.lowercase()
+                    queryTerms.count { term -> term in sentLower }
+                }
+                ranked.take(2).joinToString(". ") + "."
             } else {
-                content
+                val cleanContent = content.lines().let { lines ->
+                    if (lines.size > 1 && lines[0].length < 40 && '.' !in lines[0]) {
+                        lines.drop(1).joinToString("\n").trim()
+                    } else null
+                } ?: content
+                if (cleanContent.length > 300) cleanContent.take(300) + "..." else cleanContent
             }
             quotes.add(Quote(text = quoteText, source = sourceInfo))
         }
 
+        // Check relevance threshold – include a warning instead of returning "don't know"
+        val effectiveThreshold = minRelevanceThreshold ?: rerankerConfig.similarityThreshold
+
+        // Use top score from reranked chunks, or fall back to original search results
+        val topScore = if (rag.chunks.isNotEmpty()) {
+            rag.chunks.maxOf { it.score }
+        } else {
+            rag.rerankerResult?.originalResults?.maxOfOrNull { it.score } ?: 0f
+        }
+
+        val thresholdNote = if (rag.chunks.isNotEmpty() && topScore < effectiveThreshold) {
+            "⚠️ Релевантность найденных фрагментов ниже порога (топ score: ${"%.3f".format(topScore)}, порог: ${"%.2f".format(effectiveThreshold)}). Контекст может не содержать точного ответа.\n\n"
+        } else ""
+
         // Build structured context for LLM
-        val context = buildString {
+        val context = if (rag.chunks.isEmpty()) {
+            "Контекст из базы знаний пуст — по запросу не найдено релевантных фрагментов (лучший score: ${"%.3f".format(topScore)}).\nВсего результатов до фильтрации: ${rag.rerankerResult?.originalResults?.size ?: 0}."
+        } else buildString {
+            append(thresholdNote)
             appendLine("Контекст из базы знаний:")
             appendLine()
             for ((i, r) in rag.chunks.withIndex()) {
@@ -337,11 +341,13 @@ class RAGEnhancer(
         }
 
         return RagAnswer(
-            answer = context, // This will be used as context for LLM
+            answer = context,
             sources = sources,
             quotes = quotes,
             chunks = rag.chunks,
             isUnknown = false,
+            topScore = topScore,
+            totalChunks = rag.rerankerResult?.originalResults?.size ?: rag.chunks.size,
         )
     }
 
