@@ -8,7 +8,7 @@ import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
-data class TestQuestion(
+private data class ComparisonTestQuestion(
     val id: Int,
     val question: String,
     val expectedAnswer: String,
@@ -16,7 +16,7 @@ data class TestQuestion(
 )
 
 private val testQuestions = listOf(
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 1,
         question = "Кто выиграл финал чемпионата мира 2022 года и с каким счётом?",
         expectedAnswer = "Аргентина выиграла у Франции в серии пенальти (4:2) после счёта 3:3 в основное время",
@@ -25,25 +25,25 @@ private val testQuestions = listOf(
             "Легендарные моменты чемпионатов мира"
         ),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 2,
         question = "Какие страны будут принимать чемпионат мира 2026 года?",
         expectedAnswer = "США, Канада и Мексика — три страны-хозяйки",
         expectedSources = listOf("Чемпионат мира 2026: Города, формат и превью"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 3,
         question = "Сколько голов забил Мирослав Клозе на чемпионатах мира?",
         expectedAnswer = "16 голов — рекорд в истории чемпионатов мира",
         expectedSources = listOf("Рекорды и статистика чемпионатов мира"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 4,
         question = "Что такое «Мараканасо»?",
         expectedAnswer = "Поражение Бразилии от Уругвая 1:2 на домашнем стадионе Маракана в финале ЧМ-1950",
         expectedSources = listOf("Легендарные моменты чемпионатов мира"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 5,
         question = "Кто забил «гол столетия» и в каком году?",
         expectedAnswer = "Диего Марадона в 1986 году в четвертьфинале против Англии",
@@ -52,19 +52,19 @@ private val testQuestions = listOf(
             "Величайшие игроки в истории чемпионатов мира"
         ),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 6,
         question = "Какая африканская сборная первой вышла в полуфинал чемпионата мира?",
         expectedAnswer = "Марокко в 2022 году",
         expectedSources = listOf("Достижения африканских сборных на чемпионатах мира"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 7,
         question = "Какой формат будет у чемпионата мира 2026 года?",
         expectedAnswer = "48 команд, 16 групп по 3 команды, 104 матча",
         expectedSources = listOf("Чемпионат мира 2026: Города, формат и превью"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 8,
         question = "Кто является рекордсменом по количеству матчей на чемпионатах мира?",
         expectedAnswer = "Лионель Месси — 26 матчей на пяти турнирах",
@@ -73,13 +73,13 @@ private val testQuestions = listOf(
             "Величайшие игроки в истории чемпионатов мира"
         ),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 9,
         question = "Какая команда выиграла женский чемпионат мира в 2023 году?",
         expectedAnswer = "Испания, победив Англию 1:0 в финале",
         expectedSources = listOf("Женский чемпионат мира по футболу"),
     ),
-    TestQuestion(
+    ComparisonTestQuestion(
         id = 10,
         question = "Когда впервые применили VAR на чемпионатах мира и на сколько повысилась точность решений?",
         expectedAnswer = "Впервые VAR применили на ЧМ-2018 в России, точность решений выросла с 95% до 99,3%",
@@ -258,7 +258,7 @@ class RAGComparisonDemoRunner(
         delay(2.seconds)
     }
 
-    private suspend fun runWithoutRag(question: TestQuestion, testModel: String) {
+    private suspend fun runWithoutRag(question: ComparisonTestQuestion, testModel: String) {
         val start = System.currentTimeMillis()
         addMessage(
             "assistant",
@@ -292,7 +292,7 @@ class RAGComparisonDemoRunner(
     }
 
     private suspend fun runWithRag(
-        question: TestQuestion,
+        question: ComparisonTestQuestion,
         enhancer: RAGEnhancer,
         testModel: String
     ) {

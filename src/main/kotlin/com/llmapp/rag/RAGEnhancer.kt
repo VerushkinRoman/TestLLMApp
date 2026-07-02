@@ -8,12 +8,15 @@ import com.llmapp.rag.domain.ChunkingStrategy
 import com.llmapp.rag.domain.IndexRepository
 import com.llmapp.rag.domain.IndexResult
 import com.llmapp.rag.domain.QueryRewriter
+import com.llmapp.rag.domain.Quote
+import com.llmapp.rag.domain.RagAnswer
 import com.llmapp.rag.domain.Reranker
 import com.llmapp.rag.domain.RerankerConfig
 import com.llmapp.rag.domain.RerankerResult
 import com.llmapp.rag.domain.RerankerType
 import com.llmapp.rag.domain.SearchResult
 import com.llmapp.rag.domain.SimpleQueryRewriter
+import com.llmapp.rag.domain.SourceInfo
 import com.llmapp.rag.domain.SwitchingReranker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -245,22 +248,101 @@ class RAGEnhancer(
         )
     }
 
-    suspend fun searchWithContext(query: String): String {
+    suspend fun searchWithStructuredContext(
+        query: String,
+        minRelevanceThreshold: Float = 0.85f,
+    ): RagAnswer {
         ensureIndexLoaded()
         val rag = searchInternal(query, mode)
-        if (rag.chunks.isEmpty()) return query
 
-        return buildString {
-            appendLine("Ответь на вопрос пользователя, используя информацию из предоставленного контекста.")
-            appendLine("Если в контексте нет ответа — ответь на основе своих знаний, но укажи это.")
-            appendLine()
-            appendLine(rag.combinedContext)
-            appendLine("=== КОНЕЦ КОНТЕКСТА ===")
-            appendLine()
-            appendLine("Вопрос: ${rag.rewrittenQuery ?: query}")
-            appendLine()
-            appendLine("Ответь на русском языке, используя факты из контекста. Укажи источник информации.")
+        // Check if we have relevant chunks
+        if (rag.chunks.isEmpty()) {
+            return RagAnswer(
+                answer = "Не знаю. В базе знаний нет информации по этому вопросу.",
+                sources = emptyList(),
+                quotes = emptyList(),
+                isUnknown = true,
+                unknownReason = "Ни один чанк не найден в индексе",
+            )
         }
+
+        // Check relevance threshold
+        val topScore = rag.chunks.firstOrNull()?.score ?: 0f
+        if (topScore < minRelevanceThreshold) {
+            return RagAnswer(
+                answer = "Не знаю. Релевантность найденных фрагментов слишком низкая (топ score: ${
+                    "%.3f".format(
+                        topScore
+                    )
+                }, порог: ${"%.2f".format(minRelevanceThreshold)}). Пожалуйста, уточните вопрос.",
+                sources = emptyList(),
+                quotes = emptyList(),
+                isUnknown = true,
+                unknownReason = "Топ score ${"%.3f".format(topScore)} ниже порога ${
+                    "%.2f".format(
+                        minRelevanceThreshold
+                    )
+                }",
+            )
+        }
+
+        // Extract sources and quotes from relevant chunks
+        val sources = mutableListOf<SourceInfo>()
+        val quotes = mutableListOf<Quote>()
+
+        // Prepare query terms for quote extraction
+        val queryTerms = query.lowercase().split("\\s+".toRegex())
+            .filter { it.length > 2 }
+            .toSet()
+
+        for (result in rag.chunks) {
+            val sourceInfo = SourceInfo(
+                source = result.chunk.source,
+                title = result.chunk.title,
+                section = result.chunk.section,
+                chunkId = result.chunk.chunkId,
+                score = result.score,
+            )
+            sources.add(sourceInfo)
+
+            // Extract a relevant quote - find sentences containing query terms
+            val content = result.chunk.content
+            val sentences = content.split("\\.\\s+".toRegex()).filter { it.length > 20 }
+            val relevantSentences = sentences.filter { sent ->
+                val sentLower = sent.lowercase()
+                queryTerms.any { term -> term in sentLower }
+            }
+            val quoteText = if (relevantSentences.isNotEmpty()) {
+                relevantSentences.take(3).joinToString(". ") + "."
+            } else if (content.length > 300) {
+                content.take(300) + "..."
+            } else {
+                content
+            }
+            quotes.add(Quote(text = quoteText, source = sourceInfo))
+        }
+
+        // Build structured context for LLM
+        val context = buildString {
+            appendLine("Контекст из базы знаний:")
+            appendLine()
+            for ((i, r) in rag.chunks.withIndex()) {
+                appendLine("--- Источник ${i + 1} (релевантность: ${"%.3f".format(r.score)}) ---")
+                appendLine("Документ: ${r.chunk.title}")
+                appendLine("Раздел: ${r.chunk.section}")
+                appendLine("ID чанка: ${r.chunk.chunkId}")
+                appendLine(r.chunk.content.take(1500))
+                appendLine()
+            }
+        }
+
+        return RagAnswer(
+            answer = context, // This will be used as context for LLM
+            sources = sources,
+            quotes = quotes,
+            chunks = rag.chunks,
+            isUnknown = false,
+        )
     }
 
     private fun log(msg: String) {

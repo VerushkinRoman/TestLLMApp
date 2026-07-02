@@ -13,6 +13,7 @@ import com.llmapp.model.ResponseControl
 import com.llmapp.model.RouterRequest
 import com.llmapp.model.TokenStats
 import com.llmapp.rag.RAGEnhancer
+import com.llmapp.rag.domain.RagAnswer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -267,10 +268,21 @@ class ChatSession(
         if (ragEnabled && !mcpConnected) {
             try {
                 ragEnhancer.ensureIndexLoaded()
-                val ragPrompt = ragEnhancer.searchWithContext(userPrompt)
-                if (userPrompt != ragPrompt) {
-                    log("📚 RAG: Промт обогащён контекстом из базы знаний")
-                    augmentedUserPrompt = ragPrompt
+                val ragAnswer: RagAnswer = ragEnhancer.searchWithStructuredContext(userPrompt)
+                if (ragAnswer.chunks.isNotEmpty()) {
+                    log("📚 RAG: Найдено ${ragAnswer.chunks.size} релевантных чанков")
+                    augmentedUserPrompt = buildStructuredRagPrompt(userPrompt, ragAnswer)
+                } else if (ragAnswer.shouldSayIdontKnow) {
+                    log("📚 RAG: Релевантность ниже порога — возвращаю 'не знаю'")
+                    return ChatResponse(
+                        content = ragAnswer.iDontKnowMessage
+                            ?: "Я не нашёл релевантной информации в базе знаний. Уточните запрос или задайте другой вопрос.",
+                        promptTokens = 0,
+                        completionTokens = 0,
+                        totalTokens = 0,
+                        finishReason = "rag_low_relevance",
+                        responseTimeMs = 0
+                    )
                 }
             } catch (e: Exception) {
                 log("⚠️ RAG: Ошибка обогащения: ${e.message}")
@@ -1632,5 +1644,41 @@ class ChatSession(
         compressedAgent?.clearTokenStats()
         regularAgent?.clearTokenStats()
         strategicAgent?.clearTokenStats()
+    }
+
+    private fun buildStructuredRagPrompt(userQuery: String, ragAnswer: RagAnswer): String {
+        val sourcesText = ragAnswer.sources
+            .mapIndexed { i, s -> "[${i + 1}] ${s.title} — ${s.section} (score: ${"%.3f".format(s.score)})" }
+            .joinToString("\n")
+
+        val quotesText = ragAnswer.quotes
+            .mapIndexed { i, q -> "> **Цитата ${i + 1}** (${q.source.title} / ${q.source.section}):\n> ${q.text}" }
+            .joinToString("\n\n")
+
+        return buildString {
+            appendLine("Ты — ассистент с доступом к базе знаний. Твоя задача — ответить на вопрос пользователя, используя ТОЛЬКО предоставленный контекст.")
+            appendLine()
+            appendLine("=== КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ ===")
+            appendLine(ragAnswer.answer)
+            appendLine("=== КОНЕЦ КОНТЕКСТА ===")
+            appendLine()
+            appendLine("=== ИСТОЧНИКИ (обязательно ссылайся на них в формате [1], [2] и т.д.) ===")
+            appendLine(sourcesText)
+            appendLine()
+            appendLine("=== ЦИТАТЫ (используй их для подтверждения фактов) ===")
+            appendLine(quotesText)
+            appendLine()
+            appendLine("=== СТРОГИЕ ИНСТРУКЦИИ ===")
+            appendLine("1. Отвечай ТОЛЬКО на русском языке")
+            appendLine("2. Используй ТОЛЬКО факты из контекста выше — НЕ придумывай ничего")
+            appendLine("3. ОБЯЗАТЕЛЬНО указывай источники в тексте ответа в формате [1], [2], [3]...")
+            appendLine("4. Используй цитаты из раздела ЦИТАТЫ для подтверждения важных фактов")
+            appendLine("5. Если в контексте НЕТ ответа на вопрос — напиши ровно: \"В предоставленном контексте нет информации об этом. Уточните вопрос или задайте другой.\"")
+            appendLine("6. НЕ пиши вводные фразы вроде \"Получил контекст, чем могу помочь\" — отвечай сразу по существу")
+            appendLine()
+            appendLine("Вопрос пользователя: $userQuery")
+            appendLine()
+            appendLine("Твой ответ (ссылки на источники [1], [2]... обязательны):")
+        }
     }
 }

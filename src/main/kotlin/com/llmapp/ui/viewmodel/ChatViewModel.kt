@@ -412,6 +412,7 @@ class ChatViewModel : ViewModel() {
             is ViewEvent.StartRagDemo -> demoHandler.startRagDemo(event.query)
             ViewEvent.StartRagComparisonDemo -> demoHandler.startRagComparisonDemo()
             ViewEvent.StartRagImprovedDemo -> demoHandler.startRagImprovedComparisonDemo()
+            ViewEvent.StartRagStructuredDemo -> demoHandler.startRagStructuredDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {

@@ -15,6 +15,34 @@ data class SearchResult(
     val rank: Int,
 )
 
+data class SourceInfo(
+    val source: String,
+    val title: String,
+    val section: String,
+    val chunkId: String,
+    val score: Float,
+)
+
+data class Quote(
+    val text: String,
+    val source: SourceInfo,
+)
+
+data class RagAnswer(
+    val answer: String,
+    val sources: List<SourceInfo>,
+    val quotes: List<Quote>,
+    val chunks: List<SearchResult> = emptyList(),
+    val isUnknown: Boolean = false,
+    val unknownReason: String? = null,
+) {
+    val shouldSayIdontKnow: Boolean
+        get() = isUnknown
+
+    val iDontKnowMessage: String?
+        get() = if (isUnknown) answer else null
+}
+
 interface IndexRepository {
     suspend fun saveIndex(index: IndexResult)
     suspend fun loadIndex(): IndexResult?

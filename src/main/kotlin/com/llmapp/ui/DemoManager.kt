@@ -8,13 +8,14 @@ import com.llmapp.demo.manager.CompressionDemoRunner
 import com.llmapp.demo.manager.InvariantDemoRunner
 import com.llmapp.demo.manager.MemoryDemoRunner
 import com.llmapp.demo.manager.PersonalizationDemoRunner
+import com.llmapp.demo.manager.RAGComparisonDemoRunner
+import com.llmapp.demo.manager.RAGImprovedDemoRunner
+import com.llmapp.demo.manager.RAGStructuredDemoRunner
+import com.llmapp.demo.manager.RagDemoRunner
 import com.llmapp.demo.manager.StatefulDemoRunner
 import com.llmapp.demo.manager.StrategyDemoRunner
 import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
-import com.llmapp.demo.manager.RagDemoRunner
-import com.llmapp.demo.manager.RAGComparisonDemoRunner
-import com.llmapp.demo.manager.RAGImprovedDemoRunner
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +38,7 @@ sealed class DemoType {
     object RagPipeline : DemoType()
     object RagComparison : DemoType()
     object RagImprovedComparison : DemoType()
+    object RagStructured : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -51,6 +53,7 @@ sealed class DemoType {
             RagPipeline -> "RAG Pipeline"
             RagComparison -> "RAG сравнение"
             RagImprovedComparison -> "RAG улучшенный"
+            RagStructured -> "RAG структурированный (10 вопросов)"
         }
 }
 
@@ -284,6 +287,15 @@ class DemoManager(
     fun startRagImprovedComparisonDemo() {
         runDemo(DemoType.RagImprovedComparison) {
             RAGImprovedDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+            )
+        }
+    }
+
+    fun startRagStructuredDemo() {
+        runDemo(DemoType.RagStructured) {
+            RAGStructuredDemoRunner(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
             )

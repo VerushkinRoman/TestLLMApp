@@ -10,6 +10,13 @@ import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
+private data class TestQuestion(
+    val id: Int,
+    val question: String,
+    val expectedAnswer: String,
+    val expectedSources: List<String>,
+)
+
 private val testQuestions = listOf(
     TestQuestion(
         id = 1,

@@ -95,6 +95,7 @@ sealed class ViewEvent {
     data class StartRagDemo(val query: String) : ViewEvent()
     object StartRagComparisonDemo : ViewEvent()
     object StartRagImprovedDemo : ViewEvent()
+    object StartRagStructuredDemo : ViewEvent()
     object CancelDemo : ViewEvent()
 
     // ============================================================

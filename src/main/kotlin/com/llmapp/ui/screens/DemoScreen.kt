@@ -59,6 +59,7 @@ fun DemoScreen(
     onStartRagDemo: () -> Unit,
     onStartRagComparisonDemo: () -> Unit,
     onStartRagImprovedDemo: () -> Unit,
+    onStartRagStructuredDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -164,6 +165,15 @@ fun DemoScreen(
             features = listOf("3 режима", "Фильтрация", "Rewrite"),
             color = Color(0xFF43A047),
             onStart = onStartRagImprovedDemo
+        ),
+        DemoItem(
+            id = "rag_structured",
+            title = "📋 RAG Структурированный (8 вопросов)",
+            icon = Icons.Default.TravelExplore,
+            description = "Проверка 8 вопросов с обязательными источниками, цитатами и режимом 'не знаю' при низкой релевантности.",
+            features = listOf("Источники", "Цитаты", "Не знаю"),
+            color = Color(0xFF2E7D32),
+            onStart = onStartRagStructuredDemo
         ),
     )
 

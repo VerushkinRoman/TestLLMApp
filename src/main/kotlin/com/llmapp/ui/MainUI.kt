@@ -489,6 +489,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartRagImprovedDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartRagStructuredDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartRagStructuredDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

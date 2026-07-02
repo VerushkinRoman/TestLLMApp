@@ -110,6 +110,7 @@ class DemoHandler(
     fun startRagDemo(query: String) = demoManager?.startRagDemo(query)
     fun startRagComparisonDemo() = demoManager?.startRagComparisonDemo()
     fun startRagImprovedComparisonDemo() = demoManager?.startRagImprovedComparisonDemo()
+    fun startRagStructuredDemo() = demoManager?.startRagStructuredDemo()
     fun cancelDemo() = demoManager?.cancelDemo()
 
 }
