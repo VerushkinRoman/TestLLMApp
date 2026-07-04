@@ -70,15 +70,10 @@ sealed class ViewEvent {
     object ResetWorkingMemory : ViewEvent()
 
     // ============================================================
-    // МОДЕЛЬ
-    // ============================================================
-    data class ChangeModel(val modelId: String) : ViewEvent()
-
-    // ============================================================
     // КОМПРЕССИЯ
     // ============================================================
     data class ToggleCompression(val enabled: Boolean) : ViewEvent()
-    data class UpdateCompressionParams(val keepLast: Int, val summarizeEvery: Int) : ViewEvent()
+    data class UpdateCompressionParams(val keepLast: Int, val compressAfterTokens: Int) : ViewEvent()
 
     // ============================================================
     // ДЕМОНСТРАЦИИ
@@ -96,6 +91,7 @@ sealed class ViewEvent {
     object StartRagComparisonDemo : ViewEvent()
     object StartRagImprovedDemo : ViewEvent()
     object StartRagStructuredDemo : ViewEvent()
+    object StartContextRetentionDemo : ViewEvent()
     object CancelDemo : ViewEvent()
 
     // ============================================================
@@ -122,12 +118,6 @@ sealed class ViewEvent {
     // ============================================================
     object ClearTokenStats : ViewEvent()
     object RefreshTokenStats : ViewEvent()
-
-    // ============================================================
-    // API
-    // ============================================================
-    object RefreshApiKeys : ViewEvent()
-    object ForceRotateToNextKey : ViewEvent()
 
     // ============================================================
     // СИСТЕМНЫЕ
@@ -161,6 +151,13 @@ sealed class ViewEvent {
     object ConnectPipelineMcp : ViewEvent()
     object DisconnectPipelineMcp : ViewEvent()
     data class OnMcpLog(val message: String) : ViewEvent()
+
+    // ============================================================
+    // ПАМЯТЬ ЗАДАЧИ
+    // ============================================================
+    data object ToggleTaskMemory : ViewEvent()
+    data object ResetTaskMemory : ViewEvent()
+    data class SetTaskMemory(val memory: com.llmapp.memory.TaskMemory) : ViewEvent()
 
     // ============================================================
     // КОЛЛЕКТОР МАТЧЕЙ (периодический сбор данных)

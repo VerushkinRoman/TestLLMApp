@@ -7,6 +7,5 @@ interface IAgent {
     fun changeModel(newModel: String)
     fun updateResponseControl(control: ResponseControl)
     fun clearHistory()
-    fun refreshApiKey(newApiKey: String)
     fun updateSystemPrompt(newPrompt: String)
 }

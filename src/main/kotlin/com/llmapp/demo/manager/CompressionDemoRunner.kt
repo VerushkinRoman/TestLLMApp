@@ -130,7 +130,7 @@ class CompressionDemoRunner(
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу.",
             maxHistorySize = 200,
             keepLastMessages = 8,
-            summarizeEvery = 6
+            compressAfterTokens = 4500
         )
         compressedAgent.compressionEnabled = true
 
@@ -266,15 +266,15 @@ class CompressionDemoRunner(
                 else -> 6
             }
 
-            val summarizeEvery = when {
-                contextSize >= 1_000_000 -> 10
-                contextSize >= 200_000 -> 8
-                else -> 5
+            val compressAfterTokens = when {
+                contextSize >= 1_000_000 -> 6000
+                contextSize >= 200_000 -> 4000
+                else -> 3000
             }
 
             addMessage(
                 role = "assistant",
-                content = "   Адаптивные настройки: keepLast=$keepLastMessages, summarizeEvery=$summarizeEvery",
+                content = "   Адаптивные настройки: keepLast=$keepLastMessages, compressAfterTokens=${compressAfterTokens}",
                 metadata = "Настройки"
             )
 
@@ -283,7 +283,7 @@ class CompressionDemoRunner(
                 model = modelId,
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко.",
                 keepLastMessages = keepLastMessages,
-                summarizeEvery = summarizeEvery
+                compressAfterTokens = compressAfterTokens
             )
 
             val testQuestions = DemoData.longDialogueTopics.take(8)

@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
@@ -27,6 +30,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,8 +74,17 @@ fun IndexScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
+        AddArticleSection(
+            onAdd = { title, content -> viewModel.obtainEvent(IndexEvent.AddUserArticle(title, content)) },
+            userArticles = state.userArticles,
+            onRemove = { index -> viewModel.obtainEvent(IndexEvent.RemoveUserArticle(index)) },
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         Text(
             text = "Построение RAG-индекса",
             fontSize = 20.sp,
@@ -196,6 +210,126 @@ fun IndexScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         LogSection(log = state.log)
+    }
+}
+
+@Composable
+private fun AddArticleSection(
+    onAdd: (title: String, content: String) -> Unit,
+    userArticles: List<UserArticle>,
+    onRemove: (Int) -> Unit,
+) {
+    var title by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf("") }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+        ),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Filled.Article, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Добавить свою статью",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                placeholder = { Text("Название статьи", fontSize = 12.sp) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                placeholder = { Text("Текст статьи (plain text)...", fontSize = 12.sp) },
+                modifier = Modifier.fillMaxWidth().height(120.dp),
+                textStyle = MaterialTheme.typography.bodySmall,
+                maxLines = 8,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Добавлено: ${userArticles.size}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                FilledTonalButton(
+                    onClick = {
+                        if (title.isNotBlank() && content.isNotBlank()) {
+                            onAdd(title.trim(), content.trim())
+                            title = ""
+                            content = ""
+                        }
+                    },
+                    enabled = title.isNotBlank() && content.isNotBlank(),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Добавить", fontSize = 12.sp)
+                }
+            }
+
+            if (userArticles.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                userArticles.forEachIndexed { index, article ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${index + 1}. ${article.title}",
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${article.content.length} симв.",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            IconButton(
+                                onClick = { onRemove(index) },
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Удалить",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

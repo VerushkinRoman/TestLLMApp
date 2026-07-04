@@ -14,54 +14,23 @@ class TokenTracker {
     private val _historySnapshots = MutableStateFlow<List<TokenSnapshot>>(emptyList())
     val historySnapshots: StateFlow<List<TokenSnapshot>> = _historySnapshots.asStateFlow()
 
-    private var currentModelId: String = ""
-    private var contextWindowSize: Int = getContextWindowForModel(currentModelId)
-
-    private fun getContextWindowForModel(modelId: String): Int {
-        return when {
-            // NVIDIA Nemotron серия - 1M контекста
-            modelId.contains("nemotron-3-super") -> 1_000_000
-            modelId.contains("nemotron-3-ultra") -> 1_000_000
-            modelId.contains("nemotron-3-nano-30b") -> 256_000
-            modelId.contains("nemotron-3-nano-omni") -> 300_000
-            modelId.contains("nemotron-nano-9b") -> 128_000
-            modelId.contains("nemotron-nano-12b") -> 128_000
-
-            // OpenAI GPT-OSS серия - 131K контекста
-            modelId.contains("gpt-oss") -> 131_072
-
-            // Google Gemma серия - 256K контекста
-            modelId.contains("gemma-4") -> 256_000
-
-            // Poolside серия - 128K контекста
-            modelId.contains("laguna") -> 128_000
-
-            // Owl Alpha - 1.05M контекста
-            modelId.contains("owl-alpha") -> 1_050_000
-
-            // GLM 4.5 Air - 131K контекста
-            modelId.contains("glm-4.5") -> 131_072
-
-            // Kimi K2.6 - 128K контекста
-            modelId.contains("kimi") -> 128_000
-
-            // По умолчанию - 128K
-            else -> 128_000
-        }
-    }
+    private var contextWindowSize: Int = 128_000
+    private var currentModel: String = "mistral/mistral-large-latest"
 
     fun updateModel(modelId: String) {
-        currentModelId = modelId
-        contextWindowSize = getContextWindowForModel(modelId)
+        currentModel = modelId
+        contextWindowSize = 128_000
     }
 
     fun trackRequest(usage: TokenUsage, requestNumber: Int): TokenStats {
-        val pricing = ModelPricing.getPricing(currentModelId)
-        val newStats = _stats.value.addUsage(
-            usage,
-            pricing.perPromptToken,
-            pricing.perCompletionToken
-        )
+        val inputCost =
+            (usage.promptTokens.toDouble() / 1_000_000) * ModelPricing.getInputPrice(currentModel)
+        val outputCost =
+            (usage.completionTokens.toDouble() / 1_000_000) * ModelPricing.getOutputPrice(
+                currentModel
+            )
+        val requestCost = inputCost + outputCost
+        val newStats = _stats.value.addUsageWithCost(usage, requestCost)
         _stats.value = newStats
 
         val snapshot = TokenSnapshot(
@@ -132,6 +101,4 @@ data class TokenSnapshot(
     val contextUsagePercent: Double,
     val timestamp: Long,
     val contextWindowSize: Int
-) {
-    fun getFormattedCost(): String = "$${"%.6f".format(cumulativeCost)}"
-}
+)

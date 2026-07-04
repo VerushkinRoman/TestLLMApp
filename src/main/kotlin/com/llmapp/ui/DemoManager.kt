@@ -16,6 +16,7 @@ import com.llmapp.demo.manager.StatefulDemoRunner
 import com.llmapp.demo.manager.StrategyDemoRunner
 import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
+import com.llmapp.memory.TaskMemory
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +40,7 @@ sealed class DemoType {
     object RagComparison : DemoType()
     object RagImprovedComparison : DemoType()
     object RagStructured : DemoType()
+    object ContextRetention : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -54,6 +56,7 @@ sealed class DemoType {
             RagComparison -> "RAG сравнение"
             RagImprovedComparison -> "RAG улучшенный"
             RagStructured -> "RAG структурированный (10 вопросов)"
+            ContextRetention -> "Удержание контекста (24 сообщения)"
         }
 }
 
@@ -67,6 +70,7 @@ class DemoManager(
     private val onTokenHistoryUpdated: ((List<TokenSnapshot>) -> Unit)?,
     private val onContextWarningUpdated: ((String) -> Unit)?,
     private val onTaskStateUpdated: (() -> Unit),
+    private val onTaskMemoryUpdated: ((TaskMemory) -> Unit)? = null,
     private val statefulAgent: StatefulMemoryAgent
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -298,6 +302,18 @@ class DemoManager(
             RAGStructuredDemoRunner(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
+            )
+        }
+    }
+
+    fun startContextRetentionDemo() {
+        runDemo(DemoType.ContextRetention) {
+            com.llmapp.demo.manager.ContextRetentionDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                chatSession = chatSession,
+                onTaskMemoryUpdated = { memory -> onTaskMemoryUpdated?.invoke(memory) },
+                onStatsUpdated = onStatsUpdated,
             )
         }
     }

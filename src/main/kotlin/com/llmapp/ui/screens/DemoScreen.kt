@@ -60,6 +60,7 @@ fun DemoScreen(
     onStartRagComparisonDemo: () -> Unit,
     onStartRagImprovedDemo: () -> Unit,
     onStartRagStructuredDemo: () -> Unit,
+    onStartContextRetentionDemo: () -> Unit,
     isDemoRunning: Boolean,
     currentDemoName: String?,
     demoProgress: String?,
@@ -174,6 +175,15 @@ fun DemoScreen(
             features = listOf("Источники", "Цитаты", "Не знаю"),
             color = Color(0xFF2E7D32),
             onStart = onStartRagStructuredDemo
+        ),
+        DemoItem(
+            id = "context_retention",
+            title = "💬 Удержание контекста (24 сообщ.)",
+            icon = Icons.Default.Timeline,
+            description = "Демонстрация TaskMemory и RAG-источников в 24 сообщениях с 4 сменами темы и возвратом к исходной.",
+            features = listOf("TaskMemory", "RAG-источники", "24 сообщения"),
+            color = Color(0xFF2E7D32),
+            onStart = onStartContextRetentionDemo
         ),
     )
 

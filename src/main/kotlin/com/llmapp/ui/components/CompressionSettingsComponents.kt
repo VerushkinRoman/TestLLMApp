@@ -27,10 +27,10 @@ import androidx.compose.ui.unit.sp
 fun CompressionSettingsCard(
     compressionEnabled: Boolean,
     keepLastMessages: Int,
-    summarizeEvery: Int,
+    compressAfterTokens: Int,
     onCompressionToggle: (Boolean) -> Unit,
     onKeepLastMessagesChange: (Int) -> Unit,
-    onSummarizeEveryChange: (Int) -> Unit,
+    onCompressAfterTokensChange: (Int) -> Unit,
     compressionStats: com.llmapp.agent.CompressedChatHistory.CompressionStats?
 ) {
     Card(
@@ -103,23 +103,23 @@ fun CompressionSettingsCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Резюме каждые N сообщений:", fontSize = 14.sp)
+                    Text("Компрессия после (токенов):", fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = {
-                            onSummarizeEveryChange(
-                                (summarizeEvery - 1).coerceAtLeast(3)
+                            onCompressAfterTokensChange(
+                                (compressAfterTokens - 500).coerceAtLeast(1000)
                             )
                         }) {
                             Text("-", fontSize = 20.sp)
                         }
                         Text(
-                            "$summarizeEvery",
+                            "${compressAfterTokens / 1000}K",
                             fontSize = 16.sp,
                             modifier = Modifier.padding(horizontal = 12.dp)
                         )
                         IconButton(onClick = {
-                            onSummarizeEveryChange(
-                                (summarizeEvery + 1).coerceAtMost(15)
+                            onCompressAfterTokensChange(
+                                (compressAfterTokens + 500).coerceAtMost(32000)
                             )
                         }) {
                             Text("+", fontSize = 20.sp)

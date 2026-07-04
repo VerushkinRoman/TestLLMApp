@@ -1,6 +1,7 @@
 package com.llmapp.demo.manager
 
 import com.llmapp.ui.models.ChatMessageUI
+import com.llmapp.ui.models.RagSourceUI
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -42,7 +43,8 @@ abstract class BaseDemoRunner(
         completionTokens: Int? = null,
         totalTokens: Int? = null,
         responseTimeMs: Long? = null,
-        isDemoMessage: Boolean = true
+        isDemoMessage: Boolean = true,
+        ragSources: List<RagSourceUI>? = null,
     ) {
         checkCancelled()
 
@@ -55,7 +57,8 @@ abstract class BaseDemoRunner(
             completionTokens = completionTokens,
             totalTokens = totalTokens,
             responseTimeMs = responseTimeMs,
-            isDemoMessage = isDemoMessage
+            isDemoMessage = isDemoMessage,
+            ragSources = ragSources,
         )
         onMessageAdded(message)
         if (delayMs > 0) {

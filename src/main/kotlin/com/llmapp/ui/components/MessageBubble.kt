@@ -2,10 +2,12 @@ package com.llmapp.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,16 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.ExperimentalComposeUiApi
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,6 +63,7 @@ fun MessageBubble(
     isDemoRunning: Boolean = false
 ) {
     val isUser = message.role == "user"
+    val isSystem = message.role == "system"
     val clipboard = LocalClipboard.current
     var showCopiedTooltip by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -77,22 +79,38 @@ fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (isUser) Modifier.padding(start = 48.dp)
-                else Modifier.padding(end = 48.dp)
+                when {
+                    isUser -> Modifier.padding(start = 48.dp)
+                    isSystem -> Modifier.padding(horizontal = 24.dp)
+                    else -> Modifier.padding(end = 48.dp)
+                }
             ),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        horizontalArrangement = when {
+            isUser -> Arrangement.End
+            isSystem -> Arrangement.Center
+            else -> Arrangement.Start
+        }
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp
+                topStart = if (isSystem) 12.dp else 16.dp,
+                topEnd = if (isSystem) 12.dp else 16.dp,
+                bottomStart = when {
+                    isSystem -> 12.dp
+                    isUser -> 16.dp
+                    else -> 4.dp
+                },
+                bottomEnd = when {
+                    isSystem -> 12.dp
+                    isUser -> 4.dp
+                    else -> 16.dp
+                }
             ),
-            color = if (isUser)
-                MaterialTheme.colorScheme.primaryContainer
-            else
-                MaterialTheme.colorScheme.surfaceVariant,
+            color = when {
+                isSystem -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                isUser -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            },
             tonalElevation = 1.dp,
             modifier = Modifier.widthIn(max = 1200.dp)
         ) {
@@ -105,12 +123,17 @@ fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isUser) "Вы" else "Ассистент",
+                        text = when {
+                            isUser -> "Вы"
+                            isSystem -> "⚡ Система"
+                            else -> "Ассистент"
+                        },
                         fontSize = 12.sp,
-                        color = if (isUser)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.secondary,
+                        color = when {
+                            isSystem -> MaterialTheme.colorScheme.onTertiaryContainer
+                            isUser -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.secondary
+                        },
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -154,24 +177,34 @@ fun MessageBubble(
                         }
                     }
                 } else {
-                    if (isUser) {
-                        SelectionContainer {
+                    when {
+                        isUser -> SelectionContainer {
                             Text(
                                 text = message.content,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
-                    } else {
-                        FormattedMessage(message.content)
+
+                        isSystem -> SelectionContainer {
+                            Text(
+                                text = message.content,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+
+                        else -> FormattedMessage(message.content)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = if (isSystem) Arrangement.Center else Arrangement.spacedBy(
+                        4.dp
+                    )
                 ) {
                     Button(
                         onClick = {
@@ -184,8 +217,9 @@ fun MessageBubble(
                                 showCopiedTooltip = false
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).heightIn(min = 28.dp),
                         enabled = true,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -198,95 +232,110 @@ fun MessageBubble(
                             Icon(
                                 Icons.Default.ContentCopy,
                                 contentDescription = "Копировать",
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(12.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Копировать")
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("Копировать", fontSize = 11.sp)
                             if (showCopiedTooltip) {
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
                                 Text(
                                     text = "✓",
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
                     }
 
-                    if (isUser && onEdit != null) {
-                        Button(
-                            onClick = { isEditing = true },
-                            modifier = Modifier.weight(1f),
-                            enabled = !isDemoRunning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDemoRunning)
-                                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = if (isDemoRunning)
-                                    MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Редактировать",
-                                    modifier = Modifier.size(16.dp)
+                    if (!isSystem) {
+                        if (isUser && onEdit != null) {
+                            Button(
+                                onClick = { isEditing = true },
+                                modifier = Modifier.weight(1f).heightIn(min = 28.dp),
+                                enabled = !isDemoRunning,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDemoRunning)
+                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                                    else
+                                        MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = if (isDemoRunning)
+                                        MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
+                                    else
+                                        MaterialTheme.colorScheme.onTertiaryContainer
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Редактировать")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Редактировать",
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("Редактировать", fontSize = 11.sp)
+                                }
                             }
                         }
-                    }
 
-                    if (!isUser && onRegenerate != null) {
-                        Button(
-                            onClick = onRegenerate,
-                            modifier = Modifier.weight(1f),
-                            enabled = !isRegenerating && !isDemoRunning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDemoRunning)
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = if (isDemoRunning)
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                        if (!isUser && onRegenerate != null) {
+                            Button(
+                                onClick = onRegenerate,
+                                modifier = Modifier.weight(1f).heightIn(min = 28.dp),
+                                enabled = !isRegenerating && !isDemoRunning,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDemoRunning)
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    else
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = if (isDemoRunning)
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                                    else
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             ) {
-                                if (isRegenerating) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Генерация...")
-                                } else {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = "Перегенерировать",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Перегенерировать")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    if (isRegenerating) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(12.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("Генерация...", fontSize = 11.sp)
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Перегенерировать",
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("Перегенерировать", fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                if (!isUser) {
+                if (isSystem) {
+                    message.metadata?.let { meta ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = meta,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+
+                if (!isUser && !isSystem) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val infoItems = mutableListOf<String>()
@@ -335,6 +384,41 @@ fun MessageBubble(
                                 completionTokens = message.completionTokens,
                                 totalTokens = message.totalTokens,
                             )
+                        }
+                    }
+
+                    message.ragSources?.let { sources ->
+                        if (sources.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text(
+                                        text = "📚 Источники (${sources.size}):",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    sources.forEachIndexed { i, src ->
+                                        Text(
+                                            text = "[${i + 1}] ${src.title} — ${src.section} (score: ${
+                                                "%.3f".format(
+                                                    src.score
+                                                )
+                                            })",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(
+                                                alpha = 0.8f
+                                            ),
+                                            maxLines = 2
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

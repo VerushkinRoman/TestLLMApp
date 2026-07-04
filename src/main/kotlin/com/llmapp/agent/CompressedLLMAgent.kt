@@ -2,9 +2,9 @@ package com.llmapp.agent
 
 import com.llmapp.api.ClientFactory
 import com.llmapp.api.RouterClient
+import com.llmapp.model.ResponseControl
 import com.llmapp.model.RouterRequest
 import com.llmapp.model.RouterResponse
-import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenUsage
 
 data class LLMResponseWithCompression(
@@ -23,16 +23,16 @@ class CompressedLLMAgent(
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
-    maxHistorySize: Int = 50,
-    keepLastMessages: Int = 8,
-    summarizeEvery: Int = 6
+    maxHistorySize: Int = 150,
+    keepLastMessages: Int = 15,
+    compressAfterTokens: Int = 8000
 ) {
     private val apiClient: RouterClient = ClientFactory.create(apiKey)
     private val history = CompressedChatHistory(
         apiClient = apiClient,
         systemPrompt = systemPrompt,
         keepLastMessages = keepLastMessages,
-        summarizeEvery = summarizeEvery,
+        compressAfterTokens = compressAfterTokens,
         maxHistorySize = maxHistorySize
     )
     private val tokenTracker = TokenTracker()
@@ -44,13 +44,15 @@ class CompressedLLMAgent(
             history.compressionEnabled = value
         }
 
+    var onSummaryGenerated: ((summary: String, stats: CompressedChatHistory.CompressionStats) -> Unit)? =
+        null
+        set(value) {
+            field = value
+            history.onSummaryGenerated = value
+        }
+
     init {
         tokenTracker.updateModel(model)
-    }
-
-    fun refreshApiKey(newApiKey: String) {
-        apiClient.updateApiKey(newApiKey)
-        println("🔑 CompressedLLMAgent: API ключ обновлен")
     }
 
     suspend fun processRequest(userInput: String): LLMResponseWithCompression {
@@ -58,7 +60,7 @@ class CompressedLLMAgent(
             val enhancedPrompt = enhancePrompt(userInput)
             history.addUserMessage(enhancedPrompt)
 
-            if (compressionEnabled && shouldGenerateSummary()) {
+            if (compressionEnabled && shouldCompress()) {
                 history.generateSummary()
             }
 
@@ -99,9 +101,8 @@ class CompressedLLMAgent(
         }
     }
 
-    private fun shouldGenerateSummary(): Boolean {
-        val stats = history.getCompressionStats()
-        return stats.pendingForSummaryCount >= 4
+    private fun shouldCompress(): Boolean {
+        return history.shouldCompress()
     }
 
     private fun enhancePrompt(userInput: String): String {
@@ -143,6 +144,26 @@ class CompressedLLMAgent(
         history.updateSystemPrompt(newPrompt)
     }
 
+    fun updateTaskMemory(summary: String) {
+        history.taskMemorySummary = summary
+    }
+
+    fun addUserMessage(content: String) {
+        history.addUserMessage(content)
+    }
+
+    fun addAssistantMessage(content: String) {
+        history.addAssistantMessage(content)
+    }
+
+    suspend fun compressNow(): Boolean {
+        if (compressionEnabled && shouldCompress()) {
+            history.generateSummary()
+            return true
+        }
+        return false
+    }
+
     fun clearHistory() {
         history.clear()
         tokenTracker.reset()
@@ -164,8 +185,6 @@ class CompressedLLMAgent(
     fun getTokenStats() = tokenTracker.stats.value
 
     fun getTokenHistory() = tokenTracker.historySnapshots.value
-
-    fun getContextWarning() = tokenTracker.getWarningMessage()
 
     fun getCompressionStats() = history.getCompressionStats()
 

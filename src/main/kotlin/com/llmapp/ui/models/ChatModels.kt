@@ -1,5 +1,11 @@
 package com.llmapp.ui.models
 
+data class RagSourceUI(
+    val title: String,
+    val section: String,
+    val score: Float,
+)
+
 data class ChatMessageUI(
     val id: String,
     val role: String,
@@ -9,7 +15,8 @@ data class ChatMessageUI(
     val completionTokens: Int? = null,
     val totalTokens: Int? = null,
     val responseTimeMs: Long? = null,
-    val isDemoMessage: Boolean = false
+    val isDemoMessage: Boolean = false,
+    val ragSources: List<RagSourceUI>? = null,
 ) {
     fun getFormattedResponseTime(): String? {
         return responseTimeMs?.let { ms ->

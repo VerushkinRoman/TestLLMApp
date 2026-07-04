@@ -16,7 +16,7 @@ class CompressionUseCase(
             apiKey = ApiConfig.getApiKey(),
             compressionEnabled = enabled,
             keepLastMessages = state.keepLastMessages,
-            summarizeEvery = state.summarizeEvery
+            compressAfterTokens = state.compressAfterTokens
         )
         onChatSessionUpdate(newSession)
         onTokenStatsUpdate()
@@ -24,14 +24,14 @@ class CompressionUseCase(
         return state.copy(
             compressionEnabled = enabled,
             keepLastMessages = state.keepLastMessages,
-            summarizeEvery = state.summarizeEvery
+            compressAfterTokens = state.compressAfterTokens
         )
     }
 
     fun updateCompressionParams(
         state: ChatViewState,
         keepLast: Int,
-        summarizeEvery: Int
+        compressAfterTokens: Int
     ): ChatViewState {
         if (state.isDemoRunning) return state
 
@@ -39,14 +39,14 @@ class CompressionUseCase(
             apiKey = ApiConfig.getApiKey(),
             compressionEnabled = state.compressionEnabled,
             keepLastMessages = keepLast,
-            summarizeEvery = summarizeEvery
+            compressAfterTokens = compressAfterTokens
         )
         onChatSessionUpdate(newSession)
         onTokenStatsUpdate()
 
         return state.copy(
             keepLastMessages = keepLast,
-            summarizeEvery = summarizeEvery
+            compressAfterTokens = compressAfterTokens
         )
     }
 }

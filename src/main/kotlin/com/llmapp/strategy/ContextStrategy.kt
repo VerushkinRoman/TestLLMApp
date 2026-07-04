@@ -67,7 +67,7 @@ class SlidingWindowStrategy(
         "Хранит только последние $windowSize сообщений. Старые отбрасываются."
 
     private fun estimateTokens(messages: List<ChatMessage>): Int =
-        messages.sumOf { it.content.length / 4 }
+        messages.sumOf { it.content.length / 2 }
 }
 
 class StickyFactsStrategy(
@@ -174,7 +174,7 @@ class StickyFactsStrategy(
     fun getFacts(): Map<String, String> = facts.toMap()
 
     private fun estimateTokens(messages: List<ChatMessage>): Int =
-        messages.sumOf { it.content.length / 4 }
+        messages.sumOf { it.content.length / 2 }
 }
 
 class BranchingStrategy(
@@ -311,7 +311,7 @@ class BranchingStrategy(
     override fun getDescription(): String = "Позволяет создавать ветки диалога от чекпоинтов"
 
     private fun estimateTokens(messages: List<ChatMessage>): Int =
-        messages.sumOf { it.content.length / 4 }
+        messages.sumOf { it.content.length / 2 }
 
     private fun generateId(): String = java.util.UUID.randomUUID().toString()
 

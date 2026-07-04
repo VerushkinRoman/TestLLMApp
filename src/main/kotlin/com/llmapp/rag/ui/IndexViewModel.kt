@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.llmapp.rag.RAGEnhancer
 import com.llmapp.rag.data.HuggingFaceEmbeddingService
 import com.llmapp.rag.data.JsonIndexRepository
+import com.llmapp.rag.data.TechArticlesDocuments
 import com.llmapp.rag.data.WorldCupDocuments
 import com.llmapp.rag.domain.ChunkerFactory
 import com.llmapp.rag.domain.ChunkingStrategy
@@ -35,8 +36,17 @@ class IndexViewModel(
     )
     val actions: SharedFlow<IndexAction?> = _actions.asSharedFlow()
 
-    private val documents = WorldCupDocuments.getAll()
     private val enhancer = RAGEnhancer(repository = repository)
+
+    private fun allDocuments() = WorldCupDocuments.getAll() + TechArticlesDocuments.getAll() + _state.value.userArticles.mapIndexed { i, a ->
+        com.llmapp.rag.domain.Document(
+            id = "user_${i + 1}",
+            title = a.title,
+            content = a.content,
+            source = "User",
+            sections = listOf(com.llmapp.rag.domain.Section("Article", a.content)),
+        )
+    }
 
     fun obtainEvent(event: IndexEvent) {
         when (event) {
@@ -54,7 +64,19 @@ class IndexViewModel(
             is IndexEvent.SetTopKAfter -> setTopKAfter(event.topK)
             is IndexEvent.CompareModes -> compareModes()
             is IndexEvent.ClearComparison -> clearComparison()
+            is IndexEvent.AddUserArticle -> addUserArticle(event.title, event.content)
+            is IndexEvent.RemoveUserArticle -> removeUserArticle(event.index)
         }
+    }
+
+    private fun addUserArticle(title: String, content: String) {
+        val articles = _state.value.userArticles + UserArticle(title, content)
+        _state.value = _state.value.copy(userArticles = articles)
+    }
+
+    private fun removeUserArticle(index: Int) {
+        val articles = _state.value.userArticles.toMutableList().also { it.removeAt(index) }
+        _state.value = _state.value.copy(userArticles = articles)
     }
 
     private fun selectStrategy(strategy: ChunkingStrategy) {
@@ -97,20 +119,24 @@ class IndexViewModel(
                 error = null,
                 log = emptyList(),
             )
+            val docs = allDocuments()
+            val baseCount = WorldCupDocuments.getAll().size
+            val techCount = TechArticlesDocuments.getAll().size
+            val userCount = _state.value.userArticles.size
             println("═══════════════════════════════════════")
             println("📚 INDEX: Начало построения индекса")
-            println("📚 INDEX: Документов: ${documents.size}")
-            println("📚 INDEX: Всего символов: ${documents.sumOf { it.content.length }}")
+            println("📚 INDEX: Документов: $baseCount WorldCup + $techCount TechArticles + $userCount пользовательских = ${docs.size}")
+            println("📚 INDEX: Всего символов: ${docs.sumOf { it.content.length }}")
             appendLog("Построение индекса...")
-            appendLog("Документов: ${documents.size}")
-            appendLog("Всего символов: ${documents.sumOf { it.content.length }}")
+            appendLog("Документов: $baseCount WorldCup + $techCount TechArticles + $userCount пользовательских")
+            appendLog("Всего символов: ${docs.sumOf { it.content.length }}")
 
             val fixedStrategy = ChunkingStrategy.FixedSize()
             val structuralStrategy = ChunkingStrategy.Structural()
 
             println("📚 INDEX: Строю fixed-size индекс (chunk=${fixedStrategy.chunkSize}, overlap=${fixedStrategy.overlap})...")
             appendLog("Fixed-size: chunk=${fixedStrategy.chunkSize}, overlap=${fixedStrategy.overlap}")
-            val fixedResult = buildSingleIndex(fixedStrategy, "fixed")
+            val fixedResult = buildSingleIndex(docs, fixedStrategy, "fixed")
             _state.value = _state.value.copy(fixedSizeStats = fixedResult?.let { computeStats(it) })
             if (fixedResult != null) {
                 println("📚 INDEX: Fixed-size индекс готов: ${fixedResult.chunks.size} чанков")
@@ -119,7 +145,7 @@ class IndexViewModel(
 
             println("📚 INDEX: Строю structural индекс (по секциям)...")
             appendLog("Structural: по секциям документов")
-            val structuralResult = buildSingleIndex(structuralStrategy, "structural")
+            val structuralResult = buildSingleIndex(docs, structuralStrategy, "structural")
             _state.value =
                 _state.value.copy(structuralStats = structuralResult?.let { computeStats(it) })
             if (structuralResult != null) {
@@ -137,14 +163,15 @@ class IndexViewModel(
     }
 
     private suspend fun buildSingleIndex(
+        docs: List<com.llmapp.rag.domain.Document>,
         strategy: ChunkingStrategy,
         strategyName: String,
     ): IndexResult? = withContext(Dispatchers.Default) {
         try {
             val chunker = ChunkerFactory.create(strategy)
-            println("  📚 INDEX: Стратегия '$strategyName' — разбиваю ${documents.size} документов на чанки...")
+            println("  📚 INDEX: Стратегия '$strategyName' — разбиваю ${docs.size} документов на чанки...")
 
-            val allChunks = documents.flatMap { doc ->
+            val allChunks = docs.flatMap { doc ->
                 chunker.chunk(doc, strategy)
             }
             println("  📚 INDEX: Получено ${allChunks.size} чанков")
@@ -162,7 +189,7 @@ class IndexViewModel(
             val result = IndexResult(
                 chunks = chunksWithEmbeddings,
                 strategy = strategy,
-                totalDocuments = documents.size,
+                totalDocuments = docs.size,
                 totalChunks = chunksWithEmbeddings.size,
                 embeddingDimension = embeddingService.dimension,
                 indexedAt = System.currentTimeMillis(),

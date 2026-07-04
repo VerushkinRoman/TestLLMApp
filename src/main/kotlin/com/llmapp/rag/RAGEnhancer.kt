@@ -5,6 +5,7 @@ import com.llmapp.rag.data.JsonIndexRepository
 import com.llmapp.rag.data.WorldCupDocuments
 import com.llmapp.rag.domain.ChunkerFactory
 import com.llmapp.rag.domain.ChunkingStrategy
+import com.llmapp.rag.domain.Document
 import com.llmapp.rag.domain.IndexRepository
 import com.llmapp.rag.domain.IndexResult
 import com.llmapp.rag.domain.QueryRewriter
@@ -49,6 +50,7 @@ data class MultiModeResult(
 class RAGEnhancer(
     private val embeddingService: HuggingFaceEmbeddingService = HuggingFaceEmbeddingService(),
     private val repository: IndexRepository = JsonIndexRepository(),
+    private val documentProvider: () -> List<Document> = { WorldCupDocuments.getAll() },
     var topK: Int = 5,
     private val reranker: Reranker = SwitchingReranker(),
     private val queryRewriter: QueryRewriter = SimpleQueryRewriter(),
@@ -99,7 +101,7 @@ class RAGEnhancer(
     suspend fun autoBuildIndex() {
         log("📚 Автоиндексация: загружаю документы...")
         try {
-            val documents = WorldCupDocuments.getAll()
+            val documents = documentProvider()
             log("📚 Документов: ${documents.size}, всего символов: ${documents.sumOf { it.content.length }}")
 
             val fixedStrategy = ChunkingStrategy.FixedSize()
@@ -127,7 +129,7 @@ class RAGEnhancer(
     private suspend fun buildSingleIndex(
         strategy: ChunkingStrategy,
         strategyName: String,
-        documents: List<com.llmapp.rag.domain.Document>,
+        documents: List<Document>,
     ): IndexResult? = withContext(Dispatchers.Default) {
         try {
             val chunker = ChunkerFactory.create(strategy)
@@ -284,7 +286,7 @@ class RAGEnhancer(
                 .map { it.trim() }
                 .filter {
                     it.length > 35
-                    && it.firstOrNull()?.isUpperCase() == true
+                            && it.firstOrNull()?.isUpperCase() == true
                 }
 
             val relevantSentences = sentences.filter { sent ->
@@ -320,12 +322,20 @@ class RAGEnhancer(
         }
 
         val thresholdNote = if (rag.chunks.isNotEmpty() && topScore < effectiveThreshold) {
-            "⚠️ Релевантность найденных фрагментов ниже порога (топ score: ${"%.3f".format(topScore)}, порог: ${"%.2f".format(effectiveThreshold)}). Контекст может не содержать точного ответа.\n\n"
+            "⚠️ Релевантность найденных фрагментов ниже порога (топ score: ${"%.3f".format(topScore)}, порог: ${
+                "%.2f".format(
+                    effectiveThreshold
+                )
+            }). Контекст может не содержать точного ответа.\n\n"
         } else ""
 
         // Build structured context for LLM
         val context = if (rag.chunks.isEmpty()) {
-            "Контекст из базы знаний пуст — по запросу не найдено релевантных фрагментов (лучший score: ${"%.3f".format(topScore)}).\nВсего результатов до фильтрации: ${rag.rerankerResult?.originalResults?.size ?: 0}."
+            "Контекст из базы знаний пуст — по запросу не найдено релевантных фрагментов (лучший score: ${
+                "%.3f".format(
+                    topScore
+                )
+            }).\nВсего результатов до фильтрации: ${rag.rerankerResult?.originalResults?.size ?: 0}."
         } else buildString {
             append(thresholdNote)
             appendLine("Контекст из базы знаний:")

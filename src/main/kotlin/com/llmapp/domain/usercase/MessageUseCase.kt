@@ -1,13 +1,17 @@
 package com.llmapp.domain.usercase
 
 import com.llmapp.chat.ChatSession
+import com.llmapp.memory.TaskMemory
+import com.llmapp.memory.TaskMemoryTracker
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.viewmodel.ChatViewState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 class MessageUseCase(
     private val chatSession: ChatSession,
@@ -53,28 +57,64 @@ class MessageUseCase(
         // Отправляем запрос к LLM
         currentGenerationJob = scope.launch {
             try {
+                chatSession.taskMemorySummary = TaskMemoryTracker.getMemory().summarize()
                 val response = chatSession.ask(text, isRegeneration = !addToHistory)
+
+                val ragSources = response.ragSources?.map { src ->
+                    com.llmapp.ui.models.RagSourceUI(
+                        title = src.title,
+                        section = src.section,
+                        score = src.score,
+                    )
+                }
+
+                val cleanContent = parseMemoryMarkers(text, response.content)
+                TaskMemoryTracker.processMessage()
+
+                val hasCompression = response.compressionNotification != null
+                if (hasCompression) {
+                    TaskMemoryTracker.processCompressionSummary(response.compressionNotification)
+                }
+                val llmMemory = TaskMemoryTracker.getMemory()
 
                 val assistantMessage = ChatMessageUI(
                     id = UUID.randomUUID().toString(),
                     role = "assistant",
-                    content = response.content,
+                    content = cleanContent,
                     metadata = buildMetadata(chatSession),
                     promptTokens = response.promptTokens,
                     completionTokens = response.completionTokens,
                     totalTokens = response.totalTokens,
                     responseTimeMs = response.responseTimeMs,
-                    isDemoMessage = false
+                    isDemoMessage = false,
+                    ragSources = ragSources,
                 )
 
+                var updatedMessages = newState.messages + assistantMessage
+                if (hasCompression) {
+                    val formattedContent = TaskMemoryTracker.formatCompressionAsMarkdown()
+                    val notificationMessage = ChatMessageUI(
+                        id = "compression-${UUID.randomUUID()}",
+                        role = "system",
+                        content = formattedContent,
+                        metadata = "Контекст сжат",
+                        isDemoMessage = false,
+                    )
+                    updatedMessages = updatedMessages + notificationMessage
+                }
                 newState = newState.copy(
-                    messages = newState.messages + assistantMessage,
+                    messages = updatedMessages,
                     isGenerating = false,
-                    isTyping = false
+                    isTyping = false,
+                    taskMemory = llmMemory,
                 )
                 onStateUpdate(newState)
                 onTokenStatsUpdate()
                 onResult(newState)
+
+                if (hasCompression) {
+                    delay(10.seconds)
+                }
 
             } catch (e: Exception) {
                 val errorMessage = ChatMessageUI(
@@ -188,11 +228,13 @@ class MessageUseCase(
 
         val demoMessages = state.messages.filter { it.isDemoMessage }
         chatSession.clearHistory()
+        TaskMemoryTracker.reset()
 
         return state.copy(
             messages = demoMessages,
             tokenStats = TokenStats(),
-            tokenHistory = emptyList()
+            tokenHistory = emptyList(),
+            taskMemory = TaskMemory(),
         )
     }
 
@@ -207,5 +249,128 @@ class MessageUseCase(
                 append(" • Компрессия: вкл")
             }
         }
+    }
+
+    private fun extractGoalFromUserMessage(text: String): String? {
+        if (text.length < 15 || text.matches(
+                Regex(
+                    "(привет|здравствуй|hello|hi| help|bye|пока)\\s*",
+                    RegexOption.IGNORE_CASE
+                )
+            )
+        )
+            return null
+        val goalPatterns = listOf(
+            Regex(
+                "(?:хочу|нужно|необходимо|требуется|помоги|помогите)\\s*(.+?)(?:\\.|!|\\?|$)",
+                RegexOption.IGNORE_CASE
+            ),
+            Regex(
+                "(?:разработать|создать|написать|сделать|реализовать|настроить|установить|научиться|изучить)\\s*(.+?)(?:\\.|!|\\?|$)",
+                RegexOption.IGNORE_CASE
+            ),
+        )
+        for (pattern in goalPatterns) {
+            val match = pattern.find(text)
+            if (match != null) {
+                val extracted = match.groupValues[1].trim()
+                if (extracted.length in 11..<200) return extracted
+            }
+        }
+        return null
+    }
+
+    private fun extractGoalFromAssistantResponse(text: String): String? {
+        val patterns = listOf(
+            Regex("цель[^:]*:\\s*(.+?)(?:\n|$)", RegexOption.IGNORE_CASE),
+            Regex("ваша цель[^:]*[—\\-:]\\s*(.+?)(?:\n|$)", RegexOption.IGNORE_CASE),
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(text)
+            if (match != null) {
+                val extracted = match.groupValues[1].trim()
+                if (extracted.length in 6..<200) return extracted
+            }
+        }
+        return null
+    }
+
+    private fun parseMemoryMarkers(userText: String, content: String): String {
+        val goalRegex = Regex("\\[GOAL](.*?)\\[/GOAL]", RegexOption.DOT_MATCHES_ALL)
+        val constraintRegex =
+            Regex("\\[CONSTRAINT](.*?)\\[/CONSTRAINT]", RegexOption.DOT_MATCHES_ALL)
+        val decisionRegex = Regex("\\[DECISION](.*?)\\[/DECISION]", RegexOption.DOT_MATCHES_ALL)
+        val contextRegex = Regex("\\[CONTEXT](.*?)\\[/CONTEXT]", RegexOption.DOT_MATCHES_ALL)
+        val progDoneRegex =
+            Regex("\\[PROGRESS_DONE](.*?)\\[/PROGRESS_DONE]", RegexOption.DOT_MATCHES_ALL)
+        val progInRegex = Regex(
+            "\\[PROGRESS_IN_PROGRESS](.*?)\\[/PROGRESS_IN_PROGRESS]",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        val progBlockedRegex =
+            Regex("\\[PROGRESS_BLOCKED](.*?)\\[/PROGRESS_BLOCKED]", RegexOption.DOT_MATCHES_ALL)
+
+        val hasAnyMarker = content.contains("[GOAL]") || content.contains("[CONSTRAINT]") ||
+                content.contains("[DECISION]") || content.contains("[CONTEXT]") ||
+                content.contains("[PROGRESS_DONE]")
+        println("🧠 parseMemoryMarkers: hasAnyMarker=$hasAnyMarker, content=${content.take(200)}...")
+
+        val markerGoal = goalRegex.find(content)?.groupValues?.getOrNull(1)?.trim()
+        val assistantFallback =
+            if (markerGoal == null) extractGoalFromAssistantResponse(content) else null
+        val userFallback =
+            if (markerGoal == null && assistantFallback == null) extractGoalFromUserMessage(userText) else null
+        val goal = markerGoal ?: assistantFallback ?: userFallback
+
+        val constraintsAndPrefs = constraintRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 3 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val decisions = decisionRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 3 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val criticalContext = contextRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 1 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val progDone = progDoneRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 3 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val progIn = progInRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 3 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val progBlocked = progBlockedRegex.findAll(content).mapNotNull {
+            it.groupValues.getOrNull(1)?.trim().takeIf { c -> c != null && c.length > 3 }
+        }.toList().takeIf { it.isNotEmpty() }
+
+        val allowGoalOverride = TaskMemoryTracker.isExplicitGoalChange(userText)
+        println("🧠 allowGoalOverride=$allowGoalOverride (userText: ${userText.take(60)})")
+        TaskMemoryTracker.processLLMResult(
+            goal = goal,
+            constraintsAndPrefs = constraintsAndPrefs,
+            progressDone = progDone,
+            progressInProgress = progIn,
+            progressBlocked = progBlocked,
+            decisions = decisions,
+            criticalContext = criticalContext,
+            allowGoalOverride = allowGoalOverride,
+            replaceItems = false,
+        )
+
+        if (goal != null) println("🧠 Goal: ${goal.take(60)}")
+        if (constraintsAndPrefs != null) println("🧠 Constraints: ${constraintsAndPrefs.size}")
+
+        return content
+            .replace(goalRegex, "")
+            .replace(constraintRegex, "")
+            .replace(decisionRegex, "")
+            .replace(contextRegex, "")
+            .replace(progDoneRegex, "")
+            .replace(progInRegex, "")
+            .replace(progBlockedRegex, "")
+            .trim()
     }
 }

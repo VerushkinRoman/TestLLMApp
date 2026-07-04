@@ -1,6 +1,8 @@
 package com.llmapp.demo.manager
 
 import com.llmapp.api.ClientFactory
+import com.llmapp.demo.evaluation.DemoEvaluator
+import com.llmapp.demo.evaluation.TestCase
 import com.llmapp.model.ChatMessage
 import com.llmapp.model.RouterRequest
 import com.llmapp.rag.RAGEnhancer
@@ -481,17 +483,59 @@ class RAGStructuredDemoRunner(
                     } | $catIcon |"
                 )
             }
-            appendLine()
-            appendLine("**Выводы:**")
-            appendLine()
-            if (passed.toDouble() / total >= 0.8) {
-                appendLine("✅ **Система работает отлично** — ${"%.0f".format(passed.toDouble() / total * 100)}% вопросов обработаны корректно")
-            } else if (passed.toDouble() / total >= 0.6) {
-                appendLine("⚠️ **Система работает удовлетворительно** — ${"%.0f".format(passed.toDouble() / total * 100)}% прошли, есть над чем поработать")
-            } else {
-                appendLine("❌ **Система требует доработки** — только ${"%.0f".format(passed.toDouble() / total * 100)}% прошли проверку")
-            }
         }, metadata = "ИТОГИ")
+
+        delayLong()
+
+        addMessage(
+            role = "assistant",
+            content = "🤖 **Агент-оценщик анализирует результаты...**",
+            metadata = "Оценка LLM"
+        )
+        delayMedium()
+
+        try {
+            val evaluator = DemoEvaluator(apiKey = apiKey)
+            val testCases = results.map { r ->
+                val expectedDesc = when (r.expectedBehavior) {
+                    ExpectedBehavior.SHOULD_ANSWER -> "Должен ответить с источниками [1], [2],... и ключевыми словами"
+                    ExpectedBehavior.SHOULD_SAY_IDONTKNOW -> "Должен сказать 'не знаю' (низкая релевантность)"
+                    ExpectedBehavior.NO_CONTEXT -> "Должен сказать 'не знаю' (нет контекста в базе)"
+                }
+                TestCase(
+                    id = r.questionId,
+                    description = r.question.take(100),
+                    expectedBehavior = expectedDesc,
+                    actualResponse = r.answer.take(500),
+                    metrics = mapOf(
+                        "Top score" to "%.3f".format(r.topScore ?: 0f),
+                        "Чанков найдено" to r.chunksFound.toString(),
+                        "Время ответа" to "${r.responseTimeMs}мс",
+                        "Passed" to if (r.passed) "✅" else "❌",
+                    ),
+                )
+            }
+
+            val evaluation = evaluator.evaluate(
+                demoName = "Структурированный RAG с обязательными источниками",
+                testCases = testCases,
+                additionalContext = "Всего вопросов: $total, пройдено: $passed (${
+                    "%.0f".format(passed.toDouble() / total * 100)
+                }%). Модель: $model.",
+            )
+
+            addMessage(
+                role = "assistant",
+                content = "📊 **ОЦЕНКА АГЕНТА**\n\n$evaluation",
+                metadata = "Оценка LLM"
+            )
+        } catch (e: Exception) {
+            addMessage(
+                role = "assistant",
+                content = "❌ **Ошибка при оценке агентом:** ${e.message}",
+                metadata = "Ошибка оценки"
+            )
+        }
     }
 
     private fun isGarbageResponse(response: String): Boolean {

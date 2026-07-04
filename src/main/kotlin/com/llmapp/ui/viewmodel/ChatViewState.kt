@@ -5,11 +5,10 @@ import com.llmapp.agent.CompressedChatHistory.CompressionStats
 import com.llmapp.agent.TokenSnapshot
 import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.ProjectConstraints
+import com.llmapp.memory.TaskMemory
 import com.llmapp.memory.UserProfile
-import com.llmapp.model.ModelInfo
 import com.llmapp.model.ResponseControl
 import com.llmapp.model.TokenStats
-import com.llmapp.model.freeModels
 import com.llmapp.rag.RagMode
 import com.llmapp.rag.domain.RerankerType
 import com.llmapp.ui.models.ChatMessageUI
@@ -27,8 +26,7 @@ data class ChatViewState(
     val cursorPosition: Int = 0,
 
     // Модель
-    val currentModel: String = "nvidia/nemotron-3-super-120b-a12b:free",
-    val availableModels: List<ModelInfo> = freeModels,
+    val currentModel: String = "mistral/mistral-large-latest",
 
     // Управление ответами
     val responseControl: ResponseControl = ResponseControl(),
@@ -72,8 +70,8 @@ data class ChatViewState(
 
     // Компрессия
     val compressionEnabled: Boolean = true,
-    val keepLastMessages: Int = 8,
-    val summarizeEvery: Int = 6,
+    val keepLastMessages: Int = 15,
+    val compressAfterTokens: Int = 24000,
 
     // MCP
     val dataMcpConnected: Boolean = false,
@@ -90,6 +88,10 @@ data class ChatViewState(
     val topKBefore: Int = 20,
     val topKAfter: Int = 5,
     val ragSettingsExpanded: Boolean = false,
+
+    // Память задачи
+    val taskMemory: TaskMemory = TaskMemory(),
+    val taskMemoryExpanded: Boolean = true,
 
     // Коллектор матчей
     val collectorRunning: Boolean = false,

@@ -12,7 +12,6 @@ import com.llmapp.collector.PeriodicCollector
 import com.llmapp.domain.usercase.CompressionUseCase
 import com.llmapp.domain.usercase.MemoryUseCase
 import com.llmapp.domain.usercase.MessageUseCase
-import com.llmapp.domain.usercase.ModelUseCase
 import com.llmapp.domain.usercase.ProfileUseCase
 import com.llmapp.domain.usercase.SnapshotUseCase
 import com.llmapp.domain.usercase.TaskUseCase
@@ -21,6 +20,8 @@ import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
 import com.llmapp.mcp.McpIntegration
 import com.llmapp.memory.LongTermMemoryManager
+import com.llmapp.memory.TaskMemory
+import com.llmapp.memory.TaskMemoryTracker
 import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
@@ -62,7 +63,6 @@ class ChatViewModel : ViewModel() {
     private lateinit var transitionUseCase: TransitionUseCase
     private lateinit var profileUseCase: ProfileUseCase
     private lateinit var snapshotUseCase: SnapshotUseCase
-    private lateinit var modelUseCase: ModelUseCase
     private lateinit var compressionUseCase: CompressionUseCase
     private lateinit var memoryUseCase: MemoryUseCase
 
@@ -110,7 +110,7 @@ class ChatViewModel : ViewModel() {
             apiKey = apiKey,
             compressionEnabled = _state.value.compressionEnabled,
             keepLastMessages = _state.value.keepLastMessages,
-            summarizeEvery = _state.value.summarizeEvery
+            compressAfterTokens = _state.value.compressAfterTokens
         ).also {
             it.dataIntegration = dataMcpIntegration
             it.pipelineIntegration = pipelineMcpIntegration
@@ -144,10 +144,6 @@ class ChatViewModel : ViewModel() {
         transitionUseCase = TransitionUseCase(statefulAgent = statefulAgent)
         profileUseCase = ProfileUseCase(profileManager = profileManager)
         snapshotUseCase = SnapshotUseCase(statefulAgent = statefulAgent)
-        modelUseCase = ModelUseCase(
-            chatSession = chatSession,
-            onTokenStatsUpdate = { updateTokenStats() }
-        )
         compressionUseCase = CompressionUseCase(
             onChatSessionUpdate = { newSession -> chatSession = newSession },
             onTokenStatsUpdate = { updateTokenStats() }
@@ -168,7 +164,10 @@ class ChatViewModel : ViewModel() {
             statefulAgent = statefulAgent,
             taskUseCase = taskUseCase,
             viewModelScope = viewModelScope,
-            chatMemoryService = chatMemoryService
+            chatMemoryService = chatMemoryService,
+            onTaskMemoryUpdatedCallback = { memory ->
+                handleEvent(ViewEvent.SetTaskMemory(memory))
+            },
         )
         commandHandler = CommandHandler(
             invariantManager = invariantManager,
@@ -335,10 +334,6 @@ class ChatViewModel : ViewModel() {
                 _state.value = memoryUseCase.resetWorkingMemory(_state.value)
             }
 
-            is ViewEvent.ChangeModel -> {
-                _state.value = modelUseCase.changeModel(_state.value, event.modelId)
-            }
-
             is ViewEvent.ToggleRagMode -> {
                 updateState { copy(ragEnabled = event.enabled) }
                 chatSession.configureRag(
@@ -389,7 +384,7 @@ class ChatViewModel : ViewModel() {
                 _state.value = compressionUseCase.updateCompressionParams(
                     _state.value,
                     event.keepLast,
-                    event.summarizeEvery
+                    event.compressAfterTokens
                 )
             }
 
@@ -413,6 +408,7 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartRagComparisonDemo -> demoHandler.startRagComparisonDemo()
             ViewEvent.StartRagImprovedDemo -> demoHandler.startRagImprovedComparisonDemo()
             ViewEvent.StartRagStructuredDemo -> demoHandler.startRagStructuredDemo()
+            ViewEvent.StartContextRetentionDemo -> demoHandler.startContextRetentionDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
 
             is ViewEvent.SelectInvariantSet -> {
@@ -452,13 +448,6 @@ class ChatViewModel : ViewModel() {
 
             ViewEvent.RefreshTokenStats -> {
                 if (!_state.value.isDemoRunning) updateTokenStats()
-            }
-
-            ViewEvent.RefreshApiKeys -> chatSession.refreshApiKeys()
-
-            ViewEvent.ForceRotateToNextKey -> {
-                ApiConfig.rotateToNextKey()
-                chatSession.refreshApiKeys()
             }
 
             is ViewEvent.SetChatMemoryService -> {
@@ -637,6 +626,19 @@ class ChatViewModel : ViewModel() {
 
             is ViewEvent.OnCollectorSummary -> {
                 updateState { copy(collectorSummary = event.summaryText) }
+            }
+
+            ViewEvent.ToggleTaskMemory -> {
+                updateState { copy(taskMemoryExpanded = !taskMemoryExpanded) }
+            }
+
+            ViewEvent.ResetTaskMemory -> {
+                TaskMemoryTracker.reset()
+                updateState { copy(taskMemory = TaskMemory()) }
+            }
+
+            is ViewEvent.SetTaskMemory -> {
+                updateState { copy(taskMemory = event.memory) }
             }
 
             ViewEvent.ClearCollectorLog -> {

@@ -19,7 +19,8 @@ class DemoHandler(
     private val statefulAgent: StatefulMemoryAgent,
     private val taskUseCase: TaskUseCase,
     private val viewModelScope: CoroutineScope,
-    private val chatMemoryService: com.llmapp.agent.ChatMemoryAgent?
+    private val chatMemoryService: com.llmapp.agent.ChatMemoryAgent?,
+    private val onTaskMemoryUpdatedCallback: ((com.llmapp.memory.TaskMemory) -> Unit)? = null,
 ) {
     private var demoManager: DemoManager? = null
     private val _demoManagerCurrentDemo = MutableStateFlow<DemoType?>(null)
@@ -66,7 +67,7 @@ class DemoHandler(
             },
             onTypingStateChanged = { typing -> updateState { copy(isTyping = typing) } },
             onStatsUpdated = {
-                // Only update during demo
+                updateTokenStats()
             },
             onTokenHistoryUpdated = {
                 // Only update during demo
@@ -79,6 +80,7 @@ class DemoHandler(
                     println("🔄 Состояние задачи обновлено: ${state.phase.displayName}")
                 }
             },
+            onTaskMemoryUpdated = onTaskMemoryUpdatedCallback,
             statefulAgent = statefulAgent
         )
 
@@ -111,6 +113,7 @@ class DemoHandler(
     fun startRagComparisonDemo() = demoManager?.startRagComparisonDemo()
     fun startRagImprovedComparisonDemo() = demoManager?.startRagImprovedComparisonDemo()
     fun startRagStructuredDemo() = demoManager?.startRagStructuredDemo()
+    fun startContextRetentionDemo() = demoManager?.startContextRetentionDemo()
     fun cancelDemo() = demoManager?.cancelDemo()
 
 }

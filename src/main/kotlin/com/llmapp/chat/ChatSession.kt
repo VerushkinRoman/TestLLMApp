@@ -19,18 +19,26 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+data class RagSource(
+    val title: String,
+    val section: String,
+    val score: Float,
+)
+
 data class ChatResponse(
     val content: String,
     val promptTokens: Int?,
     val completionTokens: Int?,
     val totalTokens: Int?,
     val finishReason: String?,
-    val responseTimeMs: Long
+    val responseTimeMs: Long,
+    val ragSources: List<RagSource>? = null,
+    val compressionNotification: String? = null,
 )
 
 class ChatSession(
     apiKey: String,
-    private var currentModel: String = "nvidia/nemotron-3-super-120b-a12b:free",
+    private var currentModel: String = "mistral/mistral-large-latest",
     private val systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
         Форматирование ответов:
         - Используй **жирный** текст для важной информации
@@ -47,11 +55,10 @@ class ChatSession(
         Для цитат используй > в начале строки
         
         Ссылки оформляй как текст""",
-    maxHistorySize: Int = 50,
+    maxHistorySize: Int = 150,
     private val compressionEnabled: Boolean = true,
-    private val keepLastMessages: Int = 8,
-    private val summarizeEvery: Int = 6,
-    val synthesisRetryModel: String? = "nvidia/nemotron-3-super-120b-a12b:free"
+    private val keepLastMessages: Int = 15,
+    private val compressAfterTokens: Int = 24000,
 ) {
     var logListener: ((String) -> Unit)? = null
     private fun log(msg: String) {
@@ -69,6 +76,15 @@ class ChatSession(
 
     var ragEnabled: Boolean = false
     val ragEnhancer: RAGEnhancer by lazy { RAGEnhancer() }
+    var taskMemorySummary: String = ""
+        set(value) {
+            field = value
+            val systemWithMemory = buildSystemPromptWithMemory()
+            strategicAgent?.updateSystemPrompt(systemWithMemory)
+            compressedAgent?.updateSystemPrompt(systemWithMemory)
+            compressedAgent?.updateTaskMemory(value)
+            regularAgent?.updateSystemPrompt(systemWithMemory)
+        }
 
     fun configureRag(
         enabled: Boolean,
@@ -169,6 +185,8 @@ class ChatSession(
             ?: pipelineIntegration?.takeIf { it.getToolNames().contains(toolName) }
     }
 
+    private var pendingCompressionNotification: String? = null
+
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
             apiKey = currentApiKey,
@@ -177,8 +195,17 @@ class ChatSession(
             responseControl = ResponseControl(),
             maxHistorySize = maxHistorySize,
             keepLastMessages = keepLastMessages,
-            summarizeEvery = summarizeEvery
-        ).also { it.compressionEnabled = true }
+            compressAfterTokens = compressAfterTokens
+        ).also {
+            it.compressionEnabled = true
+            it.onSummaryGenerated = { summary, _ ->
+                pendingCompressionNotification = buildString {
+                    appendLine("⚡ **Контекст сжат** — детальная сводка диалога:")
+                    appendLine()
+                    append(summary.trim())
+                }
+            }
+        }
     } else null
 
     private val regularAgent: LLMAgent? = if (!compressionEnabled) {
@@ -202,18 +229,6 @@ class ChatSession(
         )
     }
 
-    fun refreshApiKeys() {
-        val newApiKey = com.llmapp.api.ApiConfig.getApiKey()
-        if (newApiKey == currentApiKey) return
-
-        currentApiKey = newApiKey
-        println("🔄 ChatSession: Обновляем API ключ для всех агентов")
-
-        compressedAgent?.refreshApiKey(newApiKey)
-        regularAgent?.refreshApiKey(newApiKey)
-        strategicAgent?.refreshApiKey(newApiKey)
-    }
-
     fun isCompressionEnabled(): Boolean = compressionEnabled
     fun getCompressionStats() = compressedAgent?.getCompressionStats()
 
@@ -234,8 +249,6 @@ class ChatSession(
     }
 
     suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
-        refreshApiKeys()
-
         val mcpConnected = isAnyMcpConnected()
 
         if (mcpConnected) {
@@ -265,10 +278,18 @@ class ChatSession(
         }
 
         var augmentedUserPrompt = userPrompt
+        var lastRagSources: List<RagSource>? = null
         if (ragEnabled && !mcpConnected) {
             try {
                 ragEnhancer.ensureIndexLoaded()
                 val ragAnswer: RagAnswer = ragEnhancer.searchWithStructuredContext(userPrompt)
+                lastRagSources = ragAnswer.sources.map { src ->
+                    RagSource(
+                        title = src.title,
+                        section = src.section,
+                        score = src.score,
+                    )
+                }
                 if (ragAnswer.chunks.isNotEmpty()) {
                     log("📚 RAG: Найдено ${ragAnswer.chunks.size} релевантных чанков")
                     augmentedUserPrompt = buildStructuredRagPrompt(userPrompt, ragAnswer)
@@ -281,7 +302,8 @@ class ChatSession(
                         completionTokens = 0,
                         totalTokens = 0,
                         finishReason = "rag_low_relevance",
-                        responseTimeMs = 0
+                        responseTimeMs = 0,
+                        ragSources = lastRagSources,
                     )
                 }
             } catch (e: Exception) {
@@ -307,11 +329,46 @@ class ChatSession(
             )
         }
 
+        val markerReminder = if (taskMemorySummary.isNotBlank()) {
+            """
+            
+            ### ФОРМАТ ОТВЕТА ###
+            В конце ответа добавь ТОЛЬКО НОВЫЕ элементы (не повторяй уже известные из памяти задачи):
+            [CONSTRAINT]новое ограничение 1[/CONSTRAINT]
+            [CONSTRAINT]новое ограничение 2[/CONSTRAINT]
+            [PROGRESS_DONE]сделанная задача[/PROGRESS_DONE]
+            [PROGRESS_IN_PROGRESS]текущая задача[/PROGRESS_IN_PROGRESS]
+            [PROGRESS_BLOCKED]заблокированная задача[/PROGRESS_BLOCKED]
+            [DECISION]новое решение[/DECISION]
+            [CONTEXT]новый контекст — описание[/CONTEXT]
+            Можно несколько [CONSTRAINT], [PROGRESS_DONE], [PROGRESS_IN_PROGRESS], [PROGRESS_BLOCKED], [DECISION], [CONTEXT] — каждый в отдельном теге.
+            ⚠️ [GOAL] НЕ пиши — цель уже установлена.
+            """.trimIndent()
+        } else {
+            """
+            
+            ### ФОРМАТ ОТВЕТА ###
+            ЗАКОНЧИ ответ этими строками. Может быть НЕСКОЛЬКО ограничений, статусов задач, решений и контекстов — каждый в отдельном теге:
+            [GOAL]цель пользователя одной фразой[/GOAL]
+            [CONSTRAINT]ограничение 1[/CONSTRAINT]
+            [CONSTRAINT]ограничение 2[/CONSTRAINT]
+            [PROGRESS_DONE]сделанная задача[/PROGRESS_DONE]
+            [PROGRESS_IN_PROGRESS]текущая задача[/PROGRESS_IN_PROGRESS]
+            [PROGRESS_BLOCKED]заблокированная задача[/PROGRESS_BLOCKED]
+            [DECISION]решение 1[/DECISION]
+            [DECISION]решение 2[/DECISION]
+            [CONTEXT]контекст 1 — описание[/CONTEXT]
+            [CONTEXT]контекст 2 — описание[/CONTEXT]
+            Если каких-то элементов нет — просто не пиши соответствующий тег. НО [GOAL] — всегда!
+            """.trimIndent()
+        }
+        val promptWithMarkerReminder = "$effectivePrompt$markerReminder"
+
         try {
             val response = run {
                 if (useStrategicAgent && strategicAgent != null) {
                     try {
-                        val resp = strategicAgent!!.processRequest(effectivePrompt)
+                        val resp = strategicAgent!!.processRequest(promptWithMarkerReminder)
                         printMetadata(
                             finishReason = resp.finishReason,
                             promptTokens = resp.promptTokens,
@@ -320,13 +377,22 @@ class ChatSession(
                             responseTimeMs = resp.responseTimeMs
                         )
                         println("📊 Стратегия: ${resp.strategyUsed}")
+                        var notification: String? = null
+                        if (compressedAgent != null) {
+                            compressedAgent.addUserMessage(effectivePrompt)
+                            compressedAgent.addAssistantMessage(resp.content)
+                            compressedAgent.compressNow()
+                            notification = pendingCompressionNotification
+                            pendingCompressionNotification = null
+                        }
                         ChatResponse(
                             content = resp.content,
                             promptTokens = resp.promptTokens,
                             completionTokens = resp.completionTokens,
                             totalTokens = resp.totalTokens,
                             finishReason = resp.finishReason,
-                            responseTimeMs = resp.responseTimeMs
+                            responseTimeMs = resp.responseTimeMs,
+                            compressionNotification = notification
                         )
                     } catch (_: Exception) {
                         println("⚠️ Стратегический агент не работает, переключаюсь на обычный")
@@ -339,22 +405,25 @@ class ChatSession(
                     if (isRegeneration) {
                         println("⚠️ Регенерация для сжатого агента пока не поддерживается")
                     }
-                    val resp = compressedAgent.processRequest(effectivePrompt)
+                    val resp = compressedAgent.processRequest(promptWithMarkerReminder)
+                    val notification = pendingCompressionNotification
+                    pendingCompressionNotification = null
                     ChatResponse(
                         content = resp.content,
                         promptTokens = resp.promptTokens,
                         completionTokens = resp.completionTokens,
                         totalTokens = resp.totalTokens,
                         finishReason = resp.finishReason,
-                        responseTimeMs = resp.responseTimeMs
+                        responseTimeMs = resp.responseTimeMs,
+                        compressionNotification = notification
                     )
                 }
 
                 regularAgent != null -> {
                     val resp = if (isRegeneration) {
-                        regularAgent.regenerateLastResponse(effectivePrompt)
+                        regularAgent.regenerateLastResponse(promptWithMarkerReminder)
                     } else {
-                        regularAgent.processRequest(effectivePrompt)
+                        regularAgent.processRequest(promptWithMarkerReminder)
                     }
                     ChatResponse(
                         content = resp.content,
@@ -377,12 +446,14 @@ class ChatSession(
                 responseTimeMs = response.responseTimeMs
             )
 
-            val finalContent = handleMcpToolCalls(response.content, userPrompt)
+            val finalContent = if (mcpConnected) {
+                handleMcpToolCalls(response.content, userPrompt)
+            } else response.content
             conversationHistory.add(userPrompt to finalContent)
             if (conversationHistory.size > 10) {
                 conversationHistory.removeAt(0)
             }
-            return response.copy(content = finalContent)
+            return response.copy(content = finalContent, ragSources = lastRagSources)
         } catch (e: Exception) {
             throw Exception("Ошибка при обращении к LLM: ${e.message}", e)
         } finally {
@@ -1271,14 +1342,12 @@ class ChatSession(
                 appendLine("ТОЛЬКО РУССКИЙ. НЕ ПИШИ [MCP_CALL]. НЕ ПИШИ АНГЛИЙСКИЙ.")
                 appendLine("Выведи таблицы ВСЕХ 12 ГРУПП с названиями команд и очками, затем аналитику.")
             }
-            val savedModel = currentModel
-            if (synthesisRetryModel != null) currentModel = synthesisRetryModel
             try {
                 val retryResult =
                     stripThinkingPrefix(askMcpFollowUpSafe(retryPrompt, isFinalSynthesis = true))
                 return retryResult
-            } finally {
-                currentModel = savedModel
+            } catch (_: Exception) {
+                // fall through to original content
             }
         }
         return stripped
@@ -1616,34 +1685,91 @@ class ChatSession(
     }
 
     fun getContextWarning(): String {
-        if (useStrategicAgent && strategicAgent != null) {
-            try {
-                val stats = strategicAgent!!.getTokenStats()
-                val contextWindowSize = 131072
-                val contextPercent = (stats.totalTokens.toDouble() / contextWindowSize) * 100
-                return when {
-                    contextPercent > 90 -> "🔴 КРИТИЧЕСКИ: ${stats.totalTokens}/131072 (${
-                        "%.1f".format(contextPercent)
-                    }%)"
-
-                    contextPercent > 70 -> "⚠️ ВНИМАНИЕ: ${stats.totalTokens}/131072 (${
-                        "%.1f".format(contextPercent)
-                    }%)"
-
-                    else -> "✅ Контекст в порядке: ${stats.totalTokens}/131072 (${
-                        "%.1f".format(contextPercent)
-                    }%)"
-                }
-            } catch (_: Exception) {
-            }
+        val contextWindowSize = 131072
+        val currentTokens = try {
+            if (useStrategicAgent && strategicAgent != null) {
+                val stats = strategicAgent!!.getStrategyStats()
+                stats.contextSizeTokens
+            } else compressedAgent?.getTokenStats()?.totalTokens
+                ?: (regularAgent?.getTokenStats()?.totalTokens ?: 0)
+        } catch (_: Exception) {
+            0
         }
-        return compressedAgent?.getContextWarning() ?: regularAgent?.getContextWarning() ?: ""
+        if (currentTokens <= 0) return ""
+        val percent = currentTokens.toDouble() / contextWindowSize * 100
+        return when {
+            percent > 90 -> "🔴 КРИТИЧЕСКИ: ${currentTokens}/${contextWindowSize} (${
+                "%.1f".format(
+                    percent
+                )
+            }%)"
+
+            percent > 70 -> "⚠️ ВНИМАНИЕ: ${currentTokens}/${contextWindowSize} (${
+                "%.1f".format(
+                    percent
+                )
+            }%)"
+
+            else -> "✅ Контекст в порядке: ${currentTokens}/${contextWindowSize} (${
+                "%.1f".format(
+                    percent
+                )
+            }%)"
+        }
     }
 
     fun clearTokenStats() {
         compressedAgent?.clearTokenStats()
         regularAgent?.clearTokenStats()
         strategicAgent?.clearTokenStats()
+    }
+
+    private fun buildSystemPromptWithMemory(): String {
+        val footer = if (taskMemorySummary.isNotBlank()) {
+            """
+            
+            ### ФОРМАТ ОТВЕТА ###
+            В конце ответа добавь ТОЛЬКО НОВЫЕ элементы (не повторяй уже известные из памяти задачи):
+            [CONSTRAINT]новое ограничение 1[/CONSTRAINT]
+            [CONSTRAINT]новое ограничение 2[/CONSTRAINT]
+            [PROGRESS_DONE]сделанная задача[/PROGRESS_DONE]
+            [PROGRESS_IN_PROGRESS]текущая задача[/PROGRESS_IN_PROGRESS]
+            [PROGRESS_BLOCKED]заблокированная задача[/PROGRESS_BLOCKED]
+            [DECISION]новое решение[/DECISION]
+            [CONTEXT]новый контекст — описание[/CONTEXT]
+            Можно несколько [CONSTRAINT], [PROGRESS_DONE], [PROGRESS_IN_PROGRESS], [PROGRESS_BLOCKED], [DECISION], [CONTEXT] — каждый в отдельном теге.
+            ⚠️ [GOAL] НЕ пиши — цель уже установлена.
+            """.trimIndent()
+        } else {
+            """
+            
+            ### ФОРМАТ ОТВЕТА ###
+            Твой ответ ДОЛЖЕН заканчиваться тегами. Может быть НЕСКОЛЬКО ограничений, статусов задач, решений и контекстов — каждый в отдельном теге:
+            [GOAL]цель пользователя одной фразой[/GOAL]
+            [CONSTRAINT]ограничение 1[/CONSTRAINT]
+            [CONSTRAINT]ограничение 2[/CONSTRAINT]
+            [PROGRESS_DONE]сделанная задача[/PROGRESS_DONE]
+            [PROGRESS_IN_PROGRESS]текущая задача[/PROGRESS_IN_PROGRESS]
+            [PROGRESS_BLOCKED]заблокированная задача[/PROGRESS_BLOCKED]
+            [DECISION]решение 1[/DECISION]
+            [DECISION]решение 2[/DECISION]
+            [CONTEXT]контекст 1 — описание[/CONTEXT]
+            [CONTEXT]контекст 2 — описание[/CONTEXT]
+            Если каких-то элементов нет — не пиши соответствующий тег. [GOAL] — всегда и обязательно!
+            """.trimIndent()
+        }
+        return if (taskMemorySummary.isNotBlank()) {
+            buildString {
+                appendLine(systemPrompt)
+                appendLine()
+                appendLine("### ПАМЯТЬ ЗАДАЧИ (цель и контекст диалога) ###")
+                appendLine(taskMemorySummary)
+                appendLine("### КОНЕЦ ПАМЯТИ ЗАДАЧИ ###")
+                append(footer)
+            }
+        } else {
+            systemPrompt + footer
+        }
     }
 
     private fun buildStructuredRagPrompt(userQuery: String, ragAnswer: RagAnswer): String {

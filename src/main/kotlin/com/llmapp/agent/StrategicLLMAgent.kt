@@ -51,11 +51,6 @@ class StrategicLLMAgent(
         initStrategy(currentStrategyType, systemPrompt)
     }
 
-    fun refreshApiKey(newApiKey: String) {
-        apiClient.updateApiKey(newApiKey)
-        println("🔑 StrategicLLMAgent: API ключ обновлен")
-    }
-
     private fun initStrategy(type: ContextStrategyType, systemPrompt: String) {
         strategy = when (type) {
             ContextStrategyType.SLIDING_WINDOW -> SlidingWindowStrategy(20, systemPrompt)

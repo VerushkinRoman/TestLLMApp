@@ -52,14 +52,11 @@ fun SettingsPanel(
     onResetToDefault: () -> Unit,
     compressionEnabled: Boolean,
     keepLastMessages: Int,
-    summarizeEvery: Int,
+    compressAfterTokens: Int,
     compressionStats: com.llmapp.agent.CompressedChatHistory.CompressionStats?,
     onCompressionToggle: (Boolean) -> Unit,
     onKeepLastMessagesChange: (Int) -> Unit,
-    onSummarizeEveryChange: (Int) -> Unit,
-    onRotateToNextKey: () -> Unit,
-    onResetKeyRotation: () -> Unit,
-    onShowKeyStats: () -> Unit
+    onCompressAfterTokensChange: (Int) -> Unit,
 ) {
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -99,20 +96,14 @@ fun SettingsPanel(
                     CompressionSettingsCard(
                         compressionEnabled = compressionEnabled,
                         keepLastMessages = keepLastMessages,
-                        summarizeEvery = summarizeEvery,
+                        compressAfterTokens = compressAfterTokens,
                         onCompressionToggle = onCompressionToggle,
                         onKeepLastMessagesChange = onKeepLastMessagesChange,
-                        onSummarizeEveryChange = onSummarizeEveryChange,
+                        onCompressAfterTokensChange = onCompressAfterTokensChange,
                         compressionStats = compressionStats
                     )
 
-                    ApiKeysStatusCard()
-
-                    ApiKeysControlCard(
-                        onRotateKey = onRotateToNextKey,
-                        onResetRotation = onResetKeyRotation,
-                        onShowStats = onShowKeyStats
-                    )
+                    com.llmapp.ui.PlaceholderScreen("API Ключи", "Работа через серверную конфигурацию без авторизации")
 
                     InfoCard(
                         title = "Сравнение моделей",

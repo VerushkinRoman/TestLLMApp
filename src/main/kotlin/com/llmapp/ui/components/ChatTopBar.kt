@@ -1,11 +1,11 @@
 package com.llmapp.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -41,7 +41,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -54,7 +53,6 @@ import kotlin.math.roundToInt
 @Composable
 fun ChatTopBar(
     controlEnabled: Boolean,
-    currentModel: String,
     memorySettings: MemorySettings,
     onMemorySettingChanged: (MemorySettings) -> Unit,
     onEditProfile: () -> Unit,
@@ -66,7 +64,11 @@ fun ChatTopBar(
     dataMcpConnected: Boolean = false,
     onToggleDataMcp: () -> Unit = {},
     pipelineMcpConnected: Boolean = false,
-    onTogglePipelineMcp: () -> Unit = {}
+    onTogglePipelineMcp: () -> Unit = {},
+    ragEnabled: Boolean = false,
+    onToggleRag: (Boolean) -> Unit = {},
+    onOpenRagSettings: () -> Unit = {},
+    onOpenTaskMemory: () -> Unit = {},
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -130,7 +132,7 @@ fun ChatTopBar(
             ) {
                 Box {
                     Text(
-                        text = if (activeProfile.name.isNotEmpty()) "👤" else "👤",
+                        text = "👤",
                         fontSize = 20.sp
                     )
                     if (activeProfile.name.isNotEmpty()) {
@@ -145,7 +147,38 @@ fun ChatTopBar(
                 }
             }
 
-            Box(
+            // RAG toggle
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (ragEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (ragEnabled) "📚 RAG" else "📄 RAG",
+                        fontSize = 12.sp,
+                        color = if (ragEnabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.clickable(
+                            enabled = ragEnabled,
+                            onClick = onOpenRagSettings
+                        )
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = ragEnabled,
+                        onCheckedChange = onToggleRag,
+                        modifier = Modifier.size(width = 36.dp, height = 20.dp)
+                    )
+                }
+            }
+
+            // Memory settings button
+            IconButton(
+                onClick = { showMemoryMenu = !showMemoryMenu },
                 modifier = Modifier
                     .size(36.dp)
                     .onGloballyPositioned { coordinates ->
@@ -153,58 +186,22 @@ fun ChatTopBar(
                         buttonSize.value = coordinates.size
                     }
             ) {
-                IconButton(
-                    onClick = { showMemoryMenu = !showMemoryMenu },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        Icons.Default.Memory,
-                        contentDescription = "Настройки памяти",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            MemoryStatusChip(
-                label = "КПП",
-                active = memorySettings.useShortTerm,
-                color = Color(0xFF2E7D32)
-            )
-
-            MemoryStatusChip(
-                label = "РП",
-                active = memorySettings.useWorkingMemory,
-                color = Color(0xFFFF9800)
-            )
-
-            MemoryStatusChip(
-                label = "ДП",
-                active = memorySettings.useLongTerm,
-                color = Color(0xFF43A047)
-            )
-
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.padding(end = 8.dp)
-            ) {
-                Text(
-                    text = "🔑${com.llmapp.api.ApiConfig.getCurrentKeyIndex()}",
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                Icon(
+                    Icons.Default.Memory,
+                    contentDescription = "Настройки памяти",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
 
-            Text(
-                text = currentModel,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 8.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    )
+            // TaskMemory button
+            IconButton(
+                onClick = onOpenTaskMemory,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text("🧠", fontSize = 20.sp)
+            }
+        })
 
     if (showMemoryMenu) {
         Popup(
@@ -224,7 +221,12 @@ fun ChatTopBar(
                     modifier = Modifier.widthIn(max = 280.dp)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("🧠 Настройки памяти", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                        text = {
+                            Text(
+                                "🧠 Настройки памяти",
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        },
                         onClick = { showMemoryMenu = false },
                         enabled = false
                     )

@@ -5,5 +5,4 @@ import com.llmapp.model.RouterResponse
 
 interface RouterClient {
     suspend fun sendRequest(request: RouterRequest): RouterResponse
-    fun updateApiKey(newApiKey: String)
 }

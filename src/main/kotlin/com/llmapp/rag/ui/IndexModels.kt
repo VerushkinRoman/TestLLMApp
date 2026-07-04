@@ -21,7 +21,14 @@ sealed interface IndexEvent {
     data class SetTopKAfter(val topK: Int) : IndexEvent
     data object CompareModes : IndexEvent
     data object ClearComparison : IndexEvent
+    data class AddUserArticle(val title: String, val content: String) : IndexEvent
+    data class RemoveUserArticle(val index: Int) : IndexEvent
 }
+
+data class UserArticle(
+    val title: String,
+    val content: String,
+)
 
 data class IndexState(
     val isBuilding: Boolean = false,
@@ -38,6 +45,7 @@ data class IndexState(
     val rerankerConfig: RerankerConfig = RerankerConfig(),
     val comparisonResult: RagComparisonResult? = null,
     val isComparing: Boolean = false,
+    val userArticles: List<UserArticle> = emptyList(),
 )
 
 data class IndexStats(

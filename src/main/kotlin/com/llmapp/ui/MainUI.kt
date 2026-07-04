@@ -1,9 +1,14 @@
 package com.llmapp.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,11 +33,11 @@ import com.llmapp.chat.ChatSession
 import com.llmapp.controller.ChatStorageManager
 import com.llmapp.invariants.InvariantSet
 import com.llmapp.memory.UserProfile
+import com.llmapp.rag.ui.IndexScreen
 import com.llmapp.ui.components.AppNavigationRail
 import com.llmapp.ui.components.ConstraintsEditDialog
 import com.llmapp.ui.components.CreateTaskDialog
 import com.llmapp.ui.components.InvariantManagerDialog
-import com.llmapp.ui.components.ModelsPanel
 import com.llmapp.ui.components.ProfileEditDialog
 import com.llmapp.ui.components.ProfileManagerDialog
 import com.llmapp.ui.components.ProfileWelcomeDialog
@@ -43,7 +49,6 @@ import com.llmapp.ui.screens.ChatScreen
 import com.llmapp.ui.screens.CollectorScreen
 import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.screens.McpScreen
-import com.llmapp.rag.ui.IndexScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
 import com.llmapp.ui.viewmodel.ViewEvent
 import java.util.prefs.Preferences
@@ -497,6 +502,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartRagStructuredDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartContextRetentionDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartContextRetentionDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,
@@ -542,13 +555,9 @@ fun MainScreen(
                 }
             )
 
-            Screen.Models -> ModelsPanel(
-                models = state.availableModels,
-                currentModel = state.currentModel,
-                onModelSelected = {
-                    sendEvent(ViewEvent.ChangeModel(it))
-                    sendEvent(ViewEvent.RefreshTokenStats)
-                }
+            Screen.Models -> PlaceholderScreen(
+                "Модели",
+                "Выбор модели отключен (используется серверная конфигурация)"
             )
 
             Screen.Mcp -> McpScreen()
@@ -574,21 +583,39 @@ fun MainScreen(
                 onResetToDefault = { sendEvent(ViewEvent.ResetToDefault) },
                 compressionEnabled = state.compressionEnabled,
                 keepLastMessages = state.keepLastMessages,
-                summarizeEvery = state.summarizeEvery,
+                compressAfterTokens = state.compressAfterTokens,
                 compressionStats = state.compressionStats,
                 onCompressionToggle = { sendEvent(ViewEvent.ToggleCompression(it)) },
                 onKeepLastMessagesChange = {
-                    sendEvent(ViewEvent.UpdateCompressionParams(it, state.summarizeEvery))
+                    sendEvent(ViewEvent.UpdateCompressionParams(it, state.compressAfterTokens))
                 },
-                onSummarizeEveryChange = {
+                onCompressAfterTokensChange = {
                     sendEvent(ViewEvent.UpdateCompressionParams(state.keepLastMessages, it))
                 },
-                onRotateToNextKey = { sendEvent(ViewEvent.ForceRotateToNextKey) },
-                onResetKeyRotation = {
-                    com.llmapp.api.ApiConfig.resetKeyRotation()
-                    sendEvent(ViewEvent.RefreshApiKeys)
-                },
-                onShowKeyStats = { println(com.llmapp.api.KeyUsageMonitor.getStatsReport()) }
+            )
+        }
+    }
+}
+
+@Composable
+fun PlaceholderScreen(title: String, message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

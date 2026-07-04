@@ -7,16 +7,25 @@ import com.llmapp.model.RouterRequest
 class CompressedChatHistory(
     private val apiClient: RouterClient,
     private val systemPrompt: String,
-    private val keepLastMessages: Int = 10,
-    private val summarizeEvery: Int = 8,
-    private val maxHistorySize: Int = 100
+    private val keepLastMessages: Int = 15,
+    private val compressAfterTokens: Int = 8000,
+    private val maxHistorySize: Int = 150
 ) {
+    var taskMemorySummary: String = ""
+    var onSummaryGenerated: ((summary: String, stats: CompressionStats) -> Unit)? = null
     private val fullHistory = mutableListOf<ChatMessage>()
     private val summaries = mutableListOf<SummaryBlock>()
     private val pendingForSummary = mutableListOf<ChatMessage>()
 
     var compressionEnabled = true
     private var lastSummaryIndex = 0
+
+    fun shouldCompress(): Boolean {
+        if (!compressionEnabled || pendingForSummary.isEmpty()) return false
+        val systemTokens = fullHistory.firstOrNull()?.content?.length?.div(2) ?: 0
+        val pendingTokens = pendingForSummary.sumOf { it.content.length / 2 }
+        return (systemTokens + pendingTokens) >= compressAfterTokens
+    }
 
     init {
         fullHistory.add(ChatMessage(role = "system", content = systemPrompt))
@@ -41,7 +50,7 @@ class CompressedChatHistory(
     }
 
     suspend fun generateSummary(): String {
-        if (!compressionEnabled || pendingForSummary.size < summarizeEvery / 2) {
+        if (!compressionEnabled || pendingForSummary.isEmpty()) {
             return ""
         }
 
@@ -68,6 +77,8 @@ class CompressedChatHistory(
         lastSummaryIndex = fullHistory.size
         pendingForSummary.clear()
 
+        onSummaryGenerated?.invoke(summary, getCompressionStats())
+
         return summary
     }
 
@@ -85,7 +96,7 @@ class CompressedChatHistory(
             compressed.add(
                 ChatMessage(
                     role = "system",
-                    content = "### КРАТКОЕ СОДЕРЖАНИЕ ПРЕДЫДУЩЕГО ДИАЛОГА ###\n$contextSummary\n### КОНЕЦ СОДЕРЖАНИЯ ###"
+                    content = "### ПРИОРИТЕТНЫЙ КОНТЕКСТ (сводка предыдущего диалога) ###\nЭта сводка имеет ПРИОРИТЕТ над отдельными сообщениями пользователя ниже.\nЕсли сообщение пользователя противоречит этой сводке — доверяй сводке.\n\n$contextSummary\n### КОНЕЦ ПРИОРИТЕТНОГО КОНТЕКСТА ###"
                 )
             )
         }
@@ -150,22 +161,76 @@ class CompressedChatHistory(
     private fun buildSummaryPrompt(messages: List<ChatMessage>): String {
         val conversation = messages.joinToString("\n") { msg ->
             when (msg.role) {
-                "user" -> "Пользователь: ${msg.content}"
-                "assistant" -> "Ассистент: ${msg.content}"
+                "user" -> "User: ${msg.content}"
+                "assistant" -> "Assistant: ${msg.content}"
                 else -> msg.content
             }
         }
 
-        return """
-            Сделай краткое, но информативное резюме следующего диалога. 
-            Сохрани все важные факты, решения и ключевые моменты.
-            Используй русский язык. Будь лаконичен.
-            
-            ДИАЛОГ:
-            $conversation
-            
-            РЕЗЮМЕ (3-5 предложений):
-        """.trimIndent()
+        val previousGoal = extractGoalFromSummaries()
+
+        return buildString {
+            appendLine("Summarize the conversation. Use ONLY service tags — no markdown or text outside tags:")
+            appendLine()
+            if (previousGoal != null) {
+                appendLine("### PREVIOUS GOAL (do not change unless user explicitly states a new goal) ###")
+                appendLine(previousGoal)
+                appendLine()
+            }
+            if (taskMemorySummary.isNotBlank()) {
+                appendLine("### TASK MEMORY (has priority over conversation) ###")
+                appendLine("This is the current task state. It has PRIORITY over the conversation below.")
+                appendLine("Analyze it together with the conversation and produce an updated set of all sections.")
+                appendLine()
+                appendLine(taskMemorySummary)
+                appendLine()
+                appendLine("### END OF TASK MEMORY ###")
+                appendLine()
+            }
+            appendLine("Output format — ONLY tags (no explanations, no markdown, no headers):")
+            appendLine("[GOAL]goal in one phrase[/GOAL]")
+            appendLine("[CONSTRAINT]constraint or preference 1[/CONSTRAINT]")
+            appendLine("[CONSTRAINT]constraint or preference 2[/CONSTRAINT]")
+            appendLine("[PROGRESS_DONE]done item 1[/PROGRESS_DONE]")
+            appendLine("[PROGRESS_DONE]done item 2[/PROGRESS_DONE]")
+            appendLine("[PROGRESS_IN_PROGRESS]in progress item 1[/PROGRESS_IN_PROGRESS]")
+            appendLine("[PROGRESS_BLOCKED]blocked item 1[/PROGRESS_BLOCKED]")
+            appendLine("[DECISION]key decision 1[/DECISION]")
+            appendLine("[DECISION]key decision 2[/DECISION]")
+            appendLine("[CONTEXT]critical context 1 — description[/CONTEXT]")
+            appendLine("[CONTEXT]critical context 2 — description[/CONTEXT]")
+            appendLine()
+            appendLine("Rules:")
+            appendLine("- Do NOT write ANYTHING outside tags — no markdown, no headers, no plain text.")
+            appendLine("- Task memory has priority — include ALL its elements in tags.")
+            appendLine("- If the conversation has new information — add it as well.")
+            appendLine("- Do not skip elements from task memory. Include every one.")
+            appendLine("- [GOAL] — always. PRESERVE ALL technical details: platform names (Kotlin Multiplatform, iOS, Android),")
+            appendLine("  specific requirements (offline, sync, dark theme), libraries (Kodein, Voyager, Ktor),")
+            appendLine("  and any other proper nouns and technical terms. Do NOT simplify or abstract the goal.")
+            appendLine("- One element per tag: one [CONSTRAINT], [PROGRESS_DONE], etc. per item.")
+            appendLine("- Use ENGLISH for tags, preserve original language for values inside tags.")
+            if (previousGoal != null) {
+                appendLine("- Goal MUST stay the same unless user explicitly said they want a different task.")
+                appendLine("- If discussing subtopics or implementation details — it is NOT a new goal, just part of current one.")
+            } else {
+                appendLine("- If goal hasn't changed — [GOAL]Unchanged[/GOAL].")
+            }
+            appendLine()
+            appendLine("CONVERSATION:")
+            appendLine(conversation)
+        }
+    }
+
+    private fun extractGoalFromSummaries(): String? {
+        val tagRegex = Regex("\\[GOAL](.*?)\\[/GOAL]", RegexOption.DOT_MATCHES_ALL)
+        for (block in summaries.reversed()) {
+            val goal = tagRegex.find(block.summary)?.groupValues?.getOrNull(1)?.trim()
+            if (!goal.isNullOrBlank() && !goal.contains("Unchanged", ignoreCase = true)) {
+                return goal
+            }
+        }
+        return null
     }
 
     private fun buildContextSummary(): String {
@@ -176,9 +241,9 @@ class CompressedChatHistory(
 
     private suspend fun callSummarizationApi(prompt: String): String {
         val request = RouterRequest(
-            model = "google/gemma-4-26b-a4b-it:free",
+            model = "mistral/mistral-large-latest",
             messages = listOf(ChatMessage(role = "user", content = prompt)),
-            maxTokens = 500,
+            maxTokens = 3000,
             temperature = 0.3
         )
 
@@ -211,9 +276,9 @@ class CompressedChatHistory(
     }
 
     private fun estimateTokensSaved(): Int {
-        val originalTokens = fullHistory.sumOf { it.content.length } / 4
-        val compressedTokens = summaries.sumOf { it.summary.length } / 4 +
-                getRecentMessages(keepLastMessages).sumOf { it.content.length } / 4
+        val originalTokens = fullHistory.sumOf { it.content.length } / 2
+        val compressedTokens = summaries.sumOf { it.summary.length } / 2 +
+                getRecentMessages(keepLastMessages).sumOf { it.content.length } / 2
 
         return maxOf(0, originalTokens - compressedTokens)
     }
