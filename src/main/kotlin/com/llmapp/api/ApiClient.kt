@@ -6,6 +6,9 @@ import com.llmapp.model.RouterResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.auth.Auth
+import io.ktor.client.plugins.auth.providers.BasicAuthCredentials
+import io.ktor.client.plugins.auth.providers.basic
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -50,6 +53,16 @@ class ApiClient(
 
         val client = HttpClient {
             install(ContentNegotiation) { json(this@ApiClient.json) }
+            install(Auth) {
+                basic {
+                    credentials {
+                        BasicAuthCredentials(
+                            username = ApiConfig.getLlmUser(),
+                            password = ApiConfig.getLlmUserPassword(),
+                        )
+                    }
+                }
+            }
             install(HttpTimeout) {
                 requestTimeoutMillis = 300_000
                 connectTimeoutMillis = 30_000
