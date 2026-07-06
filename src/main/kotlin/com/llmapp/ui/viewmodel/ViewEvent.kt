@@ -153,6 +153,12 @@ sealed class ViewEvent {
     data class OnMcpLog(val message: String) : ViewEvent()
 
     // ============================================================
+    // МОДЕЛЬ (локальная / облачная)
+    // ============================================================
+    object ToggleLocalModel : ViewEvent()
+    data class StartLocalDemo(val questions: List<String>) : ViewEvent()
+
+    // ============================================================
     // ПАМЯТЬ ЗАДАЧИ
     // ============================================================
     data object ToggleTaskMemory : ViewEvent()

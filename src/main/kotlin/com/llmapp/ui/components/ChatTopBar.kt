@@ -69,6 +69,8 @@ fun ChatTopBar(
     onToggleRag: (Boolean) -> Unit = {},
     onOpenRagSettings: () -> Unit = {},
     onOpenTaskMemory: () -> Unit = {},
+    useLocalModel: Boolean = false,
+    onToggleLocalModel: () -> Unit = {},
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -98,6 +100,7 @@ fun ChatTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         actions = {
+            Spacer(Modifier.width(8.dp))
             IconButton(
                 onClick = onShowInvariantManager,
                 modifier = Modifier.size(36.dp)
@@ -171,6 +174,42 @@ fun ChatTopBar(
                     Switch(
                         checked = ragEnabled,
                         onCheckedChange = onToggleRag,
+                        modifier = Modifier.size(width = 36.dp, height = 20.dp)
+                    )
+                }
+            }
+
+            // Local / Cloud model toggle
+            Spacer(Modifier.width(12.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (useLocalModel) Color(0xFF1B5E20).copy(alpha = 0.7f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Box(modifier = Modifier.width(92.dp)) {
+                        Text(
+                            text = "🖥️ Локально",
+                            fontSize = 12.sp,
+                            color = if (useLocalModel) Color(0xFFA5D6A7)
+                            else Color.Transparent,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "☁️ Облако",
+                            fontSize = 12.sp,
+                            color = if (useLocalModel) Color.Transparent
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Switch(
+                        checked = useLocalModel,
+                        onCheckedChange = { onToggleLocalModel() },
                         modifier = Modifier.size(width = 36.dp, height = 20.dp)
                     )
                 }

@@ -241,6 +241,13 @@ class ChatSession(
 
     fun getCurrentModel(): String = currentModel
 
+    fun switchLocalMode(useLocal: Boolean) {
+        val newModel = if (useLocal) "gemma4:26b" else "mistral/mistral-large-latest"
+        currentModel = newModel
+        ClientFactory.setUseLocal(useLocal)
+        changeModel(newModel)
+    }
+
     fun setResponseControl(control: ResponseControl) {
         responseControl = control
         compressedAgent?.updateResponseControl(control)
@@ -1585,7 +1592,7 @@ class ChatSession(
     private suspend fun askMcpFollowUp(prompt: String, isFinalSynthesis: Boolean = false): String {
         println("🔄 LLM: Отправляю follow-up запрос (${prompt.length} символов)")
         println("📝 LLM: Промт (первые 500): ${prompt.take(500)}")
-        val client: RouterClient = ClientFactory.create(currentApiKey)
+        val client: RouterClient = ClientFactory.create()
         val effectiveSystemPrompt = if (isAnyMcpConnected()) {
             dataIntegration?.refreshTools()
             pipelineIntegration?.refreshTools()

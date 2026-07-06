@@ -380,13 +380,7 @@ fun MainScreen(
                 }
             },
             onClearHistory = {
-                val demoMessages = state.messages.filter { it.isDemoMessage }
-                // Очищаем через ViewEvent
                 sendEvent(ViewEvent.ClearHistory)
-                // Добавляем демо-сообщения обратно
-                demoMessages.forEach { message ->
-                    sendEvent(ViewEvent.AddDemoMessage(message))
-                }
                 if (state.messages.isEmpty()) {
                     chatMemoryService.saveCurrentChat(emptyList(), state.currentModel)
                 }
@@ -409,6 +403,10 @@ fun MainScreen(
                         sendEvent(ViewEvent.AddDemoMessage(message))
                     })
                     sendEvent(ViewEvent.StartTokenDemo)
+                    currentScreen = Screen.Chat
+                },
+                onStartLocalDemo = { questions ->
+                    sendEvent(ViewEvent.StartLocalDemo(questions))
                     currentScreen = Screen.Chat
                 },
                 onStartCompressionDemo = {

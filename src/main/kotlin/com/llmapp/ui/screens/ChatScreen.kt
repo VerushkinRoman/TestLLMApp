@@ -118,6 +118,8 @@ fun ChatScreen(
             onToggleRag = { onEvent(ViewEvent.ToggleRagMode(it)) },
             onOpenRagSettings = { showRagDialog = true },
             onOpenTaskMemory = { showTaskMemoryDialog = true },
+            useLocalModel = viewState.useLocalModel,
+            onToggleLocalModel = { onEvent(ViewEvent.ToggleLocalModel) },
         )
 
         viewState.taskState?.let { taskState ->

@@ -644,6 +644,115 @@ class ChatViewModel : ViewModel() {
             ViewEvent.ClearCollectorLog -> {
                 updateState { copy(collectorLog = emptyList()) }
             }
+
+            ViewEvent.ToggleLocalModel -> {
+                val newValue = !_state.value.useLocalModel
+                chatSession.switchLocalMode(newValue)
+                updateState {
+                    copy(
+                        useLocalModel = newValue,
+                        currentModel = if (newValue) localModelName else "mistral/mistral-large-latest"
+                    )
+                }
+            }
+
+            is ViewEvent.StartLocalDemo -> {
+                viewModelScope.launch {
+                    updateState { copy(isDemoRunning = true) }
+                    try {
+                        chatSession.switchLocalMode(true)
+                        updateState { copy(useLocalModel = true, currentModel = localModelName, messages = emptyList()) }
+
+                        val qaPairs = mutableListOf<Pair<String, String>>()
+
+                        for (question in event.questions) {
+                            val userMsg = ChatMessageUI(
+                                id = UUID.randomUUID().toString(),
+                                role = "user",
+                                content = question,
+                                isDemoMessage = true
+                            )
+                            updateState { copy(messages = messages + userMsg, isGenerating = true, isTyping = true) }
+
+                            try {
+                                val response = chatSession.ask(question)
+                                val clean = stripMarkers(response.content)
+                                val assistantMsg = ChatMessageUI(
+                                    id = UUID.randomUUID().toString(),
+                                    role = "assistant",
+                                    content = clean,
+                                    isDemoMessage = true,
+                                    totalTokens = response.totalTokens,
+                                    promptTokens = response.promptTokens,
+                                    completionTokens = response.completionTokens,
+                                    responseTimeMs = response.responseTimeMs,
+                                )
+                                updateState { copy(messages = messages + assistantMsg, isGenerating = false, isTyping = false) }
+                                qaPairs.add(question to clean)
+                            } catch (e: Exception) {
+                                val errorMsg = ChatMessageUI(
+                                    id = UUID.randomUUID().toString(),
+                                    role = "assistant",
+                                    content = "❌ Ошибка: ${e.message}",
+                                    isDemoMessage = true
+                                )
+                                updateState { copy(messages = messages + errorMsg, isGenerating = false, isTyping = false) }
+                                qaPairs.add(question to "[Ошибка: ${e.message}]")
+                            }
+                        }
+
+                        chatSession.switchLocalMode(false)
+                        updateState { copy(useLocalModel = false, currentModel = "mistral/mistral-large-latest") }
+
+                        val qaText = qaPairs.withIndex().joinToString("\n\n") { (i, pair) ->
+                            "=== Вопрос ${i + 1} ===\n${pair.first}\n\n=== Ответ ${i + 1} ===\n${pair.second}"
+                        }
+                        val evalPrompt = """
+                            Оцени качество ответов локальной модели на 3 вопроса ниже.
+
+                            $qaText
+
+                            По каждому вопросу дай оценку от 1 до 10 и краткий комментарий. В конце подведи общий итог.
+                        """.trimIndent()
+
+                        val evalUserMsg = ChatMessageUI(
+                            id = UUID.randomUUID().toString(),
+                            role = "user",
+                            content = evalPrompt,
+                            isDemoMessage = true
+                        )
+                        updateState { copy(messages = messages + evalUserMsg, isGenerating = true, isTyping = true) }
+
+                        try {
+                            val evalResponse = chatSession.ask(evalPrompt)
+                            val clean = stripMarkers(evalResponse.content)
+                            val evalAssistantMsg = ChatMessageUI(
+                                id = UUID.randomUUID().toString(),
+                                role = "assistant",
+                                content = clean,
+                                isDemoMessage = true,
+                                totalTokens = evalResponse.totalTokens,
+                                promptTokens = evalResponse.promptTokens,
+                                completionTokens = evalResponse.completionTokens,
+                                responseTimeMs = evalResponse.responseTimeMs,
+                            )
+                            updateState { copy(messages = messages + evalAssistantMsg, isGenerating = false, isTyping = false) }
+                        } catch (e: Exception) {
+                            val errorMsg = ChatMessageUI(
+                                id = UUID.randomUUID().toString(),
+                                role = "assistant",
+                                content = "❌ Ошибка оценки: ${e.message}",
+                                isDemoMessage = true
+                            )
+                            updateState { copy(messages = messages + errorMsg, isGenerating = false, isTyping = false) }
+                        }
+
+                        updateTokenStats()
+                    } finally {
+                        updateState { copy(isDemoRunning = false) }
+                    }
+                }
+            }
         }
     }
 
@@ -704,5 +813,19 @@ class ChatViewModel : ViewModel() {
             topKBefore = s.topKBefore,
             topKAfter = s.topKAfter,
         )
+    }
+
+    companion object {
+        private val markerRegex = Regex(
+            "\\[GOAL].*?\\[/GOAL]|\\[CONSTRAINT].*?\\[/CONSTRAINT]|" +
+            "\\[DECISION].*?\\[/DECISION]|\\[CONTEXT].*?\\[/CONTEXT]|" +
+            "\\[PROGRESS_DONE].*?\\[/PROGRESS_DONE]|\\[PROGRESS_IN_PROGRESS].*?\\[/PROGRESS_IN_PROGRESS]|" +
+            "\\[PROGRESS_BLOCKED].*?\\[/PROGRESS_BLOCKED]|\\[PROGRESSDONE].*?\\[/PROGRESSDONE]",
+            RegexOption.DOT_MATCHES_ALL
+        )
+
+        private fun stripMarkers(content: String): String {
+            return content.replace(markerRegex, "").trim()
+        }
     }
 }

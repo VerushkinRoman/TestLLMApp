@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.ModelTraining
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -65,7 +66,8 @@ fun DemoScreen(
     currentDemoName: String?,
     demoProgress: String?,
     onCancelDemo: (() -> Unit)?,
-    onClearHistory: () -> Unit
+    onClearHistory: () -> Unit,
+    onStartLocalDemo: ((List<String>) -> Unit)? = null,
 ) {
     val demos = listOf(
         DemoItem(
@@ -74,7 +76,7 @@ fun DemoScreen(
             icon = Icons.Default.BarChart,
             description = "Показывает потребление токенов в диалогах разной длины",
             features = listOf("Короткий диалог", "Длинный диалог", "Доп. запросы"),
-            color = Color(0xFF4CAF50),
+            color = Color(0xFFFFA726),
             onStart = onStartTokenDemo
         ),
         DemoItem(
@@ -83,7 +85,7 @@ fun DemoScreen(
             icon = Icons.Default.Compress,
             description = "Сравнение работы с компрессией и без",
             features = listOf("Без компрессии", "С компрессией", "Сравнение"),
-            color = Color(0xFF388E3C),
+            color = Color(0xFFEF5350),
             onStart = onStartCompressionDemo
         ),
         DemoItem(
@@ -92,7 +94,7 @@ fun DemoScreen(
             icon = Icons.Default.Timeline,
             description = "Сравнение 3 стратегий управления контекстом",
             features = listOf("Скользящее окно", "Фиксация фактов", "Ветвление"),
-            color = Color(0xFF43A047),
+            color = Color(0xFFAB47BC),
             onStart = onStartStrategyDemo
         ),
         DemoItem(
@@ -101,7 +103,7 @@ fun DemoScreen(
             icon = Icons.Default.Memory,
             description = "Трехслойная модель памяти: краткосрочная, рабочая, долговременная",
             features = listOf("Профиль", "Рабочая задача", "Ограничения"),
-            color = Color(0xFF66BB6A),
+            color = Color(0xFFEC407A),
             onStart = onStartMemoryDemo
         ),
         DemoItem(
@@ -110,7 +112,7 @@ fun DemoScreen(
             icon = Icons.Default.Person,
             description = "Демонстрация персонализации агента под профиль пользователя",
             features = listOf("Профили", "Стили", "Ограничения"),
-            color = Color(0xFF66BB6A),
+            color = Color(0xFF26A69A),
             onStart = onStartPersonalizationDemo
         ),
         DemoItem(
@@ -119,7 +121,7 @@ fun DemoScreen(
             icon = Icons.Default.Memory,
             description = "Полная демонстрация агента с конечным автоматом",
             features = listOf("Состояние задачи", "Пауза", "Снимки"),
-            color = Color(0xFF2E7D32),
+            color = Color(0xFF7E57C2),
             onStart = onStartStatefulDemo
         ),
         DemoItem(
@@ -128,7 +130,7 @@ fun DemoScreen(
             icon = Icons.Default.Security,
             description = "Контроль поведения агента через инварианты",
             features = listOf("Архитектура", "Стек", "Бизнес-правила"),
-            color = Color(0xFF388E3C),
+            color = Color(0xFF5C6BC0),
             onStart = onStartInvariantDemo
         ),
         DemoItem(
@@ -137,7 +139,7 @@ fun DemoScreen(
             icon = Icons.Default.Timeline,
             description = "Демонстрация контролируемого жизненного цикла задачи",
             features = listOf("Переходы", "Валидация", "Контроль"),
-            color = Color(0xFF4CAF50),
+            color = Color(0xFF42A5F5),
             onStart = onStartTransitionDemo
         ),
         DemoItem(
@@ -146,7 +148,7 @@ fun DemoScreen(
             icon = Icons.Default.TravelExplore,
             description = "Индексация документов ЧМ: чанкинг, эмбеддинги, поиск, сравнение 2 стратегий",
             features = listOf("Чанкинг", "Эмбеддинги", "Поиск"),
-            color = Color(0xFF43A047),
+            color = Color(0xFF00BCD4),
             onStart = onStartRagDemo
         ),
         DemoItem(
@@ -155,7 +157,7 @@ fun DemoScreen(
             icon = Icons.Default.TravelExplore,
             description = "Сравнение ответов модели с RAG и без RAG на 10 контрольных вопросах по базе знаний ЧМ",
             features = listOf("10 вопросов", "Сравнение", "Оценка"),
-            color = Color(0xFF2E7D32),
+            color = Color(0xFFFF7043),
             onStart = onStartRagComparisonDemo
         ),
         DemoItem(
@@ -164,7 +166,7 @@ fun DemoScreen(
             icon = Icons.Default.TravelExplore,
             description = "Сравнение 3 режимов: базовый vs фильтр релевантности vs rewrite+фильтр. Демонстрация реранкера и query rewriting.",
             features = listOf("3 режима", "Фильтрация", "Rewrite"),
-            color = Color(0xFF43A047),
+            color = Color(0xFF9CCC65),
             onStart = onStartRagImprovedDemo
         ),
         DemoItem(
@@ -173,7 +175,7 @@ fun DemoScreen(
             icon = Icons.Default.TravelExplore,
             description = "Проверка 8 вопросов с обязательными источниками, цитатами и режимом 'не знаю' при низкой релевантности.",
             features = listOf("Источники", "Цитаты", "Не знаю"),
-            color = Color(0xFF2E7D32),
+            color = Color(0xFF8D6E63),
             onStart = onStartRagStructuredDemo
         ),
         DemoItem(
@@ -182,8 +184,26 @@ fun DemoScreen(
             icon = Icons.Default.Timeline,
             description = "Демонстрация TaskMemory и RAG-источников в 24 сообщениях с 4 сменами темы и возвратом к исходной.",
             features = listOf("TaskMemory", "RAG-источники", "24 сообщения"),
-            color = Color(0xFF2E7D32),
+            color = Color(0xFF78909C),
             onStart = onStartContextRetentionDemo
+        ),
+        DemoItem(
+            id = "local_model",
+            title = "🖥️ Локальная модель (Ollama)",
+            icon = Icons.Default.ModelTraining,
+            description = "Тест локальной модели gemma4:26b через Ollama. Отправляет 3 вопроса на русском языке и показывает ответы.",
+            features = listOf("Локально", "Ollama", "Русский"),
+            color = Color(0xFF1565C0),
+            onStart = {
+                onClearHistory()
+                onStartLocalDemo?.invoke(
+                    listOf(
+                        "Расскажи кратко, что такое квантовые вычисления?",
+                        "Напиши простую функцию на Python для проверки, является ли строка палиндромом.",
+                        "Объясни разницу между SQL и NoSQL базами данных простыми словами.",
+                    )
+                )
+            }
         ),
     )
 
