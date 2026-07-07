@@ -68,8 +68,21 @@ fun DemoScreen(
     onCancelDemo: (() -> Unit)?,
     onClearHistory: () -> Unit,
     onStartLocalDemo: ((List<String>) -> Unit)? = null,
+    onStartLocalAgentFlowDemo: (() -> Unit)? = null,
 ) {
     val demos = listOf(
+        DemoItem(
+            id = "local_agent_flow",
+            title = "🤖 Агентский флоу (локально)",
+            icon = Icons.Default.ModelTraining,
+            description = "Полный агентский флоу на локальной модели: создание задачи, планирование, генерация кода, рефакторинг. Проверка всех сценариев.",
+            features = listOf("Задача", "Код", "Контекст", "5 этапов"),
+            color = Color(0xFF00695C),
+            onStart = {
+                onClearHistory()
+                onStartLocalAgentFlowDemo?.invoke()
+            }
+        ),
         DemoItem(
             id = "token",
             title = "📊 Отслеживание токенов",

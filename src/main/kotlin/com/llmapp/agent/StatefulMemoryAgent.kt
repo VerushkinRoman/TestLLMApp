@@ -1,6 +1,5 @@
 package com.llmapp.agent
 
-import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.TaskState
 import com.llmapp.memory.UserProfile
@@ -41,13 +40,12 @@ data class SafeTransitionResult(
 )
 
 class StatefulMemoryAgent(
-    apiKey: String = ApiConfig.getApiKey(),
     private var model: String = "nvidia/nemotron-3-super-120b-a12b:free",
     systemPrompt: String = "Ты полезный ассистент. Отвечай на русском языке.",
     storageDir: String = System.getProperty("user.home") + "/.llm_task_states"
 ) {
     private val memoryAgent = MemoryAwareAgent(
-        apiKey = apiKey,
+        
         model = model,
         systemPrompt = systemPrompt,
         persistToDisk = true

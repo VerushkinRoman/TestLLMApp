@@ -1,7 +1,6 @@
 package com.llmapp.demo.manager
 
 import com.llmapp.agent.MemoryAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.TaskState
@@ -19,7 +18,6 @@ class MemoryDemoRunner(
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
     override suspend fun run() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "nvidia/nemotron-3-super-120b-a12b:free"
 
         addMessage(
@@ -45,7 +43,7 @@ class MemoryDemoRunner(
         delay(4.seconds)
 
         val agent = MemoryAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке, по делу, с примерами кода если нужно.",
             persistToDisk = false
@@ -423,7 +421,7 @@ class MemoryDemoRunner(
         delay(4.seconds)
 
         val agentNoMemory = MemoryAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай на русском языке."
         )

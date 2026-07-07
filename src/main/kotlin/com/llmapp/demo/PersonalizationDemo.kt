@@ -1,7 +1,6 @@
 package com.llmapp.demo
 
 import com.llmapp.agent.MemoryAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.UserProfile
@@ -15,7 +14,6 @@ import kotlin.time.Duration.Companion.seconds
  */
 class PersonalizationDemo {
     suspend fun runPersonalizationDemo() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "openai/gpt-oss-20b:free"
 
         println("=".repeat(100))
@@ -62,7 +60,7 @@ class PersonalizationDemo {
             println("   🎯 Стиль: ${profile.preferredStyle.name.lowercase()}")
 
             val agent = MemoryAwareAgent(
-                apiKey = apiKey,
+
                 model = model,
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке."
             )
@@ -172,7 +170,7 @@ class PersonalizationDemo {
         println("-".repeat(60))
 
         val analysisAgent = MemoryAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = """Ты эксперт по анализу данных и AI-агентов.
                 Твоя задача - проанализировать результаты тестирования

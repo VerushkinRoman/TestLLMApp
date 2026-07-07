@@ -2,7 +2,6 @@ package com.llmapp.demo.manager
 
 import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.LLMAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.demo.DemoData
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
@@ -18,7 +17,6 @@ class CompressionDemoRunner(
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
     override suspend fun run() {
-        val apiKey = ApiConfig.getApiKey()
         val primaryModel = "openai/gpt-oss-20b:free"
 
         // ========== ВВЕДЕНИЕ ==========
@@ -38,7 +36,7 @@ class CompressionDemoRunner(
         delayMedium()
 
         val regularAgent = LLMAgent(
-            apiKey = apiKey,
+
             model = primaryModel,
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу.",
             maxHistorySize = 200
@@ -125,7 +123,7 @@ class CompressionDemoRunner(
         delayMedium()
 
         val compressedAgent = CompressedLLMAgent(
-            apiKey = apiKey,
+
             model = primaryModel,
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу.",
             maxHistorySize = 200,
@@ -238,10 +236,10 @@ class CompressionDemoRunner(
         )
         delayMedium()
 
-        testAdaptiveCompression(apiKey)
+        testAdaptiveCompression()
     }
 
-    private suspend fun testAdaptiveCompression(apiKey: String) {
+    private suspend fun testAdaptiveCompression() {
         val models = listOf(
             "nvidia/nemotron-3-super-120b-a12b:free" to 1_000_000,
             "openai/gpt-oss-20b:free" to 131_072,
@@ -279,7 +277,7 @@ class CompressionDemoRunner(
             )
 
             val agent = CompressedLLMAgent(
-                apiKey = apiKey,
+
                 model = modelId,
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко.",
                 keepLastMessages = keepLastMessages,

@@ -105,7 +105,6 @@ class RAGImprovedDemoRunner(
     onTypingStateChanged: (Boolean) -> Unit,
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
-    private val apiKey = com.llmapp.api.ApiConfig.getApiKey()
     private val systemPrompt = "Ты полезный ассистент. Отвечай кратко и по делу на русском языке."
 
     private val modelsByPower = listOf(
@@ -128,7 +127,7 @@ class RAGImprovedDemoRunner(
             val model = modelsByPower[i]
             println("📊 ДЕМО RAG+:   ⏳ Проверяю модель $model...")
             try {
-                val client = ClientFactory.create(apiKey)
+                val client = ClientFactory.create()
                 val request = RouterRequest(
                     model = model,
                     messages = listOf(

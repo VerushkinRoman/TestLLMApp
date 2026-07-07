@@ -31,12 +31,11 @@ enum class ContextStrategyType {
 }
 
 class StrategicLLMAgent(
-    apiKey: String,
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl()
 ) {
-    private val apiClient: RouterClient = ClientFactory.create(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create()
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0
 

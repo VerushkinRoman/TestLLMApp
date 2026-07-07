@@ -3,7 +3,6 @@ package com.llmapp.demo
 import com.llmapp.agent.CompressedChatHistory
 import com.llmapp.agent.CompressedLLMAgent
 import com.llmapp.agent.LLMAgent
-import com.llmapp.api.ApiConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.milliseconds
@@ -49,7 +48,6 @@ class ComparisonResult(
 
 class SummaryDemo {
     suspend fun runComparison() {
-        val apiKey = ApiConfig.getApiKey()
         val primaryModel = "openai/gpt-oss-20b:free"
 
         println(DemoData.getCompressionDemoHeader(primaryModel, DemoData.longDialogueTopics.size))
@@ -59,7 +57,7 @@ class SummaryDemo {
         println("━".repeat(100))
 
         val regularAgent = LLMAgent(
-            apiKey = apiKey,
+
             model = primaryModel,
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу.",
             maxHistorySize = 200
@@ -75,7 +73,7 @@ class SummaryDemo {
         println("━".repeat(100))
 
         val compressedAgent = CompressedLLMAgent(
-            apiKey = apiKey,
+
             model = primaryModel,
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко и по делу.",
             maxHistorySize = 200,
@@ -95,7 +93,7 @@ class SummaryDemo {
 
         // Тест 3: Проверка адаптивности к контексту модели
         println(DemoData.getAdaptiveCompressionHeader())
-        testAdaptiveCompression(apiKey)
+        testAdaptiveCompression()
     }
 
     private suspend fun runTestWithAgent(
@@ -268,7 +266,7 @@ class SummaryDemo {
         println(DemoData.getCompressionConclusions(tokensSavedPercent, costSaved))
     }
 
-    private suspend fun testAdaptiveCompression(apiKey: String) {
+    private suspend fun testAdaptiveCompression() {
         val models = listOf(
             "nvidia/nemotron-3-super-120b-a12b:free" to 1_000_000,
             "openai/gpt-oss-20b:free" to 131_072,
@@ -294,7 +292,7 @@ class SummaryDemo {
             println("   Адаптивные настройки: keepLast=$keepLastMessages, compressAfterTokens=${compressAfterTokens}")
 
             val agent = CompressedLLMAgent(
-                apiKey = apiKey,
+
                 model = modelId,
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке кратко.",
                 keepLastMessages = keepLastMessages,

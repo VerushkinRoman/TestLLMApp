@@ -1,7 +1,6 @@
 package com.llmapp.demo
 
 import com.llmapp.agent.MemoryAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ProjectConstraints
 import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.TaskState
@@ -13,7 +12,6 @@ import kotlin.time.Duration.Companion.seconds
 class MemoryDemo {
 
     suspend fun runMemoryDemonstration() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "openai/gpt-oss-20b:free"
 
         println("=".repeat(100))
@@ -21,7 +19,7 @@ class MemoryDemo {
         println("=".repeat(100))
 
         val agent = MemoryAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты полезный ассистент. Отвечай на русском языке."
         )

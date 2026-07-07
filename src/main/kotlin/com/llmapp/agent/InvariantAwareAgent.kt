@@ -27,7 +27,6 @@ data class InvariantAwareResponse(
 )
 
 class InvariantAwareAgent(
-    apiKey: String,
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
@@ -37,7 +36,7 @@ class InvariantAwareAgent(
     val maxRetries: Int = 3,
     private val onAgentMessage: (suspend (String, String?) -> Unit)? = null
 ) {
-    private val apiClient: RouterClient = ClientFactory.create(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create()
 
     // Используем systemPrompt напрямую, но добавляем правила
     private val history = ChatHistory(

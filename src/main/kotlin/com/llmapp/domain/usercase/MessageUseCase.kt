@@ -226,12 +226,11 @@ class MessageUseCase(
     fun clearHistory(state: ChatViewState): ChatViewState {
         if (state.isDemoRunning) return state
 
-        val demoMessages = state.messages.filter { it.isDemoMessage }
         chatSession.clearHistory()
         TaskMemoryTracker.reset()
 
         return state.copy(
-            messages = demoMessages,
+            messages = emptyList(),
             tokenStats = TokenStats(),
             tokenHistory = emptyList(),
             taskMemory = TaskMemory(),

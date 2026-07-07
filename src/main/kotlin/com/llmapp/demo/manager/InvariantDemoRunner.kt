@@ -1,7 +1,6 @@
 package com.llmapp.demo.manager
 
 import com.llmapp.agent.InvariantAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.invariants.Invariant
 import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
@@ -19,7 +18,6 @@ class InvariantDemoRunner(
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
     override suspend fun run() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "nvidia/nemotron-3-super-120b-a12b:free"
 
         addMessage(
@@ -105,7 +103,7 @@ class InvariantDemoRunner(
         delay(3.seconds)
 
         val agent = InvariantAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты опытный разработчик на Kotlin. Отвечай кратко и по делу.",
             invariantSetName = "Android/KMP",

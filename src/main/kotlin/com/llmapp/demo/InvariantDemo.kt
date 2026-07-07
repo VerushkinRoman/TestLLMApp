@@ -1,7 +1,6 @@
 package com.llmapp.demo
 
 import com.llmapp.agent.InvariantAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.invariants.InvariantManager
 import com.llmapp.invariants.InvariantPresets
 import kotlinx.coroutines.delay
@@ -10,7 +9,6 @@ import kotlin.time.Duration.Companion.seconds
 
 class InvariantDemo {
     suspend fun runInvariantDemo() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "nvidia/nemotron-3-super-120b-a12b:free"
 
         println("=".repeat(100))
@@ -50,7 +48,7 @@ class InvariantDemo {
         println("-".repeat(50))
 
         val agent = InvariantAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты опытный разработчик на Kotlin. Отвечай на русском языке.",
             invariantSetName = "Android/KMP Project"  // Загружаем по имени через менеджер

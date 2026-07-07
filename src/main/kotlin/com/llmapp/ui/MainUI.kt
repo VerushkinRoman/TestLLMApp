@@ -508,6 +508,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartContextRetentionDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartLocalAgentFlowDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartLocalAgentFlowDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

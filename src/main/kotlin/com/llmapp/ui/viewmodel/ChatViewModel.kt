@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.agent.StatefulMemoryAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.collector.MatchAggregator
 import com.llmapp.collector.MatchStore
@@ -105,9 +104,7 @@ class ChatViewModel : ViewModel() {
     }
 
     private fun initServices() {
-        val apiKey = ApiConfig.getApiKey()
         chatSession = ChatSession(
-            apiKey = apiKey,
             compressionEnabled = _state.value.compressionEnabled,
             keepLastMessages = _state.value.keepLastMessages,
             compressAfterTokens = _state.value.compressAfterTokens
@@ -116,7 +113,7 @@ class ChatViewModel : ViewModel() {
             it.pipelineIntegration = pipelineMcpIntegration
             it.logListener = { msg -> addLogMessage(msg) }
         }
-        statefulAgent = StatefulMemoryAgent(apiKey = apiKey)
+        statefulAgent = StatefulMemoryAgent()
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
         profileManager = ProfileManager(storageDir, longTermManager)
@@ -150,7 +147,7 @@ class ChatViewModel : ViewModel() {
         )
         memoryUseCase = MemoryUseCase(
             memoryAwareAgent = com.llmapp.agent.MemoryAwareAgent(
-                apiKey = ApiConfig.getApiKey(),
+
                 model = chatSession.getCurrentModel(),
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
                 persistToDisk = true
@@ -410,6 +407,14 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartRagStructuredDemo -> demoHandler.startRagStructuredDemo()
             ViewEvent.StartContextRetentionDemo -> demoHandler.startContextRetentionDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
+            ViewEvent.StartLocalAgentFlowDemo -> demoHandler.startLocalAgentFlowDemo { isLocal ->
+                updateState {
+                    copy(
+                        useLocalModel = isLocal,
+                        currentModel = if (isLocal) localModelName else "mistral/mistral-large-latest"
+                    )
+                }
+            }
 
             is ViewEvent.SelectInvariantSet -> {
                 updateState { copy(activeInvariantSetName = event.set.name) }
@@ -661,7 +666,13 @@ class ChatViewModel : ViewModel() {
                     updateState { copy(isDemoRunning = true) }
                     try {
                         chatSession.switchLocalMode(true)
-                        updateState { copy(useLocalModel = true, currentModel = localModelName, messages = emptyList()) }
+                        updateState {
+                            copy(
+                                useLocalModel = true,
+                                currentModel = localModelName,
+                                messages = emptyList()
+                            )
+                        }
 
                         val qaPairs = mutableListOf<Pair<String, String>>()
 
@@ -672,7 +683,13 @@ class ChatViewModel : ViewModel() {
                                 content = question,
                                 isDemoMessage = true
                             )
-                            updateState { copy(messages = messages + userMsg, isGenerating = true, isTyping = true) }
+                            updateState {
+                                copy(
+                                    messages = messages + userMsg,
+                                    isGenerating = true,
+                                    isTyping = true
+                                )
+                            }
 
                             try {
                                 val response = chatSession.ask(question)
@@ -687,7 +704,13 @@ class ChatViewModel : ViewModel() {
                                     completionTokens = response.completionTokens,
                                     responseTimeMs = response.responseTimeMs,
                                 )
-                                updateState { copy(messages = messages + assistantMsg, isGenerating = false, isTyping = false) }
+                                updateState {
+                                    copy(
+                                        messages = messages + assistantMsg,
+                                        isGenerating = false,
+                                        isTyping = false
+                                    )
+                                }
                                 qaPairs.add(question to clean)
                             } catch (e: Exception) {
                                 val errorMsg = ChatMessageUI(
@@ -696,13 +719,24 @@ class ChatViewModel : ViewModel() {
                                     content = "❌ Ошибка: ${e.message}",
                                     isDemoMessage = true
                                 )
-                                updateState { copy(messages = messages + errorMsg, isGenerating = false, isTyping = false) }
+                                updateState {
+                                    copy(
+                                        messages = messages + errorMsg,
+                                        isGenerating = false,
+                                        isTyping = false
+                                    )
+                                }
                                 qaPairs.add(question to "[Ошибка: ${e.message}]")
                             }
                         }
 
                         chatSession.switchLocalMode(false)
-                        updateState { copy(useLocalModel = false, currentModel = "mistral/mistral-large-latest") }
+                        updateState {
+                            copy(
+                                useLocalModel = false,
+                                currentModel = "mistral/mistral-large-latest"
+                            )
+                        }
 
                         val qaText = qaPairs.withIndex().joinToString("\n\n") { (i, pair) ->
                             "=== Вопрос ${i + 1} ===\n${pair.first}\n\n=== Ответ ${i + 1} ===\n${pair.second}"
@@ -721,7 +755,13 @@ class ChatViewModel : ViewModel() {
                             content = evalPrompt,
                             isDemoMessage = true
                         )
-                        updateState { copy(messages = messages + evalUserMsg, isGenerating = true, isTyping = true) }
+                        updateState {
+                            copy(
+                                messages = messages + evalUserMsg,
+                                isGenerating = true,
+                                isTyping = true
+                            )
+                        }
 
                         try {
                             val evalResponse = chatSession.ask(evalPrompt)
@@ -736,7 +776,13 @@ class ChatViewModel : ViewModel() {
                                 completionTokens = evalResponse.completionTokens,
                                 responseTimeMs = evalResponse.responseTimeMs,
                             )
-                            updateState { copy(messages = messages + evalAssistantMsg, isGenerating = false, isTyping = false) }
+                            updateState {
+                                copy(
+                                    messages = messages + evalAssistantMsg,
+                                    isGenerating = false,
+                                    isTyping = false
+                                )
+                            }
                         } catch (e: Exception) {
                             val errorMsg = ChatMessageUI(
                                 id = UUID.randomUUID().toString(),
@@ -744,7 +790,13 @@ class ChatViewModel : ViewModel() {
                                 content = "❌ Ошибка оценки: ${e.message}",
                                 isDemoMessage = true
                             )
-                            updateState { copy(messages = messages + errorMsg, isGenerating = false, isTyping = false) }
+                            updateState {
+                                copy(
+                                    messages = messages + errorMsg,
+                                    isGenerating = false,
+                                    isTyping = false
+                                )
+                            }
                         }
 
                         updateTokenStats()
@@ -818,9 +870,9 @@ class ChatViewModel : ViewModel() {
     companion object {
         private val markerRegex = Regex(
             "\\[GOAL].*?\\[/GOAL]|\\[CONSTRAINT].*?\\[/CONSTRAINT]|" +
-            "\\[DECISION].*?\\[/DECISION]|\\[CONTEXT].*?\\[/CONTEXT]|" +
-            "\\[PROGRESS_DONE].*?\\[/PROGRESS_DONE]|\\[PROGRESS_IN_PROGRESS].*?\\[/PROGRESS_IN_PROGRESS]|" +
-            "\\[PROGRESS_BLOCKED].*?\\[/PROGRESS_BLOCKED]|\\[PROGRESSDONE].*?\\[/PROGRESSDONE]",
+                    "\\[DECISION].*?\\[/DECISION]|\\[CONTEXT].*?\\[/CONTEXT]|" +
+                    "\\[PROGRESS_DONE].*?\\[/PROGRESS_DONE]|\\[PROGRESS_IN_PROGRESS].*?\\[/PROGRESS_IN_PROGRESS]|" +
+                    "\\[PROGRESS_BLOCKED].*?\\[/PROGRESS_BLOCKED]|\\[PROGRESSDONE].*?\\[/PROGRESSDONE]",
             RegexOption.DOT_MATCHES_ALL
         )
 

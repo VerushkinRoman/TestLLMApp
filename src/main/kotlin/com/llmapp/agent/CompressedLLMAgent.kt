@@ -19,7 +19,6 @@ data class LLMResponseWithCompression(
 )
 
 class CompressedLLMAgent(
-    apiKey: String,
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
@@ -27,7 +26,7 @@ class CompressedLLMAgent(
     keepLastMessages: Int = 15,
     compressAfterTokens: Int = 8000
 ) {
-    private val apiClient: RouterClient = ClientFactory.create(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create()
     private val history = CompressedChatHistory(
         apiClient = apiClient,
         systemPrompt = systemPrompt,

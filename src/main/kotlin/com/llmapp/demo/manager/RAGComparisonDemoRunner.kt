@@ -92,7 +92,6 @@ class RAGComparisonDemoRunner(
     onTypingStateChanged: (Boolean) -> Unit,
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
-    private val apiKey = com.llmapp.api.ApiConfig.getApiKey()
     private val systemPrompt = "Ты полезный ассистент. Отвечай кратко и по делу на русском языке."
 
     // Модели от самой слабой к самой сильной
@@ -116,7 +115,7 @@ class RAGComparisonDemoRunner(
             val model = modelsByPower[i]
             println("📊 ДЕМО RAG:   ⏳ Проверяю модель $model...")
             try {
-                val client = ClientFactory.create(apiKey)
+                val client = ClientFactory.create()
                 val request = RouterRequest(
                     model = model,
                     messages = listOf(
@@ -389,7 +388,7 @@ class RAGComparisonDemoRunner(
     }
 
     private suspend fun queryLLM(prompt: String, model: String): String {
-        val client = ClientFactory.create(apiKey)
+        val client = ClientFactory.create()
         val request = RouterRequest(
             model = model,
             messages = listOf(

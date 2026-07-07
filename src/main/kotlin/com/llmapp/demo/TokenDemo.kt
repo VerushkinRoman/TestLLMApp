@@ -1,20 +1,18 @@
 package com.llmapp.demo
 
 import com.llmapp.agent.LLMAgent
-import com.llmapp.api.ApiConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class LLMAgentWithFallback(
-    apiKey: String,
     initialModel: String,
     systemPrompt: String,
     maxHistorySize: Int = 100
 ) {
     private var currentAgent = LLMAgent(
-        apiKey = apiKey,
+
         model = initialModel,
         systemPrompt = systemPrompt,
         maxHistorySize = maxHistorySize
@@ -61,13 +59,12 @@ class LLMAgentWithFallback(
 }
 
 suspend fun demonstrateTokenTracking() {
-    val apiKey = ApiConfig.getApiKey()
     val primaryModel = "openai/gpt-oss-20b:free"
 
     println("\n✅ Используем модель: ${DemoData.getModelShortName(primaryModel)}")
 
     val agent = LLMAgentWithFallback(
-        apiKey = apiKey,
+
         initialModel = primaryModel,
         systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
         maxHistorySize = 100
@@ -220,7 +217,7 @@ suspend fun demonstrateTokenTracking() {
 
     // Создаем нового агента для анализа (чистая история)
     val analysisAgent = LLMAgentWithFallback(
-        apiKey = apiKey,
+
         initialModel = primaryModel,
         systemPrompt = "Ты эксперт по анализу данных. Делай подробные, структурированные выводы.",
         maxHistorySize = 50

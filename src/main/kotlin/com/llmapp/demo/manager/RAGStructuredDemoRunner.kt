@@ -103,7 +103,6 @@ class RAGStructuredDemoRunner(
     onTypingStateChanged: (Boolean) -> Unit,
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
-    private val apiKey = com.llmapp.api.ApiConfig.getApiKey()
     private val systemPrompt = "Ты полезный ассистент. Отвечай кратко и по делу на русском языке."
 
     private val modelsByPower = listOf(
@@ -170,7 +169,7 @@ class RAGStructuredDemoRunner(
             val model = modelsByPower[i]
             println("📊 ДЕМО RAG Structured:   ⏳ Проверяю модель $model...")
             try {
-                val client = ClientFactory.create(apiKey)
+                val client = ClientFactory.create()
                 val request = RouterRequest(
                     model = model,
                     messages = listOf(
@@ -270,7 +269,7 @@ class RAGStructuredDemoRunner(
             var responseTimeMs = 0L
 
             for (model in modelsToTry) {
-                val client = ClientFactory.create(apiKey)
+                val client = ClientFactory.create()
                 val request = RouterRequest(
                     model = model,
                     messages = listOf(
@@ -495,7 +494,7 @@ class RAGStructuredDemoRunner(
         delayMedium()
 
         try {
-            val evaluator = DemoEvaluator(apiKey = apiKey)
+            val evaluator = DemoEvaluator()
             val testCases = results.map { r ->
                 val expectedDesc = when (r.expectedBehavior) {
                     ExpectedBehavior.SHOULD_ANSWER -> "Должен ответить с источниками [1], [2],... и ключевыми словами"

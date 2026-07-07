@@ -37,7 +37,6 @@ data class ChatResponse(
 )
 
 class ChatSession(
-    apiKey: String,
     private var currentModel: String = "mistral/mistral-large-latest",
     private val systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
         Форматирование ответов:
@@ -68,7 +67,6 @@ class ChatSession(
 
     private var strategicAgent: StrategicLLMAgent? = null
     private var useStrategicAgent = true
-    private var currentApiKey = apiKey
     private val conversationHistory = mutableListOf<Pair<String, String>>()
 
     var dataIntegration: McpIntegration? = null
@@ -189,7 +187,7 @@ class ChatSession(
 
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
-            apiKey = currentApiKey,
+            
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -210,7 +208,7 @@ class ChatSession(
 
     private val regularAgent: LLMAgent? = if (!compressionEnabled) {
         LLMAgent(
-            apiKey = currentApiKey,
+            
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -222,7 +220,7 @@ class ChatSession(
 
     init {
         strategicAgent = StrategicLLMAgent(
-            apiKey = currentApiKey,
+            
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl()

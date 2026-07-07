@@ -13,7 +13,6 @@ data class TestCase(
 )
 
 class DemoEvaluator(
-    private val apiKey: String,
     private val model: String = "openai/gpt-oss-20b:free",
 ) {
 
@@ -23,7 +22,7 @@ class DemoEvaluator(
         additionalContext: String = "",
     ): String {
         val prompt = buildPrompt(demoName, testCases, additionalContext)
-        val client = ClientFactory.create(apiKey)
+        val client = ClientFactory.create()
 
         val request = RouterRequest(
             model = model,

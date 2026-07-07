@@ -114,6 +114,7 @@ class DemoHandler(
     fun startRagImprovedComparisonDemo() = demoManager?.startRagImprovedComparisonDemo()
     fun startRagStructuredDemo() = demoManager?.startRagStructuredDemo()
     fun startContextRetentionDemo() = demoManager?.startContextRetentionDemo()
+    fun startLocalAgentFlowDemo(onLocalModeChanged: ((Boolean) -> Unit)? = null) = demoManager?.startLocalAgentFlowDemo(onLocalModeChanged)
     fun cancelDemo() = demoManager?.cancelDemo()
 
 }

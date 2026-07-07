@@ -2,7 +2,6 @@ package com.llmapp.demo.manager
 
 import com.llmapp.agent.ContextStrategyType
 import com.llmapp.agent.StrategicLLMAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.demo.StrategyTestScenario
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.delay
@@ -30,7 +29,6 @@ class StrategyDemoRunner(
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
     override suspend fun run() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "openai/gpt-oss-20b:free"
 
         addMessage(
@@ -60,7 +58,7 @@ class StrategyDemoRunner(
         delayMedium()
 
         val slidingResult = runStrategyTest(
-            apiKey = apiKey,
+
             model = model,
             strategy = ContextStrategyType.SLIDING_WINDOW,
             strategyName = "Sliding Window",
@@ -79,7 +77,7 @@ class StrategyDemoRunner(
         delayMedium()
 
         val factsResult = runStrategyTest(
-            apiKey = apiKey,
+
             model = model,
             strategy = ContextStrategyType.STICKY_FACTS,
             strategyName = "Sticky Facts",
@@ -98,7 +96,7 @@ class StrategyDemoRunner(
         delayMedium()
 
         val branchingResult = runStrategyTest(
-            apiKey = apiKey,
+
             model = model,
             strategy = ContextStrategyType.BRANCHING,
             strategyName = "Branching",
@@ -123,18 +121,17 @@ class StrategyDemoRunner(
         )
         delay(2.seconds)
 
-        demoBranching(apiKey, model)
+        demoBranching(model)
     }
 
     private suspend fun runStrategyTest(
-        apiKey: String,
         model: String,
         strategy: ContextStrategyType,
         strategyName: String,
         scenario: List<String>
     ): StrategyTestResult {
         val agent = StrategicLLMAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты опытный технический архитектор. Отвечай кратко, по делу, на русском языке."
         )
@@ -237,9 +234,9 @@ class StrategyDemoRunner(
         )
     }
 
-    private suspend fun demoBranching(apiKey: String, model: String) {
+    private suspend fun demoBranching(model: String) {
         val agent = StrategicLLMAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = "Ты полезный ассистент. Отвечай кратко."
         )

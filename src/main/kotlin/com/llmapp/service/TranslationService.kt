@@ -1,6 +1,5 @@
 package com.llmapp.service
 
-import com.llmapp.api.ApiConfig
 import com.llmapp.api.ClientFactory
 import com.llmapp.api.RouterClient
 import com.llmapp.model.ChatMessage
@@ -13,7 +12,7 @@ class TranslationService {
 
     private val client: RouterClient? by lazy {
         try {
-            ClientFactory.create(ApiConfig.getApiKey())
+            ClientFactory.create()
         } catch (e: Exception) {
             println("⚠️ TranslationService: ${e.message}")
             null

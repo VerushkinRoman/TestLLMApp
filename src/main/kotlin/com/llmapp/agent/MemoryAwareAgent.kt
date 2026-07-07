@@ -36,14 +36,13 @@ data class MemoryUsageInfo(
 )
 
 class MemoryAwareAgent(
-    apiKey: String,
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
     userHome: String = System.getProperty("user.home"),
     private val persistToDisk: Boolean = true
 ) {
-    private val apiClient: RouterClient = ClientFactory.create(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create()
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0
 

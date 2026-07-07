@@ -1,6 +1,5 @@
 package com.llmapp.domain.usercase
 
-import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.ui.viewmodel.ChatViewState
 
@@ -13,7 +12,7 @@ class CompressionUseCase(
         if (state.isDemoRunning) return state
 
         val newSession = ChatSession(
-            apiKey = ApiConfig.getApiKey(),
+
             compressionEnabled = enabled,
             keepLastMessages = state.keepLastMessages,
             compressAfterTokens = state.compressAfterTokens
@@ -36,7 +35,7 @@ class CompressionUseCase(
         if (state.isDemoRunning) return state
 
         val newSession = ChatSession(
-            apiKey = ApiConfig.getApiKey(),
+
             compressionEnabled = state.compressionEnabled,
             keepLastMessages = keepLast,
             compressAfterTokens = compressAfterTokens

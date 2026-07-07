@@ -1,7 +1,6 @@
 package com.llmapp.demo.manager
 
 import com.llmapp.agent.MemoryAwareAgent
-import com.llmapp.api.ApiConfig
 import com.llmapp.memory.ResponseStyle
 import com.llmapp.memory.UserProfile
 import com.llmapp.ui.models.ChatMessageUI
@@ -41,7 +40,6 @@ class PersonalizationDemoRunner(
 ) : BaseDemoRunner(onMessageAdded, onTypingStateChanged) {
 
     override suspend fun run() {
-        val apiKey = ApiConfig.getApiKey()
         val model = "nvidia/nemotron-3-super-120b-a12b:free"
 
         addMessage(
@@ -95,7 +93,7 @@ class PersonalizationDemoRunner(
 
         for ((profileName, profile) in profiles) {
             val agent = MemoryAwareAgent(
-                apiKey = apiKey,
+
                 model = model,
                 systemPrompt = "Ты полезный ассистент. Отвечай на русском языке.",
                 persistToDisk = false
@@ -211,7 +209,7 @@ class PersonalizationDemoRunner(
         delayMedium()
 
         val analysisAgent = MemoryAwareAgent(
-            apiKey = apiKey,
+
             model = model,
             systemPrompt = """Ты эксперт по анализу данных и AI-агентов.
                 Твоя задача - проанализировать результаты тестирования

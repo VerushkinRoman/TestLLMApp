@@ -18,13 +18,12 @@ data class LLMResponse(
 )
 
 class LLMAgent(
-    apiKey: String,
     private var model: String,
     systemPrompt: String,
     private var responseControl: ResponseControl = ResponseControl(),
     maxHistorySize: Int = 50
 ) : IAgent {
-    private val apiClient: RouterClient = ClientFactory.create(apiKey)
+    private val apiClient: RouterClient = ClientFactory.create()
     private val history = ChatHistory(systemPrompt, maxHistorySize)
     private val tokenTracker = TokenTracker()
     private var requestCounter = 0

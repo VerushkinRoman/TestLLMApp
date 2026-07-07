@@ -1,6 +1,5 @@
 package com.llmapp.demo.manager
 
-import com.llmapp.api.ApiConfig
 import com.llmapp.chat.ChatSession
 import com.llmapp.demo.evaluation.DemoEvaluator
 import com.llmapp.demo.evaluation.TestCase
@@ -411,7 +410,7 @@ class ContextRetentionDemoRunner(
                 )
             }
 
-            val evaluator = DemoEvaluator(apiKey = ApiConfig.getApiKey())
+            val evaluator = DemoEvaluator()
             val evalResult = evaluator.evaluate(
                 demoName = "Удержание контекста (24 сообщения, 4 темы)",
                 testCases = testCases,
