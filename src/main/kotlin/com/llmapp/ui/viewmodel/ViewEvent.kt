@@ -158,6 +158,7 @@ sealed class ViewEvent {
     object ToggleLocalModel : ViewEvent()
     data class StartLocalDemo(val questions: List<String>) : ViewEvent()
     object StartLocalAgentFlowDemo : ViewEvent()
+    object StartLocalRAGComparisonDemo : ViewEvent()
 
     // ============================================================
     // ПАМЯТЬ ЗАДАЧИ

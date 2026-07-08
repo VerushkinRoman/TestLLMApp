@@ -69,6 +69,7 @@ fun DemoScreen(
     onClearHistory: () -> Unit,
     onStartLocalDemo: ((List<String>) -> Unit)? = null,
     onStartLocalAgentFlowDemo: (() -> Unit)? = null,
+    onStartLocalRAGComparisonDemo: (() -> Unit)? = null,
 ) {
     val demos = listOf(
         DemoItem(
@@ -199,6 +200,18 @@ fun DemoScreen(
             features = listOf("TaskMemory", "RAG-источники", "24 сообщения"),
             color = Color(0xFF78909C),
             onStart = onStartContextRetentionDemo
+        ),
+        DemoItem(
+            id = "local_rag_compare",
+            title = "🧪 Локальный RAG vs Облачный RAG",
+            icon = Icons.Default.ModelTraining,
+            description = "Полностью локальный RAG: индекс + retrieval + генерация (Ollama). Сравнение с облачной моделью. Оценка качества, скорости, стабильности облачным экспертом.",
+            features = listOf("5 вопросов", "Локально", "Оценка"),
+            color = Color(0xFF00ACC1),
+            onStart = {
+                onClearHistory()
+                onStartLocalRAGComparisonDemo?.invoke()
+            }
         ),
         DemoItem(
             id = "local_model",

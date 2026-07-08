@@ -17,6 +17,7 @@ import com.llmapp.demo.manager.StrategyDemoRunner
 import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
 import com.llmapp.demo.manager.LocalAgentFlowDemoRunner
+import com.llmapp.demo.manager.LocalRAGComparisonDemoRunner
 import com.llmapp.memory.TaskMemory
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
@@ -43,6 +44,7 @@ sealed class DemoType {
     object RagStructured : DemoType()
     object ContextRetention : DemoType()
     object LocalAgentFlow : DemoType()
+    object LocalRAGComparison : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -60,6 +62,7 @@ sealed class DemoType {
             RagStructured -> "RAG структурированный (10 вопросов)"
             ContextRetention -> "Удержание контекста (24 сообщения)"
             LocalAgentFlow -> "Агентский флоу (локальная модель)"
+            LocalRAGComparison -> "Локальный RAG vs Облачный RAG"
         }
 }
 
@@ -328,6 +331,16 @@ class DemoManager(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
                 onLocalModeChanged = onLocalModeChanged,
+            )
+        }
+    }
+
+    fun startLocalRAGComparisonDemo() {
+        runDemo(DemoType.LocalRAGComparison) {
+            LocalRAGComparisonDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                onStatsUpdated = { _ -> },
             )
         }
     }

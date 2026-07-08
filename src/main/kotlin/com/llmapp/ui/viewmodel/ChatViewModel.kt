@@ -415,6 +415,7 @@ class ChatViewModel : ViewModel() {
                     )
                 }
             }
+            ViewEvent.StartLocalRAGComparisonDemo -> demoHandler.startLocalRAGComparisonDemo()
 
             is ViewEvent.SelectInvariantSet -> {
                 updateState { copy(activeInvariantSetName = event.set.name) }
