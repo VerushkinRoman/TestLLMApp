@@ -70,6 +70,7 @@ fun DemoScreen(
     onStartLocalDemo: ((List<String>) -> Unit)? = null,
     onStartLocalAgentFlowDemo: (() -> Unit)? = null,
     onStartLocalRAGComparisonDemo: (() -> Unit)? = null,
+    onStartOptimizationDemo: (() -> Unit)? = null,
 ) {
     val demos = listOf(
         DemoItem(
@@ -229,6 +230,18 @@ fun DemoScreen(
                         "Объясни разницу между SQL и NoSQL базами данных простыми словами.",
                     )
                 )
+            }
+        ),
+        DemoItem(
+            id = "optimization",
+            title = "⚡ Оптимизация LLM (3 фазы)",
+            icon = Icons.Default.ModelTraining,
+            description = "Сравнение неоптимизированной vs оптимизированной локальной модели на 3 сложных вопросах по разработке чат-ботов. Оценка облачной моделью в конце.",
+            features = listOf("3 фазы", "Temperature", "System Prompt", "Оценка"),
+            color = Color(0xFFFF6F00),
+            onStart = {
+                onClearHistory()
+                onStartOptimizationDemo?.invoke()
             }
         ),
     )

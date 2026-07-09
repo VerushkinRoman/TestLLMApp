@@ -806,6 +806,17 @@ class ChatViewModel : ViewModel() {
                     }
                 }
             }
+
+            is ViewEvent.StartOptimizationDemo -> {
+                demoHandler.startOptimizationDemo { isLocal ->
+                    updateState {
+                        copy(
+                            useLocalModel = isLocal,
+                            currentModel = if (isLocal) localModelName else "mistral/mistral-large-latest"
+                        )
+                    }
+                }
+            }
         }
     }
 

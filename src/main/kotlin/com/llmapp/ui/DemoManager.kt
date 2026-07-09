@@ -18,6 +18,7 @@ import com.llmapp.demo.manager.TokenDemoRunner
 import com.llmapp.demo.manager.TransitionDemoRunner
 import com.llmapp.demo.manager.LocalAgentFlowDemoRunner
 import com.llmapp.demo.manager.LocalRAGComparisonDemoRunner
+import com.llmapp.demo.manager.OptimizationDemoRunner
 import com.llmapp.memory.TaskMemory
 import com.llmapp.model.TokenStats
 import com.llmapp.ui.models.ChatMessageUI
@@ -45,6 +46,7 @@ sealed class DemoType {
     object ContextRetention : DemoType()
     object LocalAgentFlow : DemoType()
     object LocalRAGComparison : DemoType()
+    object OptimizationLocalModel : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -63,6 +65,7 @@ sealed class DemoType {
             ContextRetention -> "Удержание контекста (24 сообщения)"
             LocalAgentFlow -> "Агентский флоу (локальная модель)"
             LocalRAGComparison -> "Локальный RAG vs Облачный RAG"
+            OptimizationLocalModel -> "Оптимизация LLM"
         }
 }
 
@@ -341,6 +344,17 @@ class DemoManager(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
                 onStatsUpdated = { _ -> },
+            )
+        }
+    }
+
+    fun startOptimizationDemo(onLocalModeChanged: ((Boolean) -> Unit)? = null) {
+        runDemo(DemoType.OptimizationLocalModel) {
+            OptimizationDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                chatSession = chatSession,
+                onLocalModeChanged = onLocalModeChanged,
             )
         }
     }
