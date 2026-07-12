@@ -153,12 +153,14 @@ sealed class ViewEvent {
     data class OnMcpLog(val message: String) : ViewEvent()
 
     // ============================================================
-    // МОДЕЛЬ (локальная / облачная)
+    // МОДЕЛЬ (локальная / облачная / приватный сервер)
     // ============================================================
     object ToggleLocalModel : ViewEvent()
+    object TogglePrivateServer : ViewEvent()
     data class StartLocalDemo(val questions: List<String>) : ViewEvent()
     object StartLocalAgentFlowDemo : ViewEvent()
     object StartLocalRAGComparisonDemo : ViewEvent()
+    object StartPrivateServerDemo : ViewEvent()
 
     // ============================================================
     // ОПТИМИЗАЦИЯ ЛОКАЛЬНОЙ МОДЕЛИ

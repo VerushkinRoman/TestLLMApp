@@ -120,6 +120,12 @@ fun ChatScreen(
             onOpenTaskMemory = { showTaskMemoryDialog = true },
             useLocalModel = viewState.useLocalModel,
             onToggleLocalModel = { onEvent(ViewEvent.ToggleLocalModel) },
+            usePrivateServer = viewState.usePrivateServer,
+            onTogglePrivateServer = { onEvent(ViewEvent.TogglePrivateServer) },
+            onSwitchToCloud = {
+                if (viewState.useLocalModel) onEvent(ViewEvent.ToggleLocalModel)
+                if (viewState.usePrivateServer) onEvent(ViewEvent.TogglePrivateServer)
+            },
         )
 
         viewState.taskState?.let { taskState ->

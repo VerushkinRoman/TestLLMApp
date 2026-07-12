@@ -71,6 +71,9 @@ fun ChatTopBar(
     onOpenTaskMemory: () -> Unit = {},
     useLocalModel: Boolean = false,
     onToggleLocalModel: () -> Unit = {},
+    usePrivateServer: Boolean = false,
+    onTogglePrivateServer: () -> Unit = {},
+    onSwitchToCloud: () -> Unit = {},
 ) {
     var showMemoryMenu by remember { mutableStateOf(false) }
     val buttonPosition = remember { mutableStateOf(Offset.Zero) }
@@ -179,39 +182,72 @@ fun ChatTopBar(
                 }
             }
 
-            // Local / Cloud model toggle
+            // 3-way model selector: Cloud / Local / Private
             Spacer(Modifier.width(12.dp))
+            val activeColor = when {
+                usePrivateServer -> Color(0xFF1565C0)
+                useLocalModel -> Color(0xFF1B5E20)
+                else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+            }
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (useLocalModel) Color(0xFF1B5E20).copy(alpha = 0.7f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                color = activeColor.copy(alpha = 0.3f),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
                 ) {
-                    Box(modifier = Modifier.width(92.dp)) {
+                    // Cloud
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (!useLocalModel && !usePrivateServer)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        else Color.Transparent,
+                        modifier = Modifier.clickable { onSwitchToCloud() }
+                    ) {
                         Text(
-                            text = "🖥️ Локально",
+                            text = "☁️",
                             fontSize = 12.sp,
-                            color = if (useLocalModel) Color(0xFFA5D6A7)
-                            else Color.Transparent,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = "☁️ Облако",
-                            fontSize = 12.sp,
-                            color = if (useLocalModel) Color.Transparent
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            maxLines = 1
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = if (!useLocalModel && !usePrivateServer)
+                                Color.White
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         )
                     }
-                    Spacer(Modifier.width(6.dp))
-                    Switch(
-                        checked = useLocalModel,
-                        onCheckedChange = { onToggleLocalModel() },
-                        modifier = Modifier.size(width = 36.dp, height = 20.dp)
-                    )
+                    // Local
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (useLocalModel)
+                            Color(0xFF2E7D32)
+                        else Color.Transparent,
+                        modifier = Modifier.clickable { if (!useLocalModel) onToggleLocalModel() }
+                    ) {
+                        Text(
+                            text = "🖥️",
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = if (useLocalModel)
+                                Color.White
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        )
+                    }
+                    // Private server
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (usePrivateServer)
+                            Color(0xFF1565C0)
+                        else Color.Transparent,
+                        modifier = Modifier.clickable { if (!usePrivateServer) onTogglePrivateServer() }
+                    ) {
+                        Text(
+                            text = "🔒",
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = if (usePrivateServer)
+                                Color.White
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        )
+                    }
                 }
             }
 

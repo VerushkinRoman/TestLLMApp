@@ -10,23 +10,39 @@ object ClientFactory {
 
     fun setUseLocal(value: Boolean) {
         switchingClient.useLocal = value
-        println("🔀 Клиент переключен на ${if (value) "локальный (Ollama)" else "облачный (KodikRouter)"}")
+        if (value) switchingClient.usePrivate = false
+        println("🔀 Клиент переключен на ${modeName()}")
     }
 
+    fun setUsePrivate(value: Boolean) {
+        switchingClient.usePrivate = value
+        if (value) switchingClient.useLocal = false
+        println("🔀 Клиент переключен на ${modeName()}")
+    }
+
+    private fun modeName(): String = when {
+        switchingClient.useLocal -> "локальный (Ollama)"
+        switchingClient.usePrivate -> "приватный (LLMServer)"
+        else -> "облачный (KodikRouter)"
+    }
 }
 
 class SwitchingClient : RouterClient {
     @Volatile
     var useLocal: Boolean = false
 
+    @Volatile
+    var usePrivate: Boolean = false
+
     private val localClient = OllamaClient()
     private val cloudClient = ApiClient()
+    private val privateClient = PrivateServerClient()
 
     override suspend fun sendRequest(request: RouterRequest): RouterResponse {
-        return if (useLocal) {
-            localClient.sendRequest(request)
-        } else {
-            cloudClient.sendRequest(request)
+        return when {
+            useLocal -> localClient.sendRequest(request)
+            usePrivate -> privateClient.sendRequest(request)
+            else -> cloudClient.sendRequest(request)
         }
     }
 }

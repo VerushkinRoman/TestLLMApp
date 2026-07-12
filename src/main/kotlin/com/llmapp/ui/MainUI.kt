@@ -532,6 +532,11 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartOptimizationDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartPrivateServerDemo = {
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.StartPrivateServerDemo)
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

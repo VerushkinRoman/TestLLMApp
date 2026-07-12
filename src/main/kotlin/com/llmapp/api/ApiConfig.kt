@@ -13,12 +13,15 @@ object ApiConfig {
 
     fun getBaseUrl(): String = "https://alcoserver.ru:4001"
 
-    /** @deprecated больше не используется; авторизация через Basic Auth (llm_user) */
-    fun getApiKey(): String = ""
-
     fun getLlmUser(): String = "llm_user"
 
     fun getLlmUserPassword(): String =
         properties.getProperty("llm_user_pwd")
             ?: error("llm_user_pwd не найден в keys.properties")
+
+    fun getPrivateServerUser(): String = "llmuser"
+
+    fun getPrivateServerPassword(): String =
+        properties.getProperty("llmuser_pwd")
+            ?: error("llmuser_pwd не найден в keys.properties")
 }

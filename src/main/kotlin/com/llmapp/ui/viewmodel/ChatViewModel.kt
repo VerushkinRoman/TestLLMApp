@@ -67,6 +67,7 @@ class ChatViewModel : ViewModel() {
 
     private lateinit var demoHandler: DemoHandler
     private lateinit var commandHandler: CommandHandler
+    private lateinit var privateServerDemoRunner: PrivateServerDemoRunner
     private var collector: PeriodicCollector? = null
     private var matchStore: MatchStore? = null
 
@@ -171,6 +172,10 @@ class ChatViewModel : ViewModel() {
             onHandleEvent = { handleEvent(it) },
             onAddAssistantMessage = { addAssistantMessage(it) },
             onGetTokenStats = { chatSession.getTokenStats() }
+        )
+        privateServerDemoRunner = PrivateServerDemoRunner(
+            chatSession = chatSession,
+            scope = viewModelScope,
         )
     }
 
@@ -657,7 +662,20 @@ class ChatViewModel : ViewModel() {
                 updateState {
                     copy(
                         useLocalModel = newValue,
+                        usePrivateServer = if (newValue) false else usePrivateServer,
                         currentModel = if (newValue) localModelName else "mistral/mistral-large-latest"
+                    )
+                }
+            }
+
+            ViewEvent.TogglePrivateServer -> {
+                val newValue = !_state.value.usePrivateServer
+                chatSession.switchPrivateMode(newValue)
+                updateState {
+                    copy(
+                        usePrivateServer = newValue,
+                        useLocalModel = if (newValue) false else useLocalModel,
+                        currentModel = if (newValue) privateServerModel else "mistral/mistral-large-latest"
                     )
                 }
             }
@@ -816,6 +834,13 @@ class ChatViewModel : ViewModel() {
                         )
                     }
                 }
+            }
+
+            ViewEvent.StartPrivateServerDemo -> {
+                privateServerDemoRunner.start(
+                    updateState = { update -> updateState(update) },
+                    updateTokenStats = { updateTokenStats() }
+                )
             }
         }
     }

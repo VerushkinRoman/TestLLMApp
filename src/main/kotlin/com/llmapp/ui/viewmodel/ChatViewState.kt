@@ -28,7 +28,9 @@ data class ChatViewState(
     // Модель
     val currentModel: String = "mistral/mistral-large-latest",
     val useLocalModel: Boolean = false,
+    val usePrivateServer: Boolean = false,
     val localModelName: String = "gemma4:26b",
+    val privateServerModel: String = "local",
 
     // Управление ответами
     val responseControl: ResponseControl = ResponseControl(),

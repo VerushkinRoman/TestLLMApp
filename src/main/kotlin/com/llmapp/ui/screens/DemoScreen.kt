@@ -71,6 +71,7 @@ fun DemoScreen(
     onStartLocalAgentFlowDemo: (() -> Unit)? = null,
     onStartLocalRAGComparisonDemo: (() -> Unit)? = null,
     onStartOptimizationDemo: (() -> Unit)? = null,
+    onStartPrivateServerDemo: (() -> Unit)? = null,
 ) {
     val demos = listOf(
         DemoItem(
@@ -242,6 +243,18 @@ fun DemoScreen(
             onStart = {
                 onClearHistory()
                 onStartOptimizationDemo?.invoke()
+            }
+        ),
+        DemoItem(
+            id = "private_server",
+            title = "🔒 Приватный сервер (LLMServer)",
+            icon = Icons.Default.Security,
+            description = "Тест приватного AI-сервера на alcoserver.ru:18333. Проверка доступа, стабильности и качества ответов через nginx реверс-прокси к llama.cpp.",
+            features = listOf("3 вопроса", "Rate Limit", "Оценка"),
+            color = Color(0xFF1565C0),
+            onStart = {
+                onClearHistory()
+                onStartPrivateServerDemo?.invoke()
             }
         ),
     )

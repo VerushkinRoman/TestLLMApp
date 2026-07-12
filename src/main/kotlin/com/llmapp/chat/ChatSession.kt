@@ -246,6 +246,13 @@ class ChatSession(
         changeModel(newModel)
     }
 
+    fun switchPrivateMode(usePrivate: Boolean) {
+        val newModel = if (usePrivate) "local" else "mistral/mistral-large-latest"
+        currentModel = newModel
+        ClientFactory.setUsePrivate(usePrivate)
+        changeModel(newModel)
+    }
+
     fun setResponseControl(control: ResponseControl) {
         responseControl = control
         compressedAgent?.updateResponseControl(control)
