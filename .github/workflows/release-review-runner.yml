@@ -54,4 +54,5 @@ jobs:
             - run: curl -L -o review-runner.jar https://github.com/${{ github.repository }}/releases/latest/download/review-runner-*.jar
             - run: java -jar review-runner.jar \${PR_NUMBER}
             ```
-          files: build/libs/review-runner-*.jar
+          files: build/libs/review-runner.jar
+          fail_on_unmatched_files: true

@@ -73,7 +73,7 @@ val excludeJars = listOf(
 tasks.register<Jar>("reviewRunnerJar") {
     dependsOn(runnerLibs)
     archiveBaseName.set("review-runner")
-    archiveVersion.set("1.0.0")
+    archiveVersion.set("")
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
