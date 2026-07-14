@@ -4,6 +4,7 @@ import com.llmapp.chat.ChatSession
 import com.llmapp.demo.manager.BaseDemoRunner
 import com.llmapp.demo.manager.ProjectDemoRunner
 import com.llmapp.model.TokenStats
+import com.llmapp.pr_review.PRReviewDemoRunner
 import com.llmapp.ui.models.ChatMessageUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,10 +16,12 @@ import kotlinx.coroutines.launch
 
 sealed class DemoType {
     object ProjectDemo : DemoType()
+    object PRReviewDemo : DemoType()
 
     val displayName: String
         get() = when (this) {
             ProjectDemo -> "Ассистент разработчика"
+            PRReviewDemo -> "AI Code Review"
         }
 }
 
@@ -124,6 +127,16 @@ class DemoManager(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
                 chatSession = chatSession,
+            )
+        }
+    }
+
+    fun startPRReviewDemo(prNumber: Int = 2) {
+        runDemo(DemoType.PRReviewDemo) {
+            PRReviewDemoRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                prNumber = prNumber,
             )
         }
     }

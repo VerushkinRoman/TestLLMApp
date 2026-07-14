@@ -1096,7 +1096,88 @@ fun NewFeatureScreen(modifier: Modifier = Modifier) {
 
 ---
 
-## 12. Итоговый чек-лист при создании новой фичи
+## 12. PR Review Pipeline — AI Code Review
+
+Автоматическое ревью Pull Request'ов через LLM + RAG.
+
+### Архитектура
+
+```
+pr_review/
+├── PrReviewModels.kt           # Модели: PullRequestInfo, ChangedFile, ReviewIssue, ReviewReport
+├── PRReviewAgent.kt            # Основной агент ревью: загрузка diff, RAG, LLM, парсинг
+├── PRReviewDemoRunner.kt       # Демо-раннер для UI с поэтапным отображением
+└── PRReviewRunner.kt           # CLI-точка входа для GitHub Actions / командной строки
+```
+
+### Pipeline
+
+```
+Pull Request → GitHub API (diff+patch) → RAG контекст → LLM анализ → ReviewReport → GitHub Comment
+                       ↓
+              UI Demo / CLI Runner
+```
+
+### Компоненты
+
+**PrReviewModels.kt** — модели данных:
+```kotlin
+data class PullRequestInfo(number, title, description, author, ...)
+data class ChangedFile(path, status, additions, deletions, patch)
+data class PullRequestDiff(pr, files, diffText, totalAdditions, ...)
+data class ReviewIssue(severity: ReviewSeverity, category: ReviewCategory, ...)
+data class ReviewReport(prInfo, issues, summary, positiveHighlights, recommendations, overallScore)
+```
+
+**PRReviewAgent.kt** — выполняет ревью:
+1. Загружает PR diff через `GitHubApi.getPullRequestDiff()`
+2. Строит RAG-контекст по изменённым файлам (`extractTopicsFromDiff`)
+3. Отправляет system + user промпт в LLM
+4. Парсит ответ в `ReviewReport` (через regex)
+
+**PRReviewDemoRunner.kt** — демо в UI:
+- 5 шагов: загрузка diff, RAG+LLM, результаты, рекомендации, оценка
+- В шаге 5 — оценка облачной моделью качества ревью
+
+**PRReviewRunner.kt** — CLI/GitHub Actions:
+```bash
+./gradlew runPrReview --args="123"
+```
+Создаёт `build/reports/pr_review/review_<PR>.md` и `.json`
+
+### GitHub Actions
+
+Файл: `.github/workflows/pr-review.yml`
+
+- Триггер: `pull_request: [opened, synchronize, reopened]`
+- Шаги: checkout → JDK 17 → diff → запуск PRReviewRunner → пост комментария
+- Комментарий обновляется (не дублируется) при новых коммитах
+
+### Демо-кнопка в UI
+
+- Экран "Демонстрации" → карточка "AI Code Review"
+- Поле для ввода номера PR
+- После запуска — редирект в чат с поэтапным отображением результатов
+
+### Оценка эффективности
+
+В шаге 5 демо — облачная модель (`mistral/mistral-large-latest`) оценивает качество ревью по 5 критериям:
+- Полнота охвата (30%)
+- Точность (25%)
+- Архитектурное понимание (20%)
+- Конструктивность (15%)
+- Читаемость (10%)
+
+### Интеграция
+
+- `DemoManager` — новый `DemoType.PRReviewDemo` + метод `startPRReviewDemo(prNumber)`
+- `DemoHandler` — новый `startPRReview(prNumber)`
+- `ChatViewModel` — обработка `ViewEvent.StartPRReview`
+- `DemoScreen` — новая карточка с полем ввода номера PR
+
+---
+
+## 13. Итоговый чек-лист при создании новой фичи
 
 - [ ] Создан пакет `feature_<name>` с подпакетами `compose`, `presentation`, `domain`, `data`.
 - [ ] Определен `sealed interface <Name>Event` (события UI).
@@ -1118,7 +1199,7 @@ fun NewFeatureScreen(modifier: Modifier = Modifier) {
 
 ---
 
-## 13. Стиль кода — сводка
+## 14. Стиль кода — сводка
 
 | Элемент | Соглашение |
 |---------|-----------|

@@ -428,4 +428,134 @@ object GitHubApi {
         httpClient?.close()
         httpClient = null
     }
+
+    // ============================================================
+    // PR REVIEW METHODS
+    // ============================================================
+
+    data class PrFile(
+        val filename: String,
+        val status: String,
+        val additions: Int,
+        val deletions: Int,
+        val changes: Int,
+        val patch: String?,
+    )
+
+    data class PrDiffResult(
+        val title: String,
+        val description: String,
+        val author: String,
+        val files: List<PrFile>,
+        val latestCommitSha: String,
+        val totalAdditions: Int,
+        val totalDeletions: Int,
+        val totalChanges: Int,
+    )
+
+    suspend fun getPullRequestDiff(prNumber: Int): PrDiffResult? {
+        val token = getToken() ?: run {
+            println("❌ GITHUB_TOKEN не задан — невозможно получить PR diff")
+            return null
+        }
+        val client = getHttpClient()
+
+        return try {
+            // 1. Get PR info
+            val prUrl = "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/pulls/$prNumber"
+            val prResponse = client.get(prUrl) {
+                header("Accept", "application/vnd.github.v3+json")
+                header("Authorization", "Bearer $token")
+            }
+            if (!prResponse.status.isSuccess()) {
+                println("❌ GitHub API ${prResponse.status} при получении PR #$prNumber")
+                return null
+            }
+            val prJson = Json.parseToJsonElement(prResponse.bodyAsText()).jsonObject
+            val title = prJson["title"]?.jsonPrimitive?.content ?: ""
+            val description = prJson["body"]?.jsonPrimitive?.content ?: ""
+            val author = prJson["user"]?.jsonObject?.get("login")?.jsonPrimitive?.content ?: ""
+
+            // 2. Get PR files with patch
+            val filesUrl = "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/pulls/$prNumber/files?per_page=100"
+            val filesResponse = client.get(filesUrl) {
+                header("Accept", "application/vnd.github.v3+json")
+                header("Authorization", "Bearer $token")
+            }
+            if (!filesResponse.status.isSuccess()) {
+                println("❌ GitHub API ${filesResponse.status} при получении файлов PR #$prNumber")
+                return null
+            }
+            val filesJsonArray = Json.parseToJsonElement(filesResponse.bodyAsText()).jsonArray
+            val files = filesJsonArray.mapNotNull { element ->
+                val obj = element.jsonObject
+                val patchText = obj["patch"]?.jsonPrimitive?.content
+                PrFile(
+                    filename = obj["filename"]?.jsonPrimitive?.content ?: return@mapNotNull null,
+                    status = obj["status"]?.jsonPrimitive?.content ?: "modified",
+                    additions = obj["additions"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                    deletions = obj["deletions"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                    changes = obj["changes"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                    patch = patchText,
+                )
+            }
+
+            val totalAdditions = files.sumOf { it.additions }
+            val totalDeletions = files.sumOf { it.deletions }
+            val totalChanges = files.sumOf { it.changes }
+
+            PrDiffResult(
+                title = title,
+                description = description,
+                author = author,
+                files = files,
+                latestCommitSha = "",
+                totalAdditions = totalAdditions,
+                totalDeletions = totalDeletions,
+                totalChanges = totalChanges,
+            )
+        } catch (e: Exception) {
+            println("❌ Ошибка получения PR #$prNumber: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun listOpenPullRequests(): List<PullRequestSummary> {
+        val token = getToken() ?: return emptyList()
+        val client = getHttpClient()
+        return try {
+            val url = "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/pulls?state=open&sort=created&direction=desc&per_page=10"
+            val response = client.get(url) {
+                header("Accept", "application/vnd.github.v3+json")
+                header("Authorization", "Bearer $token")
+            }
+            if (!response.status.isSuccess()) return emptyList()
+            val jsonArray = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+            jsonArray.map { element ->
+                val obj = element.jsonObject
+                PullRequestSummary(
+                    number = obj["number"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                    title = obj["title"]?.jsonPrimitive?.content ?: "",
+                    author = obj["user"]?.jsonObject?.get("login")?.jsonPrimitive?.content ?: "",
+                    headBranch = obj["head"]?.jsonObject?.get("ref")?.jsonPrimitive?.content ?: "",
+                    baseBranch = obj["base"]?.jsonObject?.get("ref")?.jsonPrimitive?.content ?: "",
+                    createdAt = obj["created_at"]?.jsonPrimitive?.content ?: "",
+                    updatedAt = obj["updated_at"]?.jsonPrimitive?.content ?: "",
+                )
+            }
+        } catch (e: Exception) {
+            println("⚠️ listOpenPullRequests ошибка: ${e.message}")
+            emptyList()
+        }
+    }
+
+    data class PullRequestSummary(
+        val number: Int,
+        val title: String,
+        val author: String,
+        val headBranch: String,
+        val baseBranch: String,
+        val createdAt: String,
+        val updatedAt: String,
+    )
 }

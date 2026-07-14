@@ -771,6 +771,15 @@ class ChatViewModel : ViewModel() {
                     updateState { copy(showGitHubTokenDialog = true) }
                 }
             }
+
+            is ViewEvent.StartPRReview -> {
+                if (com.llmapp.rag.data.GitHubApi.getToken() != null) {
+                    demoHandler.startPRReview(event.prNumber)
+                } else {
+                    com.llmapp.rag.data.GitHubApi.openBrowserForToken()
+                    updateState { copy(showGitHubTokenDialog = true) }
+                }
+            }
         }
     }
 

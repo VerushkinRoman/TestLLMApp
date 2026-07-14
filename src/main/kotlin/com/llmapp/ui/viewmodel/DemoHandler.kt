@@ -76,5 +76,6 @@ class DemoHandler(
     }
 
     fun startProjectDemo() = demoManager?.startProjectDemo()
+    fun startPRReview(prNumber: Int) = demoManager?.startPRReviewDemo(prNumber)
     fun cancelDemo() = demoManager?.cancelDemo()
 }
