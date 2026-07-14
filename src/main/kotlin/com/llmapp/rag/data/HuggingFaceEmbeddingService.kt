@@ -30,12 +30,16 @@ class HuggingFaceEmbeddingService(
 
     override val dimension: Int = 768
 
-    private val apiToken: String = run {
+    private val apiToken: String? = run {
         val props = Properties()
-        File("keys.properties").inputStream().use { props.load(it) }
-        props.getProperty("huggingface.key")
-            ?: error("huggingface.key не найден в keys.properties")
+        try {
+            File("keys.properties").inputStream().use { props.load(it) }
+            props.getProperty("huggingface.key")?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
+    private val hasToken: Boolean get() = apiToken != null
 
     private val hostname = "router.huggingface.co"
     private val fallbackIps = listOf(
@@ -60,6 +64,10 @@ class HuggingFaceEmbeddingService(
     }
 
     override suspend fun embed(text: String): List<Float> {
+        if (!hasToken) {
+            println("⚠️ [HF] huggingface.key не задан, возвращаю пустой вектор")
+            return List(dimension) { 0f }
+        }
         return embedBatch(listOf(text)).first()
     }
 
@@ -142,6 +150,10 @@ class HuggingFaceEmbeddingService(
     }
 
     override suspend fun embedBatch(texts: List<String>): List<List<Float>> {
+        if (!hasToken) {
+            println("⚠️ [HF] huggingface.key не задан, возвращаю пустые векторы")
+            return texts.map { List(dimension) { 0f } }
+        }
         val results = mutableListOf<List<Float>>()
         val bodyTexts = texts.map { t ->
             t.replace("\"", "'").take(2048)
