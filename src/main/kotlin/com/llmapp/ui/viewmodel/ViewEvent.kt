@@ -81,6 +81,7 @@ sealed class ViewEvent {
     data class InitDemoManager(val onMessageAdded: (ChatMessageUI) -> Unit) : ViewEvent()
     data class StartProjectDemo(val token: String? = null) : ViewEvent()
     data class StartPRReview(val prNumber: Int) : ViewEvent()
+    data class StartPRReviewAgent(val prNumber: Int) : ViewEvent()
     object CancelDemo : ViewEvent()
     object ShowGitHubTokenDialog : ViewEvent()
     object DismissGitHubTokenDialog : ViewEvent()

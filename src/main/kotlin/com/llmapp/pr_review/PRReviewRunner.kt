@@ -2,6 +2,7 @@ package com.llmapp.pr_review
 
 import com.llmapp.api.ApiConfig
 import com.llmapp.rag.data.GitHubApi
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -54,87 +55,44 @@ fun main(args: Array<String>) {
 
     println()
 
-    // Run review
-    kotlinx.coroutines.runBlocking {
+    // Run review using PRReviewAgent2 with MCP + RAG
+    runBlocking {
         try {
-            println("  Step 1/3: Fetching PR #$prNumber diff...")
-            val diffResult = GitHubApi.getPullRequestDiff(prNumber)
-            if (diffResult == null) {
-                println("  Error: Failed to fetch PR #$prNumber")
-                kotlin.system.exitProcess(1)
-            }
-            println("    Title: ${diffResult.title}")
-            println("    Author: ${diffResult.author}")
-            println("    Files: ${diffResult.files.size}")
-            println("    Changes: +${diffResult.totalAdditions}/-${diffResult.totalDeletions}")
-            println()
-
-            println("  Step 2/3: Running AI review...")
-            val agent = PRReviewAgent(
-                config = ReviewConfig(model = model)
-            )
-
-            val diff = PullRequestDiff(
-                pr = PullRequestInfo(
-                    number = prNumber,
-                    title = diffResult.title,
-                    description = diffResult.description,
-                    author = diffResult.author,
-                    baseBranch = "",
-                    headBranch = "",
-                    state = "open",
-                    createdAt = "",
-                    updatedAt = "",
-                ),
-                files = diffResult.files.map { file ->
-                    ChangedFile(
-                        path = file.filename,
-                        status = file.status,
-                        additions = file.additions,
-                        deletions = file.deletions,
-                        patch = file.patch ?: "",
-                    )
-                },
-                diffText = diffResult.files.joinToString("\n") { f ->
-                    "--- ${f.filename} ---\n${f.patch ?: ""}"
-                },
-                totalAdditions = diffResult.totalAdditions,
-                totalDeletions = diffResult.totalDeletions,
-                totalChanges = diffResult.totalChanges,
-            )
-
+            println("  Step 1/3: Running AI review via PRReviewAgent2...")
             val startTime = System.currentTimeMillis()
-            val report = agent.reviewFromDiff(diff)
+            val agent = PRReviewAgent2()
+            val progressMessages = mutableListOf<String>()
+            val result = agent.review(
+                prNumber = prNumber,
+                onMessage = { msg -> progressMessages.add(msg) }
+            )
             val elapsed = System.currentTimeMillis() - startTime
+
+            for (msg in progressMessages) {
+                println("    $msg")
+            }
             println("    Done in ${elapsed}ms")
             println()
 
-            println("  Step 3/3: Saving report...")
+            println("  Step 2/3: Saving report...")
             outputDir.mkdirs()
 
-            // Markdown report
-            val mdReport = buildMarkdownReport(report, diff)
+            val mdContent = buildMarkdownReport(result)
             val mdFile = File(outputDir, "review_$prNumber.md")
-            mdFile.writeText(mdReport)
+            mdFile.writeText(mdContent)
             println("    Report: ${mdFile.absolutePath}")
 
-            // JSON report
-            val jsonReport = buildJsonReport(report, diff)
+            val jsonContent = buildJsonReport(result)
             val jsonFile = File(outputDir, "review_$prNumber.json")
-            jsonFile.writeText(jsonReport)
+            jsonFile.writeText(jsonContent)
             println("    JSON: ${jsonFile.absolutePath}")
 
-            // Summary
             println()
             println("-" .repeat(60))
             println("  Review Summary")
             println("-" .repeat(60))
-            println("  Score: ${report.overallScore}/100")
-            println("  Issues: ${report.issues.size}")
-            println("  Critical: ${report.issues.count { it.severity == ReviewSeverity.CRITICAL }}")
-            println("  Warnings: ${report.issues.count { it.severity == ReviewSeverity.WARNING }}")
-            println("  Info: ${report.issues.count { it.severity == ReviewSeverity.INFO }}")
-            println("  Suggestions: ${report.issues.count { it.severity == ReviewSeverity.SUGGESTION }}")
+            println("  Score: ${result.score}/100")
+            println("  PR #${result.prNumber}: ${result.prTitle}")
             println("-" .repeat(60))
 
         } catch (e: Exception) {
@@ -145,90 +103,32 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun buildMarkdownReport(report: ReviewReport, diff: PullRequestDiff): String = buildString {
-    appendLine("# AI Code Review: PR #${report.prInfo.number}")
+private fun buildMarkdownReport(result: PRReviewAgent2.ReviewResult): String = buildString {
+    appendLine("# AI Code Review: PR #${result.prNumber}")
     appendLine()
-    appendLine("> **${report.prInfo.title}** by ${report.prInfo.author}")
+    appendLine("> **${result.prTitle}**")
     appendLine()
-    appendLine("## Summary")
+    appendLine("## Review")
     appendLine()
     appendLine("| Metric | Value |")
     appendLine("|--------|-------|")
-    appendLine("| Overall Score | **${report.overallScore}/100** |")
-    appendLine("| Issues Found | ${report.issues.size} |")
-    appendLine("| Files Reviewed | ${diff.files.size} |")
-    appendLine("| Changes | +${diff.totalAdditions}/-${diff.totalDeletions} |")
+    appendLine("| Overall Score | **${result.score}/100** |")
     appendLine()
-    appendLine("### Issues by Severity")
+    appendLine("## Findings")
     appendLine()
-    for (severity in listOf(ReviewSeverity.CRITICAL, ReviewSeverity.WARNING, ReviewSeverity.INFO, ReviewSeverity.SUGGESTION)) {
-        val count = report.issues.count { it.severity == severity }
-        appendLine("- **${severity.name}**: $count")
-    }
+    appendLine(result.summary)
     appendLine()
-
-    if (report.positiveHighlights.isNotEmpty()) {
-        appendLine("## Positive Highlights")
-        appendLine()
-        for (h in report.positiveHighlights) {
-            appendLine("- $h")
-        }
-        appendLine()
-    }
-
-    if (report.issues.isNotEmpty()) {
-        appendLine("## Issues Found")
-        appendLine()
-        val sorted = report.issues.sortedByDescending { it.severity.ordinal }
-        for (issue in sorted) {
-            val icon = when (issue.severity) {
-                ReviewSeverity.CRITICAL -> "🔴"
-                ReviewSeverity.WARNING -> "🟡"
-                ReviewSeverity.INFO -> "🔵"
-                ReviewSeverity.SUGGESTION -> "🟢"
-            }
-            appendLine("### $icon [${issue.severity}] ${issue.category.name}: ${issue.title}")
-            if (issue.filePath != null) appendLine("- **File:** `${issue.filePath}`${issue.lineNumber?.let { ":$it" } ?: ""}")
-            appendLine("- **Description:** ${issue.description}")
-            if (issue.suggestion != null) appendLine("- **Suggestion:** ${issue.suggestion}")
-            appendLine()
-        }
-    }
-
-    if (report.recommendations.isNotEmpty()) {
-        appendLine("## Recommendations")
-        appendLine()
-        for (rec in report.recommendations) {
-            appendLine("- $rec")
-        }
-        appendLine()
-    }
-
     appendLine("---")
-    appendLine("*Generated by AI Code Review Pipeline*")
+    appendLine("*Generated by AI Code Review Pipeline (MCP + RAG)*")
 }
 
-private fun buildJsonReport(report: ReviewReport, diff: PullRequestDiff): String {
+private fun buildJsonReport(result: PRReviewAgent2.ReviewResult): String {
     val sb = StringBuilder()
     sb.appendLine("{")
-    sb.appendLine("  \"prNumber\": ${report.prInfo.number},")
-    sb.appendLine("  \"prTitle\": \"${report.prInfo.title.replace("\"", "\\\"")}\",")
-    sb.appendLine("  \"author\": \"${report.prInfo.author}\",")
-    sb.appendLine("  \"overallScore\": ${report.overallScore},")
-    sb.appendLine("  \"totalIssues\": ${report.issues.size},")
-    sb.appendLine("  \"totalFiles\": ${diff.files.size},")
-    sb.appendLine("  \"totalAdditions\": ${diff.totalAdditions},")
-    sb.appendLine("  \"totalDeletions\": ${diff.totalDeletions},")
-
-    val bySeverity = report.issues.groupBy { it.severity }
-    sb.appendLine("  \"issuesBySeverity\": {")
-    for ((i, severity) in listOf(ReviewSeverity.CRITICAL, ReviewSeverity.WARNING, ReviewSeverity.INFO, ReviewSeverity.SUGGESTION).withIndex()) {
-        val comma = if (i < 3) "," else ""
-        sb.appendLine("    \"${severity.name.lowercase()}\": ${bySeverity[severity]?.size ?: 0}$comma")
-    }
-    sb.appendLine("  },")
-
-    sb.appendLine("  \"summary\": \"${report.summary.take(200).replace("\"", "\\\"")}\"")
+    sb.appendLine("  \"prNumber\": ${result.prNumber},")
+    sb.appendLine("  \"prTitle\": \"${result.prTitle.replace("\"", "\\\"")}\",")
+    sb.appendLine("  \"overallScore\": ${result.score},")
+    sb.appendLine("  \"summary\": \"${result.summary.take(200).replace("\"", "\\\"").replace("\n", "\\n")}\"")
     sb.appendLine("}")
     return sb.toString()
 }

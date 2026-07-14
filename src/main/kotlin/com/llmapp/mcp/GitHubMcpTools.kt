@@ -66,6 +66,30 @@ object GitHubMcpTools {
             ),
             requiredParams = listOf("path")
         ),
+        McpIntegration.McpToolInfo(
+            name = "github_list_prs",
+            description = "List open Pull Requests in CalendarKMP repository. Returns PR number, title, author, and status.",
+            parameters = listOf(
+                McpIntegration.McpToolParam(
+                    name = "max_results",
+                    type = "string",
+                    description = "Max PRs to return (default: 5)"
+                )
+            ),
+            requiredParams = null
+        ),
+        McpIntegration.McpToolInfo(
+            name = "github_get_pr",
+            description = "Get detailed Pull Request information and diff from CalendarKMP. Returns PR metadata and full diff of changed files.",
+            parameters = listOf(
+                McpIntegration.McpToolParam(
+                    name = "pr_number",
+                    type = "string",
+                    description = "PR number (e.g. '1', '2')"
+                )
+            ),
+            requiredParams = listOf("pr_number")
+        ),
     )
 
     fun getToolDefinitions(): List<McpIntegration.McpToolInfo> = toolDefinitions
@@ -79,6 +103,8 @@ object GitHubMcpTools {
             "github_search_source" -> executeSearchSource(args)
             "github_list_docs" -> executeListDocs()
             "github_list_source_tree" -> executeListSourceTree(args)
+            "github_list_prs" -> executeListPRs(args)
+            "github_get_pr" -> executeGetPR(args)
             else -> "❌ Unknown tool: $toolName"
         }
     }
@@ -203,6 +229,61 @@ object GitHubMcpTools {
             }
         }
         withContext(Dispatchers.IO) { listDir(fullPath) }
+        return sb.toString()
+    }
+
+    private suspend fun executeListPRs(args: Map<String, String>): String {
+        val maxResults = args["max_results"]?.toIntOrNull() ?: 5
+        val prs = GitHubApi.listOpenPullRequests()
+
+        if (prs.isEmpty()) return "📭 No open Pull Requests in CalendarKMP"
+
+        val sb = StringBuilder("🔀 Open Pull Requests in CalendarKMP:\n\n")
+        prs.take(maxResults).forEach { pr ->
+            sb.appendLine("PR #${pr.number}: ${pr.title}")
+            sb.appendLine("   Author: ${pr.author}")
+            sb.appendLine("   Created: ${pr.createdAt}")
+            sb.appendLine()
+        }
+        if (prs.size > maxResults) {
+            sb.appendLine("... and ${prs.size - maxResults} more")
+        }
+        return sb.toString()
+    }
+
+    private suspend fun executeGetPR(args: Map<String, String>): String {
+        val prNumber = args["pr_number"]?.toIntOrNull()
+            ?: return "❌ Invalid or missing 'pr_number'. Provide a number (e.g. '1')"
+
+        val diffResult = GitHubApi.getPullRequestDiff(prNumber)
+            ?: return "❌ Failed to fetch PR #$prNumber (not found or API error)"
+
+        val sb = StringBuilder("🔀 PR #$prNumber: ${diffResult.title}\n")
+        sb.appendLine("   Author: ${diffResult.author}")
+        sb.appendLine("   Description: ${diffResult.description.take(500)}")
+        sb.appendLine("   Changes: +${diffResult.totalAdditions}/-${diffResult.totalDeletions}")
+        sb.appendLine("   Files: ${diffResult.files.size}")
+        sb.appendLine()
+
+        sb.appendLine("## Изменённые файлы (diff):\n")
+        for (file in diffResult.files) {
+            sb.appendLine("### ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})")
+            if (file.patch != null && file.patch.isNotBlank()) {
+                val patchLines = file.patch.lines()
+                val truncatedPatch = if (patchLines.size > 100) {
+                    patchLines.take(80).joinToString("\n") + "\n... [truncated, ${patchLines.size} lines total]"
+                } else {
+                    file.patch
+                }
+                sb.appendLine("```diff")
+                sb.appendLine(truncatedPatch)
+                sb.appendLine("```")
+            } else {
+                sb.appendLine("*(binary or empty diff)*")
+            }
+            sb.appendLine()
+        }
+
         return sb.toString()
     }
 }

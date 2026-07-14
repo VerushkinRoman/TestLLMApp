@@ -466,6 +466,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartPRReview(prNumber))
                     currentScreen = Screen.Chat
                 },
+                onStartPRReviewAgent = { prNumber ->
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartPRReviewAgent(prNumber))
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

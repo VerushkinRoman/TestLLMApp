@@ -49,6 +49,7 @@ fun DemoScreen(
     onClearHistory: () -> Unit,
     onStartProjectDemo: (() -> Unit)? = null,
     onStartPRReview: ((prNumber: Int) -> Unit)? = null,
+    onStartPRReviewAgent: ((prNumber: Int) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -181,6 +182,50 @@ fun DemoScreen(
                 val num = prNumber.toIntOrNull() ?: 2
                 onClearHistory()
                 onStartPRReview?.invoke(num)
+            }
+        )
+
+        // Карточка: Ассистент ревью PR (MCP)
+        var agentPrNumber by remember { mutableStateOf("") }
+        DemoCard(
+            icon = { Icon(
+                imageVector = Icons.Filled.RateReview,
+                contentDescription = "PR Review Agent",
+                modifier = Modifier.width(36.dp).height(36.dp),
+                tint = if (isDemoRunning)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                else
+                    Color(0xFF2E7D32)
+            ) },
+            title = "Ассистент ревью PR",
+            description = "Агент сам ходит в CalendarKMP через MCP-тулы, получает diff и пишет саммари ревью в чат.",
+            features = listOf("MCP", "Git", "LLM", "Саммари"),
+            isDemoRunning = isDemoRunning,
+            additionalContent = {
+                if (!isDemoRunning) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Номер PR (0 = последний)",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = agentPrNumber,
+                            onValueChange = { agentPrNumber = it.filter { c -> c.isDigit() }.take(5) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            },
+            onClick = {
+                val num = agentPrNumber.toIntOrNull() ?: 0
+                onClearHistory()
+                onStartPRReviewAgent?.invoke(num)
             }
         )
     }
