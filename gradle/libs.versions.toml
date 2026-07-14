@@ -1,7 +1,6 @@
 [versions]
 kotlin = "2.4.0"
 ktor = "3.5.1"
-shadow = "8.1.1"
 kotlinx-serialization = "1.11.0"
 kotlinx-coroutines = "1.11.0"
 slf4j = "2.0.18"
@@ -10,6 +9,7 @@ material3 = "1.11.0-alpha07"
 materialIcons-extended = "1.7.3"
 lifecycle = "2.11.0-beta01"
 mcp-sdk = "0.14.0"
+shadow = "9.4.1"
 
 
 [libraries]
@@ -43,8 +43,8 @@ mcp-kotlin-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", 
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-shadow = { id = "com.github.johnrengelman.shadow", version.ref = "shadow" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
