@@ -1,3 +1,4 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -5,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.shadow)
 }
 
 repositories {
@@ -13,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    // Compose Multiplatform
+    // Compose Multiplatform (only for desktop app)
     implementation(compose.desktop.currentOs)
     implementation(libs.jetbrains.compose.material3)
     implementation(libs.jetbrains.compose.material.icons.extended)
@@ -56,7 +58,6 @@ compose.desktop {
 }
 
 // === AI Code Review Runner (fat JAR) ===
-// Exclude Compose/UI deps from runner; they aren't needed for CLI
 
 val runnerLibs = configurations.create("runnerLibs") {
     isCanBeResolved = true
@@ -99,4 +100,71 @@ tasks.register<JavaExec>("runPrReview") {
 
 tasks.withType<JavaExec> {
     systemProperty("file.encoding", "UTF-8")
+}
+
+// ProGuard minification — запускается отдельной задачей
+// Требует: brew install proguard
+val proguardRules = """
+# === review-runner ProGuard rules ===
+
+-injars build/libs/review-runner.jar
+-outjars build/libs/review-runner-min.jar
+
+-libraryjars <java.home>/jmods
+
+-dontwarn
+-dontnote
+
+-keep class com.llmapp.pr_review.** { *; }
+-keep class com.llmapp.rag.data.GitHubApi** { *; }
+-keep class com.llmapp.mcp.GitHubMcpTools** { *; }
+-keep class com.llmapp.api.** { *; }
+-keep class com.llmapp.model.** { *; }
+
+# Kotlin
+-keep class kotlin.** { *; }
+-keep class kotlinx.** { *; }
+
+# Ktor
+-keep class io.ktor.** { *; }
+
+# MCP
+-keep class io.modelcontextprotocol.** { *; }
+
+# Serialization
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-keepclassmembers class * {
+    @kotlinx.serialization.Serializable <fields>;
+}
+
+# Keep all public constructors
+-keepclassmembers class * {
+    public <init>(...);
+}
+""".trimIndent()
+
+tasks.register("proguardReviewRunner") {
+    dependsOn("reviewRunnerJar")
+    doFirst {
+        file("build/review-runner.pro").writeText(proguardRules)
+    }
+    doLast {
+        val proguardJar = "/opt/homebrew/Cellar/proguard/7.6.1/libexec/lib/proguard.jar"
+        val proguardFile = file(proguardJar)
+        if (!proguardFile.exists()) {
+            logger.warn("ProGuard not found at $proguardJar. Run: brew install proguard")
+            logger.warn("Skipping minification, using fat JAR as-is")
+            copy {
+                from("build/libs/review-runner.jar")
+                into("build/libs/")
+                rename { "review-runner-min.jar" }
+            }
+        } else {
+            javaexec {
+                classpath = files(proguardFile)
+                mainClass.set("proguard.ProGuard")
+                args("-include", "build/review-runner.pro")
+            }
+        }
+    }
 }

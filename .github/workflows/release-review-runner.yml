@@ -33,11 +33,46 @@ jobs:
       - name: Build fat JAR
         run: ./gradlew reviewRunnerJar --no-daemon
 
-      - name: Upload JAR as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: review-runner
-          path: build/libs/review-runner.jar
+      - name: Install ProGuard
+        run: |
+          PROGUARD_VERSION="7.6.1"
+          curl -L -o /tmp/proguard.zip "https://github.com/Guardsquare/proguard/releases/download/v${PROGUARD_VERSION}/proguard-${PROGUARD_VERSION}.zip"
+          unzip -q /tmp/proguard.zip -d /tmp/
+          PROGUARD_DIR=$(ls -d /tmp/proguard-* | head -1)
+          echo "PROGUARD_JAR=$PROGUARD_DIR/lib/proguard.jar" >> $GITHUB_ENV
+
+      - name: Minify with ProGuard
+        run: |
+          cat > build/review-runner.pro << 'RULEOF'
+          -injars build/libs/review-runner.jar
+          -outjars build/libs/review-runner-min.jar
+          -libraryjars <java.home>/jmods
+          -dontwarn
+          -dontnote
+          -keep class com.llmapp.pr_review.** { *; }
+          -keep class com.llmapp.rag.data.GitHubApi** { *; }
+          -keep class com.llmapp.mcp.GitHubMcpTools** { *; }
+          -keep class com.llmapp.api.** { *; }
+          -keep class com.llmapp.model.** { *; }
+          -keep class kotlin.** { *; }
+          -keep class kotlinx.** { *; }
+          -keep class io.ktor.** { *; }
+          -keep class io.modelcontextprotocol.** { *; }
+          -keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+          -keepclassmembers class * {
+              @kotlinx.serialization.Serializable <fields>;
+          }
+          -keepclassmembers class * {
+              public <init>(...);
+          }
+RULEOF
+          java -jar $PROGUARD_JAR @build/review-runner.pro 2>&1
+
+      - name: Replace with minified JAR
+        run: cp build/libs/review-runner-min.jar build/libs/review-runner.jar
+
+      - name: Check final size
+        run: ls -lh build/libs/review-runner.jar
 
       - name: Move tag to current commit
         run: |
