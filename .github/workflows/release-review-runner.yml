@@ -1,0 +1,57 @@
+name: Build & Release AI Review Runner
+
+on:
+  push:
+    tags:
+      - 'review-runner-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build fat JAR
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Upload JAR as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-runner
+          path: build/libs/review-runner-*.jar
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: AI Review Runner ${{ github.ref_name }}
+          body: |
+            ## AI Code Review Runner
+            
+            Fat JAR для запуска AI ревью PR в CalendarKMP.
+            
+            ### Использование:
+            ```bash
+            java -jar review-runner-*.jar <PR_NUMBER> [outputDir] [model]
+            ```
+            
+            ### В GitHub Actions:
+            ```yaml
+            - run: curl -L -o review-runner.jar https://github.com/${{ github.repository }}/releases/latest/download/review-runner-*.jar
+            - run: java -jar review-runner.jar \${PR_NUMBER}
+            ```
+          files: build/libs/review-runner-*.jar
