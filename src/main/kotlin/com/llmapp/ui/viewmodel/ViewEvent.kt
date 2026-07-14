@@ -79,20 +79,11 @@ sealed class ViewEvent {
     // ДЕМОНСТРАЦИИ
     // ============================================================
     data class InitDemoManager(val onMessageAdded: (ChatMessageUI) -> Unit) : ViewEvent()
-    object StartTokenDemo : ViewEvent()
-    object StartCompressionDemo : ViewEvent()
-    object StartStrategyDemo : ViewEvent()
-    object StartMemoryDemo : ViewEvent()
-    object StartPersonalizationDemo : ViewEvent()
-    object StartStatefulDemo : ViewEvent()
-    object StartInvariantDemo : ViewEvent()
-    object StartTransitionDemo : ViewEvent()
-    data class StartRagDemo(val query: String) : ViewEvent()
-    object StartRagComparisonDemo : ViewEvent()
-    object StartRagImprovedDemo : ViewEvent()
-    object StartRagStructuredDemo : ViewEvent()
-    object StartContextRetentionDemo : ViewEvent()
+    data class StartProjectDemo(val token: String? = null) : ViewEvent()
     object CancelDemo : ViewEvent()
+    object ShowGitHubTokenDialog : ViewEvent()
+    object DismissGitHubTokenDialog : ViewEvent()
+    data class UpdateGitHubTokenInput(val token: String) : ViewEvent()
 
     // ============================================================
     // RAG
@@ -158,14 +149,7 @@ sealed class ViewEvent {
     object ToggleLocalModel : ViewEvent()
     object TogglePrivateServer : ViewEvent()
     data class StartLocalDemo(val questions: List<String>) : ViewEvent()
-    object StartLocalAgentFlowDemo : ViewEvent()
-    object StartLocalRAGComparisonDemo : ViewEvent()
     object StartPrivateServerDemo : ViewEvent()
-
-    // ============================================================
-    // ОПТИМИЗАЦИЯ ЛОКАЛЬНОЙ МОДЕЛИ
-    // ============================================================
-    object StartOptimizationDemo : ViewEvent()
 
     // ============================================================
     // ПАМЯТЬ ЗАДАЧИ
@@ -173,14 +157,4 @@ sealed class ViewEvent {
     data object ToggleTaskMemory : ViewEvent()
     data object ResetTaskMemory : ViewEvent()
     data class SetTaskMemory(val memory: com.llmapp.memory.TaskMemory) : ViewEvent()
-
-    // ============================================================
-    // КОЛЛЕКТОР МАТЧЕЙ (периодический сбор данных)
-    // ============================================================
-    data class StartCollector(val intervalMinutes: Double = 15.0) : ViewEvent()
-    object StopCollector : ViewEvent()
-    object CollectNow : ViewEvent()
-    data class OnCollectorLog(val message: String) : ViewEvent()
-    data class OnCollectorSummary(val summaryText: String) : ViewEvent()
-    object ClearCollectorLog : ViewEvent()
 }

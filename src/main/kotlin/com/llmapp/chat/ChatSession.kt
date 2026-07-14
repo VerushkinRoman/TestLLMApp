@@ -13,9 +13,9 @@ import com.llmapp.model.ResponseControl
 import com.llmapp.model.RouterRequest
 import com.llmapp.model.TokenStats
 import com.llmapp.rag.RAGEnhancer
+import com.llmapp.rag.data.SourceCodeProvider
 import com.llmapp.rag.domain.RagAnswer
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -38,39 +38,64 @@ data class ChatResponse(
 
 class ChatSession(
     private var currentModel: String = "mistral/mistral-large-latest",
-    private val systemPrompt: String = """Ты полезный ассистент. Отвечай кратко и по делу на русском языке.
-        Форматирование ответов:
-        - Используй **жирный** текст для важной информации
-        - Используй *курсив* для выделения
-        - Для кода используй тройные обратные кавычки с указанием языка:
-        ```kotlin
-        fun example() {
-            println("Hello")
-        }
-        Для списков используй - или * в начале строки
+    private val systemPrompt: String = """Ты полезный ассистент для проекта CalendarKMP. Отвечай кратко и по делу на русском языке.
         
-        Для заголовков используй #, ##, ###
+CalendarKMP — это Kotlin Multiplatform приложение для отслеживания饮酒 календаря, построенное на Clean Architecture + MVI.
+
+Проект включает:
+- Мой календарь (отслеживание饮酒 дней)
+- Календарь друзей (просмотр календаря друзей)
+- Настройки (профиль, язык, тема, шаринг)
+- Firebase Firestore для хранения данных
+- Kodein DI для внедрения зависимостей
+- JetBrains Navigation3 для навигации
+
+**Git-операции:**
+Ты можешь выполнять Git-операции через GitHub API:
+- Читать файлы из репозитория
+- Создавать коммиты (обновлять файлы)
+- Создавать ветки
+- Создавать Pull Request'ы
+
+Для коммитов и PR нужен GITHUB_PERSONAL_ACCESS_TOKEN (env переменная).
+Репозиторий: github.com/VerushkinRoman/CalendarKMP
+
+Форматирование ответов:
+- Используй **жирный** текст для важной информации
+- Используй *курсив* для выделения
+- Для кода используй тройные обратные кавычки с указанием языка:
+```kotlin
+fun example() {
+    println("Hello")
+}
+Для списков используй - или * в начале строки
         
-        Для цитат используй > в начале строки
+Для заголовков используй #, ##, ###
         
-        Ссылки оформляй как текст""",
+Для цитат используй > в начале строки
+        
+Ссылки оформляй как текст""",
     maxHistorySize: Int = 150,
     private val compressionEnabled: Boolean = true,
     private val keepLastMessages: Int = 15,
     private val compressAfterTokens: Int = 24000,
 ) {
     var logListener: ((String) -> Unit)? = null
+    var progressListener: ((String) -> Unit)? = null
     private fun log(msg: String) {
         println(msg)
         logListener?.invoke(msg)
+    }
+
+    private fun progress(msg: String) {
+        progressListener?.invoke(msg)
     }
 
     private var strategicAgent: StrategicLLMAgent? = null
     private var useStrategicAgent = true
     private val conversationHistory = mutableListOf<Pair<String, String>>()
 
-    var dataIntegration: McpIntegration? = null
-    var pipelineIntegration: McpIntegration? = null
+    var mcpIntegration: McpIntegration? = null
 
     var ragEnabled: Boolean = false
     val ragEnhancer: RAGEnhancer by lazy { RAGEnhancer() }
@@ -104,48 +129,26 @@ class ChatSession(
         )
     }
 
-    private val dataToolNames = setOf(
-        "get_groups", "get_group", "get_teams", "get_team",
-        "get_games", "get_game", "get_stadiums", "get_stadium",
-        "search_all", "search_games", "search_teams", "search_groups"
-    )
-
-    private fun isAnyMcpConnected(): Boolean =
-        dataIntegration?.isConnected() == true || pipelineIntegration?.isConnected() == true
+    private fun isMcpAvailable(): Boolean =
+        mcpIntegration?.isConnected() == true
 
     private fun getToolNames(): Set<String> {
         val names = mutableSetOf<String>()
-        dataIntegration?.getToolNames()?.let { names.addAll(it) }
-        pipelineIntegration?.getToolNames()?.let { names.addAll(it) }
+        mcpIntegration?.getToolNames()?.let { names.addAll(it) }
         return names
     }
 
-    private fun hasPipelineTools(): Boolean =
-        pipelineIntegration?.hasPipelineTools() == true
-
     private fun getCombinedToolDescriptions(): String {
         val allTools = mutableListOf<McpToolInfo>()
-        dataIntegration?.getTools()?.let { allTools.addAll(it) }
-        pipelineIntegration?.getTools()?.let { allTools.addAll(it) }
+        mcpIntegration?.getTools()?.let { allTools.addAll(it) }
         if (allTools.isEmpty()) return ""
-
-        val hasSpecific = allTools.any { it.name in setOf("get_groups", "get_teams", "get_games") }
-        val visibleTools = allTools.filter { tool ->
-            !(hasSpecific && tool.name in setOf(
-                "search_all",
-                "search_games",
-                "search_teams",
-                "search_groups"
-            ))
-        }
-        if (visibleTools.isEmpty()) return ""
 
         return buildString {
             appendLine("ВАЖНО: Имена параметров должны быть ТОЧНО как указано ниже. Не угадывай.")
             appendLine()
             appendLine("=== ДОСТУПНЫЕ ИНСТРУМЕНТЫ ===")
             appendLine()
-            for (tool in visibleTools) {
+            for (tool in allTools) {
                 val req = tool.parameters.filter { it.name in (tool.requiredParams ?: emptyList()) }
                 val opt =
                     tool.parameters.filter { it.name !in (tool.requiredParams ?: emptyList()) }
@@ -162,9 +165,6 @@ class ChatSession(
                 for (p in opt) {
                     appendLine("  Параметр \"${p.name}\" (опциональный): ${p.description}")
                 }
-                if (tool.name == "get_group") {
-                    appendLine("  ВНИМАНИЕ: Параметр называется \"name\", а НЕ \"group\". Передавай {\"name\": \"A\"}")
-                }
                 appendLine()
             }
             appendLine("=== ПРАВИЛА ===")
@@ -176,18 +176,14 @@ class ChatSession(
     }
 
 
-    private fun getIntegrationForTool(toolName: String): McpIntegration? = when {
-        toolName in dataToolNames -> dataIntegration
-        pipelineIntegration?.getToolNames()?.contains(toolName) == true -> pipelineIntegration
-        else -> dataIntegration?.takeIf { it.getToolNames().contains(toolName) }
-            ?: pipelineIntegration?.takeIf { it.getToolNames().contains(toolName) }
-    }
+    private fun getIntegrationForTool(toolName: String): McpIntegration? =
+        mcpIntegration?.takeIf { it.getToolNames().contains(toolName) }
 
     private var pendingCompressionNotification: String? = null
 
     private val compressedAgent: CompressedLLMAgent? = if (compressionEnabled) {
         CompressedLLMAgent(
-            
+
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -208,7 +204,7 @@ class ChatSession(
 
     private val regularAgent: LLMAgent? = if (!compressionEnabled) {
         LLMAgent(
-            
+
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl(),
@@ -220,7 +216,7 @@ class ChatSession(
 
     init {
         strategicAgent = StrategicLLMAgent(
-            
+
             model = currentModel,
             systemPrompt = systemPrompt,
             responseControl = ResponseControl()
@@ -260,22 +256,24 @@ class ChatSession(
         strategicAgent?.updateResponseControl(control)
     }
 
-    suspend fun ask(userPrompt: String, isRegeneration: Boolean = false): ChatResponse {
-        val mcpConnected = isAnyMcpConnected()
+    suspend fun ask(
+        userPrompt: String,
+        isRegeneration: Boolean = false,
+        saveToHistory: Boolean = true
+    ): ChatResponse {
+        progress("Поиск в базе знаний...")
+        val useMcpMode = isMcpAvailable()
 
-        if (mcpConnected) {
-            dataIntegration?.refreshTools()
-            pipelineIntegration?.refreshTools()
-        }
-
-        val mcpSystemPrompt = if (mcpConnected) {
+        val mcpSystemPrompt = if (useMcpMode) {
             buildString {
-                appendLine("ТЫ В РЕЖИМЕ ВЫЗОВА MCP ИНСТРУМЕНТОВ.")
+                appendLine("ТЫ В РЕЖИМЕ ВЫЗОВА ИНСТРУМЕНТОВ (GitHub).")
                 appendLine("ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. НИ СЛОВА ПО-АНГЛИЙСКИ.")
                 appendLine("НЕ ПИШИ НИЧЕГО, КРОМЕ [MCP_CALL] БЛОКА ИЛИ РУССКОГО ОТВЕТА.")
                 appendLine("НЕ ДУМАЙ ВСЛУХ. НЕ ОБЪЯСНЯЙ. НЕ ПЛАНИРУЙ.")
                 appendLine("ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ ИЛИ ОТВЕТЬ ПО-РУССКИ.")
-                appendLine("ДЛЯ ПОИСКА ДАННЫХ ИСПОЛЬЗУЙ search_all ИЛИ get_groups/get_games.")
+                appendLine("ДЛЯ ЧТЕНИЯ ДОКУМЕНТАЦИИ И КОДА ИСПОЛЬЗУЙ github_read_file, github_list_dir, github_search_source.")
+                appendLine("ДЛЯ ПОИСКА КОДА ПО КЛЮЧЕВОМУ СЛОВУ ИСПОЛЬЗУЙ github_search_source.")
+                appendLine("ДЛЯ ПРОСМОТРА СПИСКА ФАЙЛОВ ИСПОЛЬЗУЙ github_list_docs ИЛИ github_list_source_tree.")
                 appendLine()
                 append(getCombinedToolDescriptions())
             }
@@ -291,7 +289,7 @@ class ChatSession(
 
         var augmentedUserPrompt = userPrompt
         var lastRagSources: List<RagSource>? = null
-        if (ragEnabled && !mcpConnected) {
+        if (ragEnabled && !useMcpMode) {
             try {
                 ragEnhancer.ensureIndexLoaded()
                 val ragAnswer: RagAnswer = ragEnhancer.searchWithStructuredContext(userPrompt)
@@ -304,12 +302,38 @@ class ChatSession(
                 }
                 if (ragAnswer.chunks.isNotEmpty()) {
                     log("📚 RAG: Найдено ${ragAnswer.chunks.size} релевантных чанков")
-                    augmentedUserPrompt = buildStructuredRagPrompt(userPrompt, ragAnswer)
+                    val sourceFiles = if (isSourceCodeNeeded(userPrompt)) {
+                        try {
+                            SourceCodeProvider.findRelevantFiles(userPrompt, ragAnswer)
+                        } catch (e: Exception) {
+                            log("⚠️ SourceCode: Ошибка загрузки файлов: ${e.message}")
+                            emptyList()
+                        }.also {
+                            if (it.isNotEmpty()) log("📂 SourceCode: Загружено ${it.size} файлов из репозитория")
+                        }
+                    } else {
+                        log("📚 SourceCode: Пропускаю — вопрос о документации, исходники не нужны")
+                        emptyList()
+                    }
+                    augmentedUserPrompt =
+                        buildStructuredRagPrompt(userPrompt, ragAnswer, sourceFiles)
                 } else if (ragAnswer.shouldSayIdontKnow) {
                     log("📚 RAG: Релевантность ниже порога — возвращаю 'не знаю'")
+                    val fallbackMessage = buildString {
+                        appendLine("В базе знаний CalendarKMP нет информации по вашему запросу.")
+                        appendLine()
+                        appendLine("**Доступные темы:**")
+                        appendLine("- Архитектура (Clean Architecture + MVI)")
+                        appendLine("- Навигация (JetBrains Navigation3)")
+                        appendLine("- Модели данных (DayData, MonthData, DrinkType)")
+                        appendLine("- Use Cases (GetStartCalendarData, CalculateStatistic, CalculateMonthIndex, GetContacts, FilterContacts)")
+                        appendLine("- DataSource (Firebase Firestore, OfflineDataSource)")
+                        appendLine("- Фичи (Мой календарь, Друзья, Настройки)")
+                        appendLine()
+                        appendLine("Попробуйте переформулировать вопрос или уточните тему.")
+                    }
                     return ChatResponse(
-                        content = ragAnswer.iDontKnowMessage
-                            ?: "Я не нашёл релевантной информации в базе знаний. Уточните запрос или задайте другой вопрос.",
+                        content = fallbackMessage,
                         promptTokens = 0,
                         completionTokens = 0,
                         totalTokens = 0,
@@ -323,11 +347,11 @@ class ChatSession(
             }
         }
 
-        val effectivePrompt = if (mcpConnected) {
+        val effectivePrompt = if (useMcpMode) {
             "START WITH [MCP_CALL] IMMEDIATELY. NO TEXT BEFORE IT.\n\n$augmentedUserPrompt"
         } else augmentedUserPrompt
 
-        val savedControl = if (mcpConnected && responseControl.enabled) {
+        val savedControl = if (useMcpMode && responseControl.enabled) {
             responseControl
         } else null
         if (savedControl != null) {
@@ -376,6 +400,7 @@ class ChatSession(
         }
         val promptWithMarkerReminder = "$effectivePrompt$markerReminder"
 
+        progress("Генерация ответа...")
         try {
             val response = run {
                 if (useStrategicAgent && strategicAgent != null) {
@@ -458,12 +483,14 @@ class ChatSession(
                 responseTimeMs = response.responseTimeMs
             )
 
-            val finalContent = if (mcpConnected) {
+            val finalContent = if (useMcpMode) {
                 handleMcpToolCalls(response.content, userPrompt)
             } else response.content
-            conversationHistory.add(userPrompt to finalContent)
-            if (conversationHistory.size > 10) {
-                conversationHistory.removeAt(0)
+            if (saveToHistory) {
+                conversationHistory.add(userPrompt to finalContent)
+                if (conversationHistory.size > 10) {
+                    conversationHistory.removeAt(0)
+                }
             }
             return response.copy(content = finalContent, ragSources = lastRagSources)
         } catch (e: Exception) {
@@ -719,13 +746,7 @@ class ChatSession(
                             appendLine("Original user question: $originalUserPrompt")
                             appendLine()
                             appendLine("Tool '$toolName' keeps failing. Try a DIFFERENT approach:")
-                            if (toolName == "summarize_data") {
-                                appendLine("- Save your data directly as JSON with save_data (format: \"json\")")
-                                appendLine("- Or answer the user in Russian with the data you have.")
-                            } else {
-                                appendLine("- Use get_groups (returns ALL groups at once) instead of get_group")
-                                appendLine("- Use get_games to get all matches")
-                            }
+                            appendLine("- Use a different tool to get the data you need.")
                             appendLine("- If you already have all data, answer the user in Russian.")
                         }
                         return@repeat
@@ -739,36 +760,6 @@ class ChatSession(
                         appendLine("The JSON you sent was: ${json.take(200)}")
                         appendLine()
                         when (toolName) {
-                            "get_group" -> {
-                                appendLine("CRITICAL: For get_group, the parameter name is EXACTLY \"name\", NOT \"group\".")
-                                appendLine("Example: {\"tool\": \"get_group\", \"arguments\": {\"name\": \"A\"}}")
-                                appendLine("Do NOT change 'name' to 'group' or any other name.")
-                            }
-
-                            "summarize_data" -> {
-                                val rawDataMissing =
-                                    errorMsg.contains("raw_data", ignoreCase = true)
-                                val fieldsMissing =
-                                    errorMsg.contains("required for type", ignoreCase = true)
-                                when {
-                                    rawDataMissing && !fieldsMissing -> {
-                                        appendLine("CRITICAL: The parameter name is EXACTLY \"raw_data\".")
-                                        appendLine("Example: {\"tool\": \"summarize_data\", \"arguments\": {\"raw_data\": \"{\\\"groups\\\": [...]}\"}}")
-                                    }
-
-                                    fieldsMissing -> {
-                                        appendLine("ERROR: Your raw_data JSON is missing required fields. Each team object MUST have ALL 10 fields:")
-                                        appendLine("  team_id, mp, w, l, d, pts, gf, ga, gd, _id")
-                                        appendLine("Copy the EXACT team JSON from the get_groups output. Do NOT omit any field.")
-                                    }
-
-                                    else -> {
-                                        appendLine("summarize_data requires \"raw_data\" — a JSON string with 'games' and/or 'groups' arrays.")
-                                        appendLine("All team objects must have ALL 10 fields: team_id, mp, w, l, d, pts, gf, ga, gd, _id.")
-                                    }
-                                }
-                            }
-
                             else -> {
                                 appendLine("The correct format is:")
                                 appendLine("[MCP_CALL]")
@@ -786,18 +777,13 @@ class ChatSession(
                     log("🔄 MCP: Отправляю follow-up запрос агенту (итерация ${allResults.size})")
                     if (beforeWasAlreadyCalled && allResults.size > 1) {
                         log("⚠️ MCP: Инструмент '$toolName' уже вызывался ранее")
-                        val hasSave = pipelineIntegration?.getToolNames()
+                        val hasSave = mcpIntegration?.getToolNames()
                             ?.contains("save_data") == true
-                        val hasSummarize = pipelineIntegration?.getToolNames()
-                            ?.contains("summarize_data") == true
-                        val failedTooMany = (errorCounts["summarize_data"] ?: 0) >= 2
-                        val needPipeline =
-                            hasSummarize && "summarize_data" !in calledTools && !failedTooMany
                         val needSave = hasSave && "save_data" !in calledTools
-                        val dataToolNames = dataIntegration?.getToolNames()?.toSet() ?: emptySet()
-                        val uncalledDataTools = dataToolNames - calledTools
-                        val hasCoreData = "get_groups" in calledTools && "get_teams" in calledTools
-                        val suggestedTools = if (hasCoreData) emptySet() else uncalledDataTools
+                        val allToolNames = mcpIntegration?.getToolNames()?.toSet() ?: emptySet()
+                        val uncalledTools = allToolNames - calledTools
+                        val needMoreData =
+                            uncalledTools.size > 1 && uncalledTools.any { it != "save_data" }
                         val estimatedSize =
                             allResults.sumOf { it.length.coerceAtMost(25000) } + 2000
                         val forceSynthesis = estimatedSize > 25000
@@ -815,27 +801,25 @@ class ChatSession(
                             if (forceSynthesis) {
                                 appendLine("У ТЕБЯ УЖЕ ЕСТЬ ВСЕ ДАННЫЕ. НЕ ВЫЗЫВАЙ ИНСТРУМЕНТЫ.")
                                 appendLine("---ОТВЕТ---")
-                                appendLine("ОТВЕЧАЙ НА РУССКОМ. НИ СЛОВА АНГЛИЙСКОГО. НЕ ДУМАЙ. ПРОСТО ТАБЛИЦЫ.")
-                            } else if (suggestedTools.isNotEmpty()) {
+                                appendLine("ОТВЕЧАЙ НА РУССКОМ. НИ СЛОВА АНГЛИЙСКОГО. НЕ ДУМАЙ. ПРОСТО ОТВЕТЬ.")
+                            } else if (needMoreData) {
                                 appendLine(
                                     "Инструмент '$toolName' уже вызывался. Тебе ещё нужно вызвать: ${
-                                        suggestedTools.sorted().joinToString(", ")
+                                        uncalledTools.sorted().joinToString(", ")
                                     }."
                                 )
-                                appendLine("Вызови их через [MCP_CALL], затем проанализируй и сохрани результат save_data.")
-                            } else if (needPipeline) {
-                                appendLine("Инструмент '$toolName' уже вызывался. Посмотри на описание других доступных инструментов и реши, что вызвать следующим.")
+                                appendLine("Вызови их через [MCP_CALL], затем проанализируй данные и ответь на русском.")
                             } else if (needSave) {
-                                appendLine("У ТЕБЯ УЖЕ ВСЕ ДАННЫЕ. Вызови save_data для сохранения аналитической сводки (format: \"md\").")
+                                appendLine("У ТЕБЯ УЖЕ ВСЕ ДАННЫЕ. Вызови save_data для сохранения (format: \"md\").")
                                 appendLine("Если не хочешь сохранять — ответь на русском.")
                             } else {
                                 appendLine("У ТЕБЯ УЖЕ ЕСТЬ ВСЕ ДАННЫЕ. НЕ ВЫЗЫВАЙ ИНСТРУМЕНТЫ.")
                                 appendLine("---ОТВЕТ---")
-                                appendLine("ОТВЕЧАЙ НА РУССКОМ. НИ СЛОВА АНГЛИЙСКОГО. НЕ ДУМАЙ. ПРОСТО ТАБЛИЦЫ.")
+                                appendLine("ОТВЕЧАЙ НА РУССКОМ. НИ СЛОВА АНГЛИЙСКОГО. НЕ ДУМАЙ. ПРОСТО ОТВЕТЬ.")
                             }
                         }
                         content = askMcpFollowUpSafe(repeatPrompt, isFinalSynthesis = true)
-                        if (!forceSynthesis && (suggestedTools.isNotEmpty() || needPipeline || needSave) && Regex(
+                        if (!forceSynthesis && (needMoreData || needSave) && Regex(
                                 "\\[MCP[_A-Z]*CALL]",
                                 setOf(RegexOption.IGNORE_CASE)
                             ).containsMatchIn(content)
@@ -868,10 +852,10 @@ class ChatSession(
                             }
                             appendLine("=== КОНЕЦ ===")
                             appendLine()
-                            if (suggestedTools.isNotEmpty()) {
+                            if (needMoreData) {
                                 appendLine(
                                     "НЕ ПИШИ АНГЛИЙСКИЙ. Вызови нужные инструменты из списка: ${
-                                        suggestedTools.sorted().joinToString(", ")
+                                        uncalledTools.sorted().joinToString(", ")
                                     }."
                                 )
                                 appendLine("После получения всех данных ответь на русском.")
@@ -879,11 +863,9 @@ class ChatSession(
                             } else {
                                 appendLine("НЕ ВЫЗЫВАЙ ИНСТРУМЕНТЫ. У ТЕБЯ УЖЕ ВСЕ ДАННЫЕ.")
                                 appendLine("ТЫ ДОЛЖЕН ОТВЕТИТЬ НА РУССКОМ ЯЗЫКЕ. НЕ ПИШИ АНГЛИЙСКИЙ.")
-                                appendLine("НЕ ЗДОРОВАЙСЯ. НЕ СПРАШИВАЙ. НЕ ПИШИ [MCP_CALL]. ПРОСТО ВЫВЕДИ ТАБЛИЦЫ.")
-                                appendLine("Используй НАЗВАНИЯ КОМАНД (из games данных), а не team_id.")
+                                appendLine("НЕ ЗДОРОВАЙСЯ. НЕ СПРАШИВАЙ. НЕ ПИШИ [MCP_CALL]. ПРОСТО ОТВЕТЬ.")
                             }
                             appendLine("---ОТВЕТ---")
-                            appendLine("Сразу после ---ОТВЕТ--- напиши таблицы групп и анализ квалификации.")
                             appendLine("Используй ТОЛЬКО данные из результатов MCP выше. НЕ ВЫЗЫВАЙ ИНСТРУМЕНТЫ.")
                         }
                         content = askMcpFollowUpSafe(retryPrompt, isFinalSynthesis = true)
@@ -915,9 +897,7 @@ class ChatSession(
                                 else -> 25000
                             }
                             appendLine(
-                                if (prev.length > 1000) prev.take(limit) else compactData(prev).take(
-                                    500
-                                )
+                                if (prev.length > 1000) prev.take(limit) else prev.take(500)
                             )
                             appendLine()
                         }
@@ -928,14 +908,11 @@ class ChatSession(
                             else -> 25000
                         }
                         appendLine(
-                            if (result.length > 1000) result.take(limit) else compactData(result).take(
-                                500
-                            )
+                            if (result.length > 1000) result.take(limit) else result.take(500)
                         )
                         appendLine("=== КОНЕЦ ===")
                         appendLine()
                         appendLine(getPipelineNextStep())
-                        appendLine(getMcpHints())
                         appendLine("---ОТВЕТ---")
                         appendLine("Если нужно вызвать инструмент, напиши [MCP_CALL]. Иначе ---ОТВЕТ--- и ответ на РУССКОМ.")
                     }
@@ -965,26 +942,6 @@ class ChatSession(
             appendLine("- Просто вызови инструмент. Не пиши ничего кроме [MCP_CALL] блока.")
             appendLine("- После получения данных ответь пользователю на русском языке.")
         }
-    }
-
-    private fun getMcpHints(): String {
-        val names = getToolNames()
-        if (names.isEmpty()) return ""
-
-        val hints = mutableListOf<String>()
-        if ("get_team" in names) {
-            hints.add("get_team: параметр \"team_id\" (имя сервера, НЕ \"id\"). Пример: {\"team_id\": \"1\"}")
-        }
-        if ("get_group" in names) {
-            hints.add("get_group: параметр \"name\" (НЕ \"group\", НЕ \"letter\"). Пример: {\"name\": \"A\"}")
-        }
-        if ("get_teams" in names) {
-            hints.add("get_teams: аргументы не требуются.")
-        }
-        if ("get_games" in names) {
-            hints.add("get_games: аргументы не требуются.")
-        }
-        return hints.joinToString("\n").ifEmpty { "" }
     }
 
     private fun formatConversationHistory(): String {
@@ -1024,154 +981,25 @@ class ChatSession(
         }
         log("📊 MCP: Собираю финальный ответ из ${allResults.size} результатов тулов")
 
-        // Build team ID → name mapping from games or teams data
-        fun buildTeamMap(): Map<String, String> {
-            val map = mutableMapOf<String, String>()
-            val json = Json { ignoreUnknownKeys = true }
-            for (r in allResults) {
-                try {
-                    val root = json.parseToJsonElement(r).jsonObject
-                    val teams = root["teams"]?.jsonArray
-                    if (teams != null) {
-                        for (t in teams) {
-                            val o = t.jsonObject
-                            val id = o["id"]?.jsonPrimitive?.content ?: ""
-                            val name = o["name_en"]?.jsonPrimitive?.content ?: ""
-                            if (id.isNotEmpty() && name.isNotEmpty()) map[id] = name
-                        }
-                    }
-                    val games = root["games"]?.jsonArray
-                    if (games != null) {
-                        for (g in games) {
-                            val o = g.jsonObject
-                            val hId = o["home_team_id"]?.jsonPrimitive?.content ?: ""
-                            val aId = o["away_team_id"]?.jsonPrimitive?.content ?: ""
-                            val hName = o["home_team_name_en"]?.jsonPrimitive?.content ?: ""
-                            val aName = o["away_team_name_en"]?.jsonPrimitive?.content ?: ""
-                            if (hId.isNotEmpty() && hName.isNotEmpty()) map[hId] = hName
-                            if (aId.isNotEmpty() && aName.isNotEmpty()) map[aId] = aName
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-            return map
-        }
-
-        val teamMap = buildTeamMap()
-
-        // Format groups with team names
-        fun formatGroupsWithNames(rawResult: String): String {
-            val json = Json { ignoreUnknownKeys = true }
-            val root = try {
-                json.parseToJsonElement(rawResult).jsonObject
-            } catch (_: Exception) {
-                return ""
-            }
-            val groupsArr = root["groups"]?.jsonArray ?: return ""
-            val sb = StringBuilder()
-            sb.appendLine("ГРУППЫ:")
-            groupsArr.forEach { g ->
-                val o = g.jsonObject
-                val name = o["name"]?.jsonPrimitive?.content ?: "?"
-                sb.append("  $name: ")
-                val teams = o["teams"]?.jsonArray
-                if (teams != null) {
-                    val teamStrs = teams.map { t ->
-                        val to = t.jsonObject
-                        val tid = to["team_id"]?.jsonPrimitive?.content ?: "?"
-                        val pts = to["pts"]?.jsonPrimitive?.content ?: "?"
-                        val gd = to["gd"]?.jsonPrimitive?.content ?: "0"
-                        val teamName = teamMap[tid] ?: "ID$tid"
-                        "$teamName(${pts}pts,${gd}gd)"
-                    }
-                    sb.appendLine(teamStrs.joinToString(", "))
-                } else {
-                    sb.appendLine("нет команд")
-                }
-            }
-            return sb.toString()
-        }
-
-        val groupsWithNames =
-            allResults.map { formatGroupsWithNames(it) }.firstOrNull { it.isNotEmpty() } ?: ""
-
-        // Format games compact
-        fun formatGamesCompact(rawResult: String): String {
-            val json = Json { ignoreUnknownKeys = true }
-            val root = try {
-                json.parseToJsonElement(rawResult).jsonObject
-            } catch (_: Exception) {
-                return ""
-            }
-            val gamesArr = root["games"]?.jsonArray ?: return ""
-            val sb = StringBuilder()
-            sb.appendLine("МАТЧИ:")
-            gamesArr.forEach { g ->
-                val o = g.jsonObject
-                val hId = o["home_team_id"]?.jsonPrimitive?.content ?: "?"
-                val aId = o["away_team_id"]?.jsonPrimitive?.content ?: "?"
-                val hName = o["home_team_name_en"]?.jsonPrimitive?.content ?: "?"
-                val aName = o["away_team_name_en"]?.jsonPrimitive?.content ?: "?"
-                val hs = o["home_score"]?.jsonPrimitive?.content ?: "?"
-                val asScore = o["away_score"]?.jsonPrimitive?.content ?: "?"
-                val grp = o["group"]?.jsonPrimitive?.content ?: "?"
-                val fin = o["finished"]?.jsonPrimitive?.content ?: "?"
-                sb.appendLine("  $grp: $hName($hId) $hs-$asScore $aName($aId) finished=$fin")
-            }
-            return sb.toString()
-        }
-
-        val gamesCompact =
-            allResults.map { formatGamesCompact(it) }.firstOrNull { it.isNotEmpty() } ?: ""
-
-        // Build mapping section
-        val mappingSection = if (teamMap.isNotEmpty()) {
-            "СООТВЕТСТВИЕ ID → НАЗВАНИЕ КОМАНДЫ:\n" + teamMap.entries.joinToString("\n") { "  ID${it.key} = ${it.value}" }
-        } else ""
-
-        // Check if save_data was already called
-        val existingSaveResult = allResults.firstOrNull { r ->
-            r.contains("saved", ignoreCase = true) || r.contains(
-                "path",
-                ignoreCase = true
-            ) || r.startsWith("{\"status\"")
-        }
-        val needSave = existingSaveResult == null
-
         val prompt = buildString {
             appendLine("Вопрос пользователя: $originalUserPrompt")
             appendLine()
-            if (groupsWithNames.isNotEmpty()) {
-                appendLine(groupsWithNames)
+            appendLine("=== РЕЗУЛЬТАТЫ ИНСТРУМЕНТОВ ===")
+            for ((i, r) in allResults.withIndex()) {
+                appendLine("--- Результат ${i + 1} ---")
+                appendLine(r.take(25000))
                 appendLine()
             }
-            if (gamesCompact.isNotEmpty()) {
-                appendLine(gamesCompact)
-                appendLine()
-            }
-            if (mappingSection.isNotEmpty()) {
-                appendLine(mappingSection)
-                appendLine()
-            }
-            if (existingSaveResult != null) {
-                appendLine("--- save_data результат ---")
-                appendLine(existingSaveResult.take(500))
-                appendLine()
-            } else {
-                appendLine("Аналитика ещё не сохранена. Если хочешь сохранить — начни с [MCP_CALL]{\"tool\": \"save_data\", \"arguments\": {\"content\": \"...\", \"format\": \"md\"}}[/MCP_CALL], потом ответь.")
-            }
+            appendLine("=== КОНЕЦ ===")
             appendLine()
             appendLine("---ОТВЕТ---")
-            appendLine("ТОЛЬКО РУССКИЙ. НИ СЛОВА АНГЛИЙСКОГО.")
-            appendLine("Выведи таблицы ВСЕХ 12 ГРУПП (A-L), аналитику и статус квалификации.")
+            appendLine("Напиши ответ пользователю на русском языке на основе данных выше.")
             appendLine("ИСПОЛЬЗУЙ ТОЛЬКО ДАННЫЕ ВЫШЕ.")
         }
         var response = askMcpFollowUpSafe(prompt, isFinalSynthesis = true)
         if (response == "NO_MCP_CALL") {
             log("⚠️ MCP: LLM недоступен для синтеза, возвращаю сырые данные")
-            val teamResult = allResults.firstOrNull()
-            return teamResult ?: fallback
+            return allResults.firstOrNull() ?: fallback
         }
         // Handle MCP_CALL in the response — loop until no more tool calls
         repeat(5) {
@@ -1179,141 +1007,26 @@ class ChatSession(
             try {
                 val obj = Json.parseToJsonElement(nextJson).jsonObject
                 val toolName = obj["tool"]?.jsonPrimitive?.content
-                if (toolName == "save_data" && needSave) {
-                    log("📦 MCP: Выполняю save_data из синтеза")
-                    val integration = getIntegrationForTool("save_data")
-                    val saveResult = integration?.executeToolCall(nextJson)
-                    if (saveResult != null) {
-                        log("✅ MCP: save_data выполнен: ${saveResult.take(100)}")
-                        response = buildString {
-                            appendLine("Вопрос пользователя: $originalUserPrompt")
-                            appendLine()
-                            if (groupsWithNames.isNotEmpty()) {
-                                appendLine(groupsWithNames)
-                                appendLine()
-                            }
-                            if (gamesCompact.isNotEmpty()) {
-                                appendLine(gamesCompact)
-                                appendLine()
-                            }
-                            if (mappingSection.isNotEmpty()) {
-                                appendLine(mappingSection)
-                                appendLine()
-                            }
-                            appendLine("--- save_data результат ---")
-                            appendLine(saveResult.take(500))
-                            appendLine()
-                            appendLine()
-                            appendLine("---ОТВЕТ---")
-                            appendLine("Данные сохранены. ТЕПЕРЬ напиши ответ пользователю на русском.")
-                            appendLine("Выведи таблицы ВСЕХ 12 ГРУПП (A-L), аналитику и статус квалификации.")
-                            appendLine("НЕ ВЫЗЫВАЙ БОЛЬШЕ ИНСТРУМЕНТЫ. Просто напиши ответ.")
-                        }
-                        response = askMcpFollowUpSafe(response, isFinalSynthesis = true)
-                        if (response == "NO_MCP_CALL") {
-                            return allResults.firstOrNull() ?: fallback
-                        }
-                    }
-                } else if (toolName != null) {
+                if (toolName != null) {
                     val integration = getIntegrationForTool(toolName)
                     if (integration != null) {
                         log("📦 MCP: Выполняю $toolName из синтеза")
                         val toolResult = integration.executeToolCall(nextJson)
                         log("✅ MCP: $toolName выполнен: ${toolResult.take(100)}")
                         val updatedResults = allResults + toolResult
-                        fun buildTeamMapInner(): Map<String, String> {
-                            val map = mutableMapOf<String, String>()
-                            val json = Json { ignoreUnknownKeys = true }
-                            for (r in updatedResults) {
-                                try {
-                                    val root = json.parseToJsonElement(r).jsonObject
-                                    val teams = root["teams"]?.jsonArray
-                                    if (teams != null) {
-                                        for (t in teams) {
-                                            val o = t.jsonObject
-                                            val id = o["id"]?.jsonPrimitive?.content ?: ""
-                                            val name = o["name_en"]?.jsonPrimitive?.content ?: ""
-                                            if (id.isNotEmpty() && name.isNotEmpty()) map[id] = name
-                                        }
-                                    }
-                                    val games = root["games"]?.jsonArray
-                                    if (games != null) {
-                                        for (g in games) {
-                                            val o = g.jsonObject
-                                            val hId =
-                                                o["home_team_id"]?.jsonPrimitive?.content ?: ""
-                                            val aId =
-                                                o["away_team_id"]?.jsonPrimitive?.content ?: ""
-                                            val hName =
-                                                o["home_team_name_en"]?.jsonPrimitive?.content ?: ""
-                                            val aName =
-                                                o["away_team_name_en"]?.jsonPrimitive?.content ?: ""
-                                            if (hId.isNotEmpty() && hName.isNotEmpty()) map[hId] =
-                                                hName
-                                            if (aId.isNotEmpty() && aName.isNotEmpty()) map[aId] =
-                                                aName
-                                        }
-                                    }
-                                } catch (_: Exception) {
-                                }
-                            }
-                            return map
-                        }
-
-                        val updatedTeamMap = buildTeamMapInner()
-                        fun formatGroupsInner(rawResult: String): String {
-                            val json = Json { ignoreUnknownKeys = true }
-                            val root = try {
-                                json.parseToJsonElement(rawResult).jsonObject
-                            } catch (_: Exception) {
-                                return ""
-                            }
-                            val groupsArr = root["groups"]?.jsonArray ?: return ""
-                            val sb = StringBuilder()
-                            sb.appendLine("ГРУППЫ:")
-                            groupsArr.forEach { g ->
-                                val o = g.jsonObject
-                                val name = o["name"]?.jsonPrimitive?.content ?: "?"
-                                sb.append("  $name: ")
-                                val teams = o["teams"]?.jsonArray
-                                if (teams != null) {
-                                    val teamStrs = teams.map { t ->
-                                        val to = t.jsonObject
-                                        val tid = to["team_id"]?.jsonPrimitive?.content ?: "?"
-                                        val pts = to["pts"]?.jsonPrimitive?.content ?: "?"
-                                        val gd = to["gd"]?.jsonPrimitive?.content ?: "0"
-                                        val teamName = updatedTeamMap[tid] ?: "ID$tid"
-                                        "$teamName(${pts}pts,${gd}gd)"
-                                    }
-                                    sb.appendLine(teamStrs.joinToString(", "))
-                                } else {
-                                    sb.appendLine("нет команд")
-                                }
-                            }
-                            return sb.toString()
-                        }
-
-                        val updatedGroups =
-                            updatedResults.map { formatGroupsInner(it) }
-                                .firstOrNull { it.isNotEmpty() } ?: ""
                         response = buildString {
                             appendLine("Вопрос пользователя: $originalUserPrompt")
                             appendLine()
-                            if (updatedGroups.isNotEmpty()) {
-                                appendLine(updatedGroups)
+                            appendLine("=== РЕЗУЛЬТАТЫ ИНСТРУМЕНТОВ ===")
+                            for ((i, r) in updatedResults.withIndex()) {
+                                appendLine("--- Результат ${i + 1} ---")
+                                appendLine(r.take(25000))
                                 appendLine()
                             }
-                            if (updatedTeamMap.isNotEmpty()) {
-                                appendLine("СООТВЕТСТВИЕ ID → НАЗВАНИЕ КОМАНДЫ:")
-                                updatedTeamMap.entries.sortedBy { it.key.toIntOrNull() ?: 0 }
-                                    .forEach { (id, name) ->
-                                        appendLine("  $id → $name")
-                                    }
-                                appendLine()
-                            }
+                            appendLine("=== КОНЕЦ ===")
+                            appendLine()
                             appendLine("---ОТВЕТ---")
                             appendLine("ТЕПЕРЬ напиши ответ пользователю на русском. НЕ ВЫЗЫВАЙ БОЛЬШЕ ИНСТРУМЕНТЫ.")
-                            appendLine("Выведи таблицы ВСЕХ 12 ГРУПП с названиями команд и очками, затем аналитику и статус квалификации.")
                         }
                         response = askMcpFollowUpSafe(response, isFinalSynthesis = true)
                     }
@@ -1334,25 +1047,13 @@ class ChatSession(
                 appendLine("Данные уже собраны. НЕ ВЫЗЫВАЙ ИНСТРУМЕНТЫ. У ТЕБЯ УЖЕ ЕСТЬ ВСЕ ДАННЫЕ.")
                 appendLine("Просто напиши ответ на русском языке. Без [MCP_CALL]. Без английского.")
                 appendLine()
-                if (groupsWithNames.isNotEmpty()) {
-                    appendLine(groupsWithNames)
-                    appendLine()
-                }
-                if (gamesCompact.isNotEmpty()) {
-                    appendLine(gamesCompact)
-                    appendLine()
-                }
-                if (mappingSection.isNotEmpty()) {
-                    appendLine(mappingSection)
-                    appendLine()
-                }
-                if (teamMap.isEmpty()) {
-                    appendLine("ПРИМЕЧАНИЕ: Названия команд неизвестны. Используй ID1, ID2 и т.д. в таблицах.")
+                for ((i, r) in allResults.withIndex()) {
+                    appendLine("--- Результат ${i + 1} ---")
+                    appendLine(r.take(25000))
                     appendLine()
                 }
                 appendLine("---ОТВЕТ---")
                 appendLine("ТОЛЬКО РУССКИЙ. НЕ ПИШИ [MCP_CALL]. НЕ ПИШИ АНГЛИЙСКИЙ.")
-                appendLine("Выведи таблицы ВСЕХ 12 ГРУПП с названиями команд и очками, затем аналитику.")
             }
             try {
                 val retryResult =
@@ -1459,61 +1160,6 @@ class ChatSession(
         return cleaned.ifEmpty { text }
     }
 
-    private fun compactData(rawResult: String): String {
-        val json = Json { ignoreUnknownKeys = true }
-        val root = try {
-            json.parseToJsonElement(rawResult).jsonObject
-        } catch (_: Exception) {
-            return rawResult.take(5000)
-        }
-
-        val gamesArr = root["games"]?.jsonArray
-        if (gamesArr != null) {
-            val sb = StringBuilder()
-            sb.appendLine("МАТЧИ:")
-            gamesArr.forEach { g ->
-                val o = g.jsonObject
-                val hId = o["home_team_id"]?.jsonPrimitive?.content ?: "?"
-                val aId = o["away_team_id"]?.jsonPrimitive?.content ?: "?"
-                val hName = o["home_team_name_en"]?.jsonPrimitive?.content ?: "?"
-                val aName = o["away_team_name_en"]?.jsonPrimitive?.content ?: "?"
-                val hs = o["home_score"]?.jsonPrimitive?.content ?: "?"
-                val asScore = o["away_score"]?.jsonPrimitive?.content ?: "?"
-                val grp = o["group"]?.jsonPrimitive?.content ?: "?"
-                val fin = o["finished"]?.jsonPrimitive?.content ?: "?"
-                sb.appendLine("  $grp: $hName($hId) $hs-$asScore $aName($aId) finished=$fin")
-            }
-            return sb.toString()
-        }
-
-        val groupsArr = root["groups"]?.jsonArray
-        if (groupsArr != null) {
-            val sb = StringBuilder()
-            sb.appendLine("ГРУППЫ:")
-            groupsArr.forEach { g ->
-                val o = g.jsonObject
-                val name = o["name"]?.jsonPrimitive?.content ?: "?"
-                sb.append("  $name: ")
-                val teams = o["teams"]?.jsonArray
-                if (teams != null) {
-                    val teamStrs = teams.map { t ->
-                        val to = t.jsonObject
-                        val tid = to["team_id"]?.jsonPrimitive?.content ?: "?"
-                        val pts = to["pts"]?.jsonPrimitive?.content ?: "?"
-                        val gd = to["gd"]?.jsonPrimitive?.content ?: "0"
-                        "ID$tid(${pts}pts,${gd}gd)"
-                    }
-                    sb.appendLine(teamStrs.joinToString(", "))
-                } else {
-                    sb.appendLine("нет команд")
-                }
-            }
-            return sb.toString()
-        }
-
-        return rawResult.take(5000)
-    }
-
     private fun extractMcpCallJson(text: String): String? {
         val json = Json { ignoreUnknownKeys = true; isLenient = true }
         val markers = listOf("[MCP_CALL]", "[MCPCALL]", "[mcp_call]", "[mcpcall]")
@@ -1598,11 +1244,9 @@ class ChatSession(
         println("🔄 LLM: Отправляю follow-up запрос (${prompt.length} символов)")
         println("📝 LLM: Промт (первые 500): ${prompt.take(500)}")
         val client: RouterClient = ClientFactory.create()
-        val effectiveSystemPrompt = if (isAnyMcpConnected()) {
-            dataIntegration?.refreshTools()
-            pipelineIntegration?.refreshTools()
+        val effectiveSystemPrompt = if (isMcpAvailable()) {
             buildString {
-                append("ТЫ В РЕЖИМЕ ВЫЗОВА MCP ИНСТРУМЕНТОВ. НЕ ПИШИ НИЧЕГО КРОМЕ [MCP_CALL]. НЕ ДУМАЙ ВСЛУХ. ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ.")
+                append("ТЫ В РЕЖИМЕ ВЫЗОВА ИНСТРУМЕНТОВ. НЕ ПИШИ НИЧЕГО КРОМЕ [MCP_CALL]. НЕ ДУМАЙ ВСЛУХ. ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ.")
                 appendLine()
                 append(getCombinedToolDescriptions())
             }
@@ -1615,7 +1259,7 @@ class ChatSession(
                 ChatMessage("system", effectiveSystemPrompt),
                 ChatMessage("user", prompt)
             ),
-            maxTokens = if (isFinalSynthesis) 8192 else if (hasPipelineTools()) 8192 else 2048,
+            maxTokens = if (isFinalSynthesis) 8192 else 4096,
             stop = null // don't strip [/MCP_CALL] — extractMcpCallJson needs it to find the boundary
         )
         val response = client.sendRequest(request)
@@ -1784,39 +1428,88 @@ class ChatSession(
         }
     }
 
-    private fun buildStructuredRagPrompt(userQuery: String, ragAnswer: RagAnswer): String {
-        val sourcesText = ragAnswer.sources
-            .mapIndexed { i, s -> "[${i + 1}] ${s.title} — ${s.section} (score: ${"%.3f".format(s.score)})" }
+    private fun isSourceCodeNeeded(question: String): Boolean {
+        val lower = question.lowercase()
+        val docOnlyPatterns = listOf(
+            "что такое", "что это", "описание", "архитектура", "структура проекта",
+            "какие фичи", "какие модули", "что входит", "список фич",
+            "общее описание", "чем отличается", "для чего нужен", "зачем нужен",
+            "какой стек", "какие библиотеки", "как использовать",
+            "навигац", "как работает навигац", "экран", "menu", "tab",
+            "use case", "бизнес-логика", "сценарий", " workflow",
+            "tutorial", "guide", "getting started", "how to use",
+            "покажи все", "список всех", "какие сущности", "какие модели",
+            "какие классы", "какие репозитории", "какие datasource",
+        )
+        if (docOnlyPatterns.any { lower.contains(it) }) return false
+        val codePatterns = listOf(
+            "реализац", "класс", "метод", "функци", "интерфейс", "код",
+            "как работает", "как реализован", "покажи код", "пример кода",
+            "имплементац", "конструктор", "сигнатура", "типы", "свойства",
+            "viewModel", "repository", "datasource", "usecase", "component",
+            "покажи исходник", "покажи реализац", "как написан",
+        )
+        return codePatterns.any { lower.contains(it) }
+    }
+
+    private fun buildStructuredRagPrompt(
+        userQuery: String,
+        ragAnswer: RagAnswer,
+        sourceFiles: List<Pair<String, String>> = emptyList()
+    ): String {
+        val sourcesText = ragAnswer.sources.take(5)
+            .mapIndexed { i, s -> "[${i + 1}] ${s.title} — ${s.section}" }
             .joinToString("\n")
 
-        val quotesText = ragAnswer.quotes
-            .mapIndexed { i, q -> "> **Цитата ${i + 1}** (${q.source.title} / ${q.source.section}):\n> ${q.text}" }
+        val quotesText = ragAnswer.quotes.take(3)
+            .mapIndexed { i, q -> "> [${i + 1}] ${q.text.take(300)}" }
             .joinToString("\n\n")
 
+        @Suppress("LocalVariableName")
+        val MAX_TOTAL_SOURCE_BYTES = 8000
+        val sourceCodeText = if (sourceFiles.isNotEmpty()) {
+            var totalBytes = 0
+            buildString {
+                appendLine("=== ИСХОДНЫЙ КОД ===")
+                for ((path, content) in sourceFiles) {
+                    val contentBytes = content.length
+                    if (totalBytes + contentBytes > MAX_TOTAL_SOURCE_BYTES) {
+                        appendLine("// ... пропущено")
+                        break
+                    }
+                    appendLine("### $path")
+                    appendLine("```kotlin")
+                    appendLine(content)
+                    appendLine("```")
+                    appendLine()
+                    totalBytes += contentBytes
+                }
+                appendLine("=== КОНЕЦ КОДА ===")
+                appendLine()
+            }
+        } else ""
+
         return buildString {
-            appendLine("Ты — ассистент с доступом к базе знаний. Твоя задача — ответить на вопрос пользователя, используя ТОЛЬКО предоставленный контекст.")
+            appendLine("Ответь на вопрос по проекту CalendarKMP на основе контекста ниже.")
+            appendLine("Если контекст действительно не содержит информации по вопросу — напиши: \"Нет данных в контексте.\"")
+            appendLine("Но сначала убедись, что ты внимательно прочитал все фрагменты — ответ может быть в любом из них.")
             appendLine()
-            appendLine("=== КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ ===")
+            appendLine("--- КОНТЕКСТ ---")
             appendLine(ragAnswer.answer)
-            appendLine("=== КОНЕЦ КОНТЕКСТА ===")
-            appendLine()
-            appendLine("=== ИСТОЧНИКИ (обязательно ссылайся на них в формате [1], [2] и т.д.) ===")
+            if (sourceCodeText.isNotEmpty()) {
+                appendLine(sourceCodeText)
+            }
+            appendLine("--- ИСТОЧНИКИ ---")
             appendLine(sourcesText)
+            if (quotesText.isNotEmpty()) {
+                appendLine()
+                appendLine("--- ЦИТАТЫ ---")
+                appendLine(quotesText)
+            }
             appendLine()
-            appendLine("=== ЦИТАТЫ (используй их для подтверждения фактов) ===")
-            appendLine(quotesText)
+            appendLine("Ссылайся на источники [1], [2]... Отвечай на русском, по существу.")
             appendLine()
-            appendLine("=== СТРОГИЕ ИНСТРУКЦИИ ===")
-            appendLine("1. Отвечай ТОЛЬКО на русском языке")
-            appendLine("2. Используй ТОЛЬКО факты из контекста выше — НЕ придумывай ничего")
-            appendLine("3. ОБЯЗАТЕЛЬНО указывай источники в тексте ответа в формате [1], [2], [3]...")
-            appendLine("4. Используй цитаты из раздела ЦИТАТЫ для подтверждения важных фактов")
-            appendLine("5. Если в контексте НЕТ ответа на вопрос — напиши ровно: \"В предоставленном контексте нет информации об этом. Уточните вопрос или задайте другой.\"")
-            appendLine("6. НЕ пиши вводные фразы вроде \"Получил контекст, чем могу помочь\" — отвечай сразу по существу")
-            appendLine()
-            appendLine("Вопрос пользователя: $userQuery")
-            appendLine()
-            appendLine("Твой ответ (ссылки на источники [1], [2]... обязательны):")
+            appendLine("Вопрос: $userQuery")
         }
     }
 }

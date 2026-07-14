@@ -17,7 +17,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,12 +24,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,8 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +52,6 @@ fun MessageBubble(
     message: ChatMessageUI,
     currentModel: String,
     onRegenerate: (() -> Unit)? = null,
-    onEdit: ((String) -> Unit)? = null,
     isRegenerating: Boolean = false,
     isDemoRunning: Boolean = false
 ) {
@@ -67,13 +60,6 @@ fun MessageBubble(
     val clipboard = LocalClipboard.current
     var showCopiedTooltip by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(message.content) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(isEditing) {
-        if (isEditing) focusRequester.requestFocus()
-    }
 
     Row(
         modifier = Modifier
@@ -140,53 +126,16 @@ fun MessageBubble(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (isEditing && isUser && onEdit != null) {
-                    Column {
-                        OutlinedTextField(
-                            value = editText,
-                            onValueChange = { editText = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                            minLines = 2,
-                            maxLines = 10
+                when {
+                    isUser -> SelectionContainer {
+                        Text(
+                            text = message.content,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    isEditing = false
-                                    editText = message.content
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Отмена")
-                            }
-                            Button(
-                                onClick = {
-                                    onEdit.invoke(editText)
-                                    isEditing = false
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Сохранить")
-                            }
-                        }
                     }
-                } else {
-                    when {
-                        isUser -> SelectionContainer {
-                            Text(
-                                text = message.content,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
 
-                        isSystem -> SelectionContainer {
+                    isSystem -> SelectionContainer {
                             Text(
                                 text = message.content,
                                 fontSize = 13.sp,
@@ -196,7 +145,6 @@ fun MessageBubble(
 
                         else -> FormattedMessage(message.content)
                     }
-                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -248,38 +196,6 @@ fun MessageBubble(
                     }
 
                     if (!isSystem) {
-                        if (isUser && onEdit != null) {
-                            Button(
-                                onClick = { isEditing = true },
-                                modifier = Modifier.weight(1f).heightIn(min = 28.dp),
-                                enabled = !isDemoRunning,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isDemoRunning)
-                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                                    else
-                                        MaterialTheme.colorScheme.tertiaryContainer,
-                                    contentColor = if (isDemoRunning)
-                                        MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
-                                    else
-                                        MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Редактировать",
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("Редактировать", fontSize = 11.sp)
-                                }
-                            }
-                        }
-
                         if (!isUser && onRegenerate != null) {
                             Button(
                                 onClick = onRegenerate,
@@ -324,7 +240,7 @@ fun MessageBubble(
                     }
                 }
 
-                if (isSystem) {
+                if (isSystem && !message.isDemoMessage) {
                     message.metadata?.let { meta ->
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -342,7 +258,9 @@ fun MessageBubble(
                     var tokensText: String?
                     var timeText: String?
 
-                    message.metadata?.let { infoItems.add(it) }
+                    if (!message.isDemoMessage) {
+                        message.metadata?.let { infoItems.add(it) }
+                    }
 
                     if (message.totalTokens != null) {
                         tokensText =
@@ -378,6 +296,7 @@ fun MessageBubble(
                             )
 
                             CopyMetricsButton(
+                                content = message.content,
                                 modelName = currentModel,
                                 responseTimeMs = message.responseTimeMs,
                                 promptTokens = message.promptTokens,
@@ -430,6 +349,7 @@ fun MessageBubble(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CopyMetricsButton(
+    content: String,
     modelName: String,
     responseTimeMs: Long?,
     promptTokens: Int?,
@@ -441,6 +361,8 @@ fun CopyMetricsButton(
     val scope = rememberCoroutineScope()
 
     val copyText = buildString {
+        appendLine(content)
+        appendLine()
         append("Модель: $modelName")
 
         responseTimeMs?.let { ms ->

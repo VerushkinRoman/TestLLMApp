@@ -646,7 +646,7 @@ class CalculateStatistic {
         calendarData: List<MonthData>,
         inactivePeriods: List<InactiveDates> = emptyList(),
     ): StatisticWithDaysState {
-        // ... чистая бизнес-логика без副作用
+        // ... чистая бизнес-логика без побочных эффектов
     }
 }
 ```

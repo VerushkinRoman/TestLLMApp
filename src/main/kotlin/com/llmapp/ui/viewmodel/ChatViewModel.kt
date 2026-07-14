@@ -5,9 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.llmapp.agent.ChatMemoryAgent
 import com.llmapp.agent.StatefulMemoryAgent
 import com.llmapp.chat.ChatSession
-import com.llmapp.collector.MatchAggregator
-import com.llmapp.collector.MatchStore
-import com.llmapp.collector.PeriodicCollector
 import com.llmapp.domain.usercase.CompressionUseCase
 import com.llmapp.domain.usercase.MemoryUseCase
 import com.llmapp.domain.usercase.MessageUseCase
@@ -43,15 +40,8 @@ class ChatViewModel : ViewModel() {
 
     private val invariantManager = InvariantManager()
     private lateinit var chatSession: ChatSession
-    private val dataMcpIntegration = McpIntegration(
-        name = "data",
-        serverUrl = "https://alcoserver.ru:4454/mcp",
-        onLog = { handleEvent(ViewEvent.OnMcpLog(it)) }
-    )
-    private val pipelineMcpIntegration = McpIntegration(
-        name = "pipeline",
-        serverUrl = "https://alcoserver.ru:4456/mcp",
-        onLog = { handleEvent(ViewEvent.OnMcpLog(it)) }
+    private val mcpIntegration = McpIntegration(
+        onLog = { handleEvent(ViewEvent.OnMcpLog(it)) },
     )
     private lateinit var statefulAgent: StatefulMemoryAgent
     private lateinit var profileManager: ProfileManager
@@ -68,8 +58,6 @@ class ChatViewModel : ViewModel() {
     private lateinit var demoHandler: DemoHandler
     private lateinit var commandHandler: CommandHandler
     private lateinit var privateServerDemoRunner: PrivateServerDemoRunner
-    private var collector: PeriodicCollector? = null
-    private var matchStore: MatchStore? = null
 
     init {
         initServices()
@@ -110,26 +98,16 @@ class ChatViewModel : ViewModel() {
             keepLastMessages = _state.value.keepLastMessages,
             compressAfterTokens = _state.value.compressAfterTokens
         ).also {
-            it.dataIntegration = dataMcpIntegration
-            it.pipelineIntegration = pipelineMcpIntegration
+            it.mcpIntegration = mcpIntegration
             it.logListener = { msg -> addLogMessage(msg) }
+            it.progressListener = { msg ->
+                _state.value = _state.value.copy(progressMessage = msg)
+            }
         }
         statefulAgent = StatefulMemoryAgent()
         val storageDir = File(System.getProperty("user.home"), ".llm_chat_app")
         val longTermManager = LongTermMemoryManager(storageDir)
         profileManager = ProfileManager(storageDir, longTermManager)
-        val store = MatchStore(File(storageDir, "match_collector"))
-        matchStore = store
-        collector = PeriodicCollector(
-            store = store,
-            onLog = { handleEvent(ViewEvent.OnCollectorLog(it)) },
-            onSummaryGenerated = {
-                val text = MatchAggregator.generateTextSummary(
-                    store.loadLatestSnapshot() ?: return@PeriodicCollector
-                )
-                handleEvent(ViewEvent.OnCollectorSummary(text))
-            }
-        )
     }
 
     private fun initUseCases() {
@@ -159,13 +137,7 @@ class ChatViewModel : ViewModel() {
     private fun initHandlers() {
         demoHandler = DemoHandler(
             chatSession = chatSession,
-            statefulAgent = statefulAgent,
-            taskUseCase = taskUseCase,
             viewModelScope = viewModelScope,
-            chatMemoryService = chatMemoryService,
-            onTaskMemoryUpdatedCallback = { memory ->
-                handleEvent(ViewEvent.SetTaskMemory(memory))
-            },
         )
         commandHandler = CommandHandler(
             invariantManager = invariantManager,
@@ -398,29 +370,7 @@ class ChatViewModel : ViewModel() {
                 )
             }
 
-            ViewEvent.StartTokenDemo -> demoHandler.startTokenDemo()
-            ViewEvent.StartCompressionDemo -> demoHandler.startCompressionDemo()
-            ViewEvent.StartStrategyDemo -> demoHandler.startStrategyDemo()
-            ViewEvent.StartMemoryDemo -> demoHandler.startMemoryDemo()
-            ViewEvent.StartPersonalizationDemo -> demoHandler.startPersonalizationDemo()
-            ViewEvent.StartStatefulDemo -> demoHandler.startStatefulDemo()
-            ViewEvent.StartInvariantDemo -> demoHandler.startInvariantDemo()
-            ViewEvent.StartTransitionDemo -> demoHandler.startTransitionDemo()
-            is ViewEvent.StartRagDemo -> demoHandler.startRagDemo(event.query)
-            ViewEvent.StartRagComparisonDemo -> demoHandler.startRagComparisonDemo()
-            ViewEvent.StartRagImprovedDemo -> demoHandler.startRagImprovedComparisonDemo()
-            ViewEvent.StartRagStructuredDemo -> demoHandler.startRagStructuredDemo()
-            ViewEvent.StartContextRetentionDemo -> demoHandler.startContextRetentionDemo()
             ViewEvent.CancelDemo -> demoHandler.cancelDemo()
-            ViewEvent.StartLocalAgentFlowDemo -> demoHandler.startLocalAgentFlowDemo { isLocal ->
-                updateState {
-                    copy(
-                        useLocalModel = isLocal,
-                        currentModel = if (isLocal) localModelName else "mistral/mistral-large-latest"
-                    )
-                }
-            }
-            ViewEvent.StartLocalRAGComparisonDemo -> demoHandler.startLocalRAGComparisonDemo()
 
             is ViewEvent.SelectInvariantSet -> {
                 updateState { copy(activeInvariantSetName = event.set.name) }
@@ -562,81 +512,47 @@ class ChatViewModel : ViewModel() {
             ViewEvent.ConnectDataMcp -> {
                 viewModelScope.launch {
                     updateState { copy(dataMcpConnected = true) }
-                    addLogMessage("🔄 Подключение к MCP Data серверу (alcoserver.ru:4454)...")
+                    addLogMessage("🔄 Подключение к GitHub MCP...")
                     try {
-                        val result = dataMcpIntegration.connect()
-                        addLogMessage("✅ MCP Data подключен: ${result.name} v${result.version}")
+                        val result = mcpIntegration.connect()
+                        addLogMessage("✅ GitHub MCP подключен: ${result.name} v${result.version}")
                         updateState { copy(dataMcpServerName = "${result.name} v${result.version}") }
                     } catch (e: Exception) {
-                        addLogMessage("❌ MCP Data: ${e.message}")
+                        addLogMessage("❌ GitHub MCP: ${e.message}")
                         updateState { copy(dataMcpConnected = false) }
                     }
                 }
             }
 
             ViewEvent.DisconnectDataMcp -> {
-                dataMcpIntegration.disconnect()
-                addLogMessage("🔌 MCP Data отключен")
+                mcpIntegration.disconnect()
+                addLogMessage("🔌 GitHub MCP отключен")
                 updateState { copy(dataMcpConnected = false, dataMcpServerName = null) }
             }
 
             ViewEvent.ConnectPipelineMcp -> {
                 viewModelScope.launch {
                     updateState { copy(pipelineMcpConnected = true) }
-                    addLogMessage("🔄 Подключение к MCP Pipeline серверу (alcoserver.ru:4456)...")
+                    addLogMessage("🔄 Подключение к GitHub MCP...")
                     try {
-                        val result = pipelineMcpIntegration.connect()
-                        addLogMessage("✅ MCP Pipeline подключен: ${result.name} v${result.version}")
+                        val result = mcpIntegration.connect()
+                        addLogMessage("✅ GitHub MCP подключен: ${result.name} v${result.version}")
                         updateState { copy(pipelineMcpServerName = "${result.name} v${result.version}") }
                     } catch (e: Exception) {
-                        addLogMessage("❌ MCP Pipeline: ${e.message}")
+                        addLogMessage("❌ GitHub MCP: ${e.message}")
                         updateState { copy(pipelineMcpConnected = false) }
                     }
                 }
             }
 
             ViewEvent.DisconnectPipelineMcp -> {
-                pipelineMcpIntegration.disconnect()
-                addLogMessage("🔌 MCP Pipeline отключен")
+                mcpIntegration.disconnect()
+                addLogMessage("🔌 GitHub MCP отключен")
                 updateState { copy(pipelineMcpConnected = false, pipelineMcpServerName = null) }
             }
 
             is ViewEvent.OnMcpLog -> {
                 addLogMessage("MCP: ${event.message}")
-            }
-
-            is ViewEvent.StartCollector -> {
-                viewModelScope.launch {
-                    addCollectorLog("🔄 Запуск периодического сбора (интервал: ${event.intervalMinutes} мин)...")
-                    updateState {
-                        copy(
-                            collectorRunning = true,
-                            collectorInterval = event.intervalMinutes
-                        )
-                    }
-                    collector?.start(event.intervalMinutes)
-                }
-            }
-
-            ViewEvent.StopCollector -> {
-                collector?.stop()
-                updateState { copy(collectorRunning = false) }
-                addCollectorLog("⏹ Сбор остановлен")
-            }
-
-            ViewEvent.CollectNow -> {
-                viewModelScope.launch {
-                    addCollectorLog("📡 Принудительный сбор...")
-                    collector?.collectOnce()
-                }
-            }
-
-            is ViewEvent.OnCollectorLog -> {
-                addCollectorLog(event.message)
-            }
-
-            is ViewEvent.OnCollectorSummary -> {
-                updateState { copy(collectorSummary = event.summaryText) }
             }
 
             ViewEvent.ToggleTaskMemory -> {
@@ -650,10 +566,6 @@ class ChatViewModel : ViewModel() {
 
             is ViewEvent.SetTaskMemory -> {
                 updateState { copy(taskMemory = event.memory) }
-            }
-
-            ViewEvent.ClearCollectorLog -> {
-                updateState { copy(collectorLog = emptyList()) }
             }
 
             ViewEvent.ToggleLocalModel -> {
@@ -825,22 +737,39 @@ class ChatViewModel : ViewModel() {
                 }
             }
 
-            is ViewEvent.StartOptimizationDemo -> {
-                demoHandler.startOptimizationDemo { isLocal ->
-                    updateState {
-                        copy(
-                            useLocalModel = isLocal,
-                            currentModel = if (isLocal) localModelName else "mistral/mistral-large-latest"
-                        )
-                    }
-                }
-            }
-
             ViewEvent.StartPrivateServerDemo -> {
                 privateServerDemoRunner.start(
                     updateState = { update -> updateState(update) },
                     updateTokenStats = { updateTokenStats() }
                 )
+            }
+
+            ViewEvent.ShowGitHubTokenDialog -> {
+                com.llmapp.rag.data.GitHubApi.openBrowserForToken()
+                updateState { copy(showGitHubTokenDialog = true) }
+            }
+
+            ViewEvent.DismissGitHubTokenDialog -> {
+                updateState { copy(showGitHubTokenDialog = false, githubTokenInput = "") }
+            }
+
+            is ViewEvent.UpdateGitHubTokenInput -> {
+                updateState { copy(githubTokenInput = event.token) }
+            }
+
+            is ViewEvent.StartProjectDemo -> {
+                val token = event.token
+                if (token != null) {
+                    com.llmapp.rag.data.GitHubApi.cachedToken = token
+                    com.llmapp.rag.data.GitHubApi.saveTokenToKeys(token)
+                    updateState { copy(showGitHubTokenDialog = false, githubTokenInput = "") }
+                    demoHandler.startProjectDemo()
+                } else if (com.llmapp.rag.data.GitHubApi.getToken() != null) {
+                    demoHandler.startProjectDemo()
+                } else {
+                    com.llmapp.rag.data.GitHubApi.openBrowserForToken()
+                    updateState { copy(showGitHubTokenDialog = true) }
+                }
             }
         }
     }
@@ -884,11 +813,6 @@ class ChatViewModel : ViewModel() {
     private fun addLogMessage(msg: String) {
         val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
         updateState { copy(mcpLog = mcpLog + entry) }
-    }
-
-    private fun addCollectorLog(msg: String) {
-        val entry = "[${java.time.LocalTime.now().withNano(0)}] $msg"
-        updateState { copy(collectorLog = collectorLog + entry) }
     }
 
     private fun applyCurrentRagConfig() {

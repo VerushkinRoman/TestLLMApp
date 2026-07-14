@@ -5,10 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,7 +52,6 @@ import com.llmapp.ui.components.SettingsPanel
 import com.llmapp.ui.components.TransitionsDialog
 import com.llmapp.ui.models.Screen
 import com.llmapp.ui.screens.ChatScreen
-import com.llmapp.ui.screens.CollectorScreen
 import com.llmapp.ui.screens.DemoScreen
 import com.llmapp.ui.screens.McpScreen
 import com.llmapp.ui.viewmodel.ChatViewModel
@@ -324,6 +329,56 @@ fun MainScreen(
         )
     }
 
+    // GitHub Token Dialog
+    if (state.showGitHubTokenDialog) {
+        AlertDialog(
+            onDismissRequest = { sendEvent(ViewEvent.DismissGitHubTokenDialog) },
+            title = { Text("GitHub Token", style = MaterialTheme.typography.headlineSmall) },
+            text = {
+                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Репозиторий приватный. Введите GitHub Personal Access Token с правами 'repo'.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Токен уже открыт в браузере. Создайте его и вставьте сюда.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    OutlinedTextField(
+                        value = state.githubTokenInput,
+                        onValueChange = { sendEvent(ViewEvent.UpdateGitHubTokenInput(it)) },
+                        label = { Text("GitHub Token") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        sendEvent(ViewEvent.ClearHistory)
+                        sendEvent(ViewEvent.InitDemoManager { message ->
+                            sendEvent(ViewEvent.AddDemoMessage(message))
+                        })
+                        sendEvent(ViewEvent.StartProjectDemo(token = state.githubTokenInput))
+                        currentScreen = Screen.Chat
+                    },
+                    enabled = state.githubTokenInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Text("Запустить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sendEvent(ViewEvent.DismissGitHubTokenDialog) }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+
     if (showInvariantManager) {
         InvariantManagerDialog(
             invariantSets = invariantSets,
@@ -395,146 +450,12 @@ fun MainScreen(
             )
 
             Screen.Demo -> DemoScreen(
-                onStartTokenDemo = {
-                    // Очищаем историю через ViewEvent
-                    sendEvent(ViewEvent.ClearHistory)
-                    // Инициализируем DemoManager
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartTokenDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartLocalDemo = { questions ->
-                    sendEvent(ViewEvent.StartLocalDemo(questions))
-                    currentScreen = Screen.Chat
-                },
-                onStartCompressionDemo = {
+                onStartProjectDemo = {
                     sendEvent(ViewEvent.ClearHistory)
                     sendEvent(ViewEvent.InitDemoManager { message ->
                         sendEvent(ViewEvent.AddDemoMessage(message))
                     })
-                    sendEvent(ViewEvent.StartCompressionDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartStrategyDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartStrategyDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartMemoryDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartMemoryDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartPersonalizationDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartPersonalizationDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartStatefulDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartStatefulDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartInvariantDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartInvariantDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartTransitionDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartTransitionDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartRagDemo = {
-                    val lastQuery = state.messages
-                        .lastOrNull { it.role == "user" }?.content
-                        ?: "Кто выиграл мужской финал чемпионата мира 2022 года"
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartRagDemo(lastQuery))
-                    currentScreen = Screen.Chat
-                },
-                onStartRagComparisonDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartRagComparisonDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartRagImprovedDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartRagImprovedDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartRagStructuredDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartRagStructuredDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartContextRetentionDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartContextRetentionDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartLocalAgentFlowDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartLocalAgentFlowDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartLocalRAGComparisonDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartLocalRAGComparisonDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartOptimizationDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.InitDemoManager { message ->
-                        sendEvent(ViewEvent.AddDemoMessage(message))
-                    })
-                    sendEvent(ViewEvent.StartOptimizationDemo)
-                    currentScreen = Screen.Chat
-                },
-                onStartPrivateServerDemo = {
-                    sendEvent(ViewEvent.ClearHistory)
-                    sendEvent(ViewEvent.StartPrivateServerDemo)
+                    sendEvent(ViewEvent.StartProjectDemo())
                     currentScreen = Screen.Chat
                 },
                 isDemoRunning = state.isDemoRunning,
@@ -590,14 +511,6 @@ fun MainScreen(
             Screen.Mcp -> McpScreen()
 
             Screen.Index -> IndexScreen()
-
-            Screen.Collector -> CollectorScreen(
-                isRunning = state.collectorRunning,
-                intervalMinutes = state.collectorInterval,
-                log = state.collectorLog,
-                summary = state.collectorSummary,
-                onEvent = { event -> viewModel.handleEvent(event) }
-            )
 
             Screen.Settings -> SettingsPanel(
                 control = state.responseControl,

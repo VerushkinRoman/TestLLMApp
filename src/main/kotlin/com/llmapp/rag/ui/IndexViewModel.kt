@@ -5,8 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.llmapp.rag.RAGEnhancer
 import com.llmapp.rag.data.HuggingFaceEmbeddingService
 import com.llmapp.rag.data.JsonIndexRepository
-import com.llmapp.rag.data.TechArticlesDocuments
-import com.llmapp.rag.data.WorldCupDocuments
+import com.llmapp.rag.data.ProjectDocuments
 import com.llmapp.rag.domain.ChunkerFactory
 import com.llmapp.rag.domain.ChunkingStrategy
 import com.llmapp.rag.domain.IndexResult
@@ -38,7 +37,7 @@ class IndexViewModel(
 
     private val enhancer = RAGEnhancer(repository = repository)
 
-    private fun allDocuments() = WorldCupDocuments.getAll() + TechArticlesDocuments.getAll() + _state.value.userArticles.mapIndexed { i, a ->
+    private fun allDocuments() = ProjectDocuments.getAll() + _state.value.userArticles.mapIndexed { i, a ->
         com.llmapp.rag.domain.Document(
             id = "user_${i + 1}",
             title = a.title,
@@ -120,15 +119,14 @@ class IndexViewModel(
                 log = emptyList(),
             )
             val docs = allDocuments()
-            val baseCount = WorldCupDocuments.getAll().size
-            val techCount = TechArticlesDocuments.getAll().size
+            val baseCount = ProjectDocuments.getAll().size
             val userCount = _state.value.userArticles.size
             println("═══════════════════════════════════════")
             println("📚 INDEX: Начало построения индекса")
-            println("📚 INDEX: Документов: $baseCount WorldCup + $techCount TechArticles + $userCount пользовательских = ${docs.size}")
+            println("📚 INDEX: Документов: $baseCount CalendarKMP + $userCount пользовательских = ${docs.size}")
             println("📚 INDEX: Всего символов: ${docs.sumOf { it.content.length }}")
             appendLog("Построение индекса...")
-            appendLog("Документов: $baseCount WorldCup + $techCount TechArticles + $userCount пользовательских")
+            appendLog("Документов: $baseCount CalendarKMP + $userCount пользовательских")
             appendLog("Всего символов: ${docs.sumOf { it.content.length }}")
 
             val fixedStrategy = ChunkingStrategy.FixedSize()

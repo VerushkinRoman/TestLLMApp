@@ -1,8 +1,9 @@
 package com.llmapp.rag
 
+import com.llmapp.rag.data.GitHubApi
 import com.llmapp.rag.data.HuggingFaceEmbeddingService
 import com.llmapp.rag.data.JsonIndexRepository
-import com.llmapp.rag.data.WorldCupDocuments
+import com.llmapp.rag.data.ProjectDocuments
 import com.llmapp.rag.domain.ChunkerFactory
 import com.llmapp.rag.domain.ChunkingStrategy
 import com.llmapp.rag.domain.Document
@@ -50,28 +51,33 @@ data class MultiModeResult(
 class RAGEnhancer(
     private val embeddingService: HuggingFaceEmbeddingService = HuggingFaceEmbeddingService(),
     private val repository: IndexRepository = JsonIndexRepository(),
-    private val documentProvider: () -> List<Document> = { WorldCupDocuments.getAll() },
+    private val documentProvider: () -> List<Document> = { ProjectDocuments.getAll() },
     var topK: Int = 5,
     private val reranker: Reranker = SwitchingReranker(),
     private val queryRewriter: QueryRewriter = SimpleQueryRewriter(),
     var mode: RagMode = RagMode.BASIC,
     var rerankerConfig: RerankerConfig = RerankerConfig(
         type = RerankerType.SIMILARITY_THRESHOLD,
-        similarityThreshold = 0.3f,
+        similarityThreshold = 0.4f,
         topKBefore = 20,
-        topKAfter = topK,
+        topKAfter = 3,
     ),
 ) {
     private var isIndexLoaded = false
     private var isIndexing = false
     private val indexMutex = Mutex()
     private var indexLoadAttempted = false
+    private var lastIndexedSha: String? = null
+    private var indexedDocCount = 0
     var onIndexLog: ((String) -> Unit)? = null
+
+    private val searchCache = LinkedHashMap<String, RagContext>(64, 0.75f, true)
+    private val cacheMutex = Mutex()
+    private val maxCacheSize = 100
 
     suspend fun ensureIndexLoaded() {
         if (isIndexLoaded) return
 
-        // Quick check under mutex: already loaded, already indexing, or already attempted?
         indexMutex.withLock {
             if (isIndexLoaded) return
             if (isIndexing) return
@@ -79,19 +85,49 @@ class RAGEnhancer(
             indexLoadAttempted = true
         }
 
-        // Outside mutex: try to load existing index
-        if (repository.isIndexAvailable()) {
-            repository.loadIndex()
-            indexMutex.withLock { isIndexLoaded = true }
-            log("RAG-индекс загружен с диска")
-            return
+        val currentDocCount = try {
+            documentProvider().size
+        } catch (_: Exception) { 0 }
+
+        if (repository.isIndexAvailable() && currentDocCount == indexedDocCount) {
+            try {
+                repository.loadIndex()
+                indexMutex.withLock { isIndexLoaded = true }
+                log("RAG-индекс загружен с диска ($indexedDocCount docs)")
+                checkForGitUpdates()
+                return
+            } catch (e: Exception) {
+                log("⚠️ Ошибка загрузки индекса с диска: ${e.message}")
+            }
         }
 
-        // Need to build from scratch
-        indexMutex.withLock { isIndexing = true }
-        log("RAG-индекс не найден, запускаю автоматическую индексацию...")
+        if (currentDocCount != indexedDocCount && indexedDocCount > 0) {
+            log("📚 Обнаружено изменение документов ($indexedDocCount → $currentDocCount), пересобираю...")
+        }
+
+        log("📚 Индекс не найден, строю...")
+        rebuildIndex()
+    }
+
+    suspend fun checkForGitUpdates() {
+        val currentSha = try { GitHubApi.getLatestCommitSha() } catch (_: Exception) { null }
+        if (currentSha != null && currentSha != lastIndexedSha && lastIndexedSha != null) {
+            log("🔄 Обнаружен новый коммит, пересобираю индекс...")
+            rebuildIndex()
+        }
+        lastIndexedSha = currentSha
+    }
+
+    suspend fun rebuildIndex() {
+        indexMutex.withLock {
+            if (isIndexing) return
+            isIndexing = true
+            isIndexLoaded = false
+        }
+        cacheMutex.withLock { searchCache.clear() }
         try {
             autoBuildIndex()
+            lastIndexedSha = try { GitHubApi.getLatestCommitSha() } catch (_: Exception) { null }
             indexMutex.withLock { isIndexLoaded = true }
         } finally {
             indexMutex.withLock { isIndexing = false }
@@ -102,6 +138,7 @@ class RAGEnhancer(
         log("📚 Автоиндексация: загружаю документы...")
         try {
             val documents = documentProvider()
+            indexedDocCount = documents.size
             log("📚 Документов: ${documents.size}, всего символов: ${documents.sumOf { it.content.length }}")
 
             val fixedStrategy = ChunkingStrategy.FixedSize()
@@ -162,7 +199,26 @@ class RAGEnhancer(
 
     suspend fun search(query: String): RagContext {
         ensureIndexLoaded()
-        return searchInternal(query, mode)
+
+        val cacheKey = "${query.lowercase().trim()}_${mode}_${topK}"
+        cacheMutex.withLock {
+            searchCache[cacheKey]?.let { cached ->
+                log("📦 RAG-кэш:命中 для '${query.take(50)}'")
+                return cached
+            }
+        }
+
+        val result = searchInternal(query, mode)
+
+        cacheMutex.withLock {
+            if (searchCache.size >= maxCacheSize) {
+                val oldest = searchCache.keys.first()
+                searchCache.remove(oldest)
+            }
+            searchCache[cacheKey] = result
+        }
+
+        return result
     }
 
     private suspend fun searchInternal(query: String, searchMode: RagMode): RagContext {
@@ -203,7 +259,7 @@ class RAGEnhancer(
         val searchTime = System.currentTimeMillis() - start
 
         val context = buildString {
-            appendLine("Контекст из базы знаний чемпионатов мира:")
+            appendLine("Контекст из базы знаний CalendarKMP:")
             appendLine()
             if (rewrittenQuery != null && rewrittenQuery != query) {
                 appendLine("(Запрос был расширен: «$query» → «$rewrittenQuery»)")
@@ -345,7 +401,7 @@ class RAGEnhancer(
                 appendLine("Документ: ${r.chunk.title}")
                 appendLine("Раздел: ${r.chunk.section}")
                 appendLine("ID чанка: ${r.chunk.chunkId}")
-                appendLine(r.chunk.content.take(1500))
+                appendLine(r.chunk.content.take(2000))
                 appendLine()
             }
         }

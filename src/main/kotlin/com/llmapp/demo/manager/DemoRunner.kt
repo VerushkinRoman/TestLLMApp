@@ -20,7 +20,7 @@ interface DemoRunner {
  */
 abstract class BaseDemoRunner(
     protected val onMessageAdded: (ChatMessageUI) -> Unit,
-    protected val onTypingStateChanged: (Boolean) -> Unit,
+    @Suppress("unused") protected val onTypingStateChanged: (Boolean) -> Unit,
     protected val delayMs: Long = 300
 ) : DemoRunner {
 
@@ -70,27 +70,44 @@ abstract class BaseDemoRunner(
     /**
      * Задержка с проверкой отмены
      */
+    @Suppress("unused")
     protected suspend fun delayShort() {
         checkCancelled()
         delay(300.milliseconds)
     }
 
+    @Suppress("unused")
     protected suspend fun delayMedium() {
         checkCancelled()
         delay(500.milliseconds)
     }
 
+    @Suppress("unused")
     protected suspend fun delayLong() {
         checkCancelled()
         delay(1000.milliseconds)
     }
 
+    protected fun stripServiceTags(content: String): String {
+        return content
+            .replace(Regex("\\[GOAL].*?\\[/GOAL]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[CONSTRAINT].*?\\[/CONSTRAINT]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[DECISION].*?\\[/DECISION]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[CONTEXT].*?\\[/CONTEXT]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[PROGRESS_DONE].*?\\[/PROGRESS_DONE]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[PROGRESS_IN_PROGRESS].*?\\[/PROGRESS_IN_PROGRESS]", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("\\[PROGRESS_BLOCKED].*?\\[/PROGRESS_BLOCKED]", RegexOption.DOT_MATCHES_ALL), "")
+            .trim()
+    }
+
+    @Suppress("unused")
     protected fun formatTime(ms: Long): String = when {
         ms < 1000 -> "${ms}мс"
         ms < 60000 -> "${ms / 1000}.${(ms % 1000) / 100}с"
         else -> "${ms / 60000}м ${(ms % 60000) / 1000}с"
     }
 
+    @Suppress("unused")
     protected fun formatNumber(num: Int): String = when {
         num >= 1_000_000 -> "${num / 1_000_000}M"
         num >= 1_000 -> "${num / 1_000}K"

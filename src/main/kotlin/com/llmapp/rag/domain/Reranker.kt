@@ -8,9 +8,9 @@ enum class RerankerType {
 
 data class RerankerConfig(
     val type: RerankerType = RerankerType.SIMILARITY_THRESHOLD,
-    val similarityThreshold: Float = 0.3f,
+    val similarityThreshold: Float = 0.8f,
     val topKBefore: Int = 20,
-    val topKAfter: Int = 5,
+    val topKAfter: Int = 3,
 )
 
 data class RerankerResult(

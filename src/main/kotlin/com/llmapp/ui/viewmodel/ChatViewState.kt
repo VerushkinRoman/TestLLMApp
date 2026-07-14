@@ -97,13 +97,12 @@ data class ChatViewState(
     val taskMemory: TaskMemory = TaskMemory(),
     val taskMemoryExpanded: Boolean = true,
 
-    // Коллектор матчей
-    val collectorRunning: Boolean = false,
-    val collectorInterval: Double = 15.0,
-    val collectorLog: List<String> = emptyList(),
-    val collectorSummary: String? = null,
-    val collectorLastRun: String? = null,
-    val showCollectorPanel: Boolean = false
+    // Прогресс
+    val progressMessage: String? = null,
+
+    // GitHub Token
+    val showGitHubTokenDialog: Boolean = false,
+    val githubTokenInput: String = "",
 ) {
     companion object {
         fun initial() = ChatViewState()

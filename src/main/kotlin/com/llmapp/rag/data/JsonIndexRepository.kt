@@ -60,6 +60,7 @@ class JsonIndexRepository(
                 "type" to "structural",
                 "mergeSmallSections" to s.mergeSmallSections.toString(),
                 "minSectionChars" to s.minSectionChars.toString(),
+                "maxSectionChars" to s.maxSectionChars.toString(),
             )
         }
 
@@ -170,6 +171,7 @@ class JsonIndexRepository(
             "structural" -> ChunkingStrategy.Structural(
                 mergeSmallSections = params["mergeSmallSections"]?.toBoolean() ?: true,
                 minSectionChars = params["minSectionChars"]?.toIntOrNull() ?: 100,
+                maxSectionChars = params["maxSectionChars"]?.toIntOrNull() ?: 800,
             )
 
             else -> ChunkingStrategy.FixedSize()

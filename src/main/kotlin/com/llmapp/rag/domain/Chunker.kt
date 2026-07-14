@@ -107,21 +107,69 @@ class StructuralChunker : Chunker {
                 }
             }
 
-            chunks.add(
-                Chunk(
-                    chunkId = "${document.id}_struct_${index}",
-                    documentId = document.id,
-                    title = document.title,
-                    section = section.heading,
-                    content = text,
-                    source = document.source,
-                    charOffset = document.sections.take(index).sumOf { it.content.length },
-                    charLength = text.length,
+            if (text.length > config.maxSectionChars) {
+                val subChunks = splitLargeSection(text, config.maxSectionChars)
+                subChunks.forEachIndexed { subIndex, subText ->
+                    chunks.add(
+                        Chunk(
+                            chunkId = "${document.id}_struct_${index}_$subIndex",
+                            documentId = document.id,
+                            title = document.title,
+                            section = if (subIndex == 0) section.heading else "${section.heading} (продолжение ${subIndex + 1})",
+                            content = subText,
+                            source = document.source,
+                            charOffset = document.sections.take(index).sumOf { it.content.length } + subIndex * config.maxSectionChars,
+                            charLength = subText.length,
+                        )
+                    )
+                }
+            } else {
+                chunks.add(
+                    Chunk(
+                        chunkId = "${document.id}_struct_${index}",
+                        documentId = document.id,
+                        title = document.title,
+                        section = section.heading,
+                        content = text,
+                        source = document.source,
+                        charOffset = document.sections.take(index).sumOf { it.content.length },
+                        charLength = text.length,
+                    )
                 )
-            )
+            }
         }
 
         return chunks
+    }
+
+    private fun splitLargeSection(text: String, maxSize: Int): List<String> {
+        val result = mutableListOf<String>()
+        var remaining = text
+
+        while (remaining.length > maxSize) {
+            val breakPoint = findBreakPoint(remaining, maxSize)
+            result.add(remaining.substring(0, breakPoint).trim())
+            remaining = remaining.substring(breakPoint).trim()
+        }
+
+        if (remaining.isNotBlank()) {
+            result.add(remaining)
+        }
+
+        return result
+    }
+
+    private fun findBreakPoint(text: String, maxSize: Int): Int {
+        val newLinePos = text.lastIndexOf('\n', maxSize - 1)
+        if (newLinePos > maxSize * 0.6) return newLinePos
+
+        val sentenceEnd = text.lastIndexOf(". ", maxSize - 1)
+        if (sentenceEnd > maxSize * 0.6) return sentenceEnd + 1
+
+        val commaPos = text.lastIndexOf(", ", maxSize - 1)
+        if (commaPos > maxSize * 0.6) return commaPos + 1
+
+        return maxSize
     }
 }
 

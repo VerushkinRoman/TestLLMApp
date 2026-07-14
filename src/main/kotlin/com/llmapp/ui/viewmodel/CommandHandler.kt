@@ -76,6 +76,15 @@ class CommandHandler(
             return """
                 📚 ДОСТУПНЫЕ КОМАНДЫ:
                 
+                📅 CalendarKMP:
+                  Этот бот настроен для работы с проектом CalendarKMP
+                  (Kotlin Multiplatform приложение для отслеживания饮酒 календаря)
+                  
+                🔧 Git-операции:
+                  Коммиты, PR, чтение файлов — через GitHub API
+                  Нужен GITHUB_PERSONAL_ACCESS_TOKEN (env переменная)
+                  Репозиторий: github.com/VerushkinRoman/CalendarKMP
+                  
                 🎯 Управление задачами:
                   /task <название> - создать новую задачу
                   /status - показать полный статус задачи

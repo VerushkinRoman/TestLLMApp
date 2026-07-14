@@ -11,7 +11,6 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ModelTraining
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsSoccer
@@ -77,13 +76,6 @@ fun AppNavigationRail(
                 onClick = { onScreenSelected(Screen.Mcp) },
                 icon = { Icon(Icons.Default.SportsSoccer, "MCP") },
                 label = { Text("MCP", fontSize = 10.sp) }
-            )
-
-            NavigationRailItem(
-                selected = currentScreen == Screen.Collector,
-                onClick = { onScreenSelected(Screen.Collector) },
-                icon = { Icon(Icons.Default.Schedule, "Сбор") },
-                label = { Text("Сбор", fontSize = 10.sp) }
             )
 
             NavigationRailItem(

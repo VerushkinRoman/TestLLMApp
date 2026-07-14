@@ -93,7 +93,7 @@ fun IndexScreen(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Индексация документов ЧМ-2026 через HuggingFace с двумя стратегиями разбивки",
+            text = "Индексация документов проекта через HuggingFace с двумя стратегиями разбивки",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

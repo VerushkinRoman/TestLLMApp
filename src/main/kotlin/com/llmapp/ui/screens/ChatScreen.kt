@@ -167,16 +167,6 @@ fun ChatScreen(
                             onRegenerate = if (message.role == "assistant") {
                                 { onEvent(ViewEvent.RegenerateMessage(message.id)) }
                             } else null,
-                            onEdit = if (message.role == "user") {
-                                { newText ->
-                                    onEvent(
-                                        ViewEvent.EditUserMessage(
-                                            message.id,
-                                            newText
-                                        )
-                                    )
-                                }
-                            } else null,
                             isRegenerating = false,
                             isDemoRunning = viewState.isDemoRunning
                         )
