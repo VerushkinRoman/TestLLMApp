@@ -1,4 +1,3 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -6,7 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.shadow)
 }
 
 repositories {
@@ -15,21 +13,36 @@ repositories {
 }
 
 dependencies {
+    // Compose Multiplatform
     implementation(compose.desktop.currentOs)
     implementation(libs.jetbrains.compose.material3)
     implementation(libs.jetbrains.compose.material.icons.extended)
     implementation(libs.jetbrains.compose.foundation)
+
+    // Coroutines
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.swing)
+
+    // Ktor
     implementation(libs.bundles.ktor)
+
+    // Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // MCP SDK
     implementation(libs.mcp.kotlin.sdk.client)
+
+    // Logging
     implementation(libs.slf4j.nop)
+
+    // ViewModel
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
 }
 
-kotlin { jvmToolchain(17) }
+kotlin {
+    jvmToolchain(17)
+}
 
 compose.desktop {
     application {
@@ -43,29 +56,38 @@ compose.desktop {
 }
 
 // === AI Code Review Runner (fat JAR) ===
+// Exclude Compose/UI deps from runner; they aren't needed for CLI
 
-val excludePatterns = listOf(
-    "compose-", "material-", "foundation-",
-    "lifecycle-", "animation-", "ui-", "runtime-saveable-",
-).map { it.lowercase() }
+val runnerLibs = configurations.create("runnerLibs") {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+    extendsFrom(configurations.implementation.get()!!)
+}
+
+val excludeJars = listOf(
+    "compose-", "material-", "material3-", "material-icons-",
+    "foundation-", "lifecycle-viewmodel-", "lifecycle-runtime-",
+    "animation-", "ui-", "runtime-saveable-",
+)
 
 tasks.register<Jar>("reviewRunnerJar") {
-    from(sourceSets.main.get().output)
-
-    val runtime = configurations.runtimeClasspath.get()
-    from(runtime.filter { jar ->
-        !excludePatterns.any { jar.name.lowercase().contains(it) }
-    }.map { jar ->
-        if (jar.isDirectory) jar else zipTree(jar)
-    })
-
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn(runnerLibs)
     archiveBaseName.set("review-runner")
     archiveVersion.set("")
     archiveClassifier.set("")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(sourceSets.main.get().output)
+
+    val filtered = runnerLibs.filter { file ->
+        excludeJars.none { file.name.contains(it, ignoreCase = true) }
+    }
+    from(filtered.map { file ->
+        if (file.isDirectory) file else zipTree(file)
+    })
 
     manifest {
-        attributes("Main-Class" to "com.llmapp.pr_review.PRReviewRunnerKt")
+        attributes(mapOf("Main-Class" to "com.llmapp.pr_review.PRReviewRunnerKt"))
     }
 }
 
