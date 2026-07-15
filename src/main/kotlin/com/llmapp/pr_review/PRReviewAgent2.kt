@@ -51,47 +51,24 @@ class PRReviewAgent2(
     }
 
     private suspend fun getRelevantDocs(diff: String): String = withContext(Dispatchers.IO) {
-        // Определяем какие файлы изменились, ищем релевантную документацию
-        val topics = mutableSetOf<String>()
         val diffLower = diff.lowercase()
+        val topics = mutableSetOf<String>()
 
-        if ("repository" in diffLower) topics.add("Repository pattern")
-        if ("viewmodel" in diffLower) topics.add("ViewModel pattern")
-        if ("usecase" in diffLower || "use_case" in diffLower) topics.add("UseCase pattern")
-        if ("datasource" in diffLower || "data_source" in diffLower) topics.add("DataSource pattern")
-        if (".domain." in diffLower || "/domain/" in diffLower) topics.add("Domain layer")
-        if (".presentation." in diffLower || "/presentation/" in diffLower) topics.add("Presentation layer")
-        if (".data." in diffLower || "/data/" in diffLower) topics.add("Data layer")
-        if (".di." in diffLower || "/di/" in diffLower) topics.add("Dependency injection")
         if ("auth" in diffLower) topics.add("Auth")
-        if ("settings" in diffLower) topics.add("Settings")
         if ("calendar" in diffLower) topics.add("Calendar")
-        if ("statistic" in diffLower) topics.add("Statistics")
+        if ("viewmodel" in diffLower) topics.add("ViewModel")
+        if ("repository" in diffLower) topics.add("Repository")
+        if ("usecase" in diffLower || "use_case" in diffLower) topics.add("UseCase")
         if ("navigation" in diffLower) topics.add("Navigation")
-        if ("test" in diffLower) topics.add("Testing")
-        if ("error" in diffLower) topics.add("Error handling")
 
         val context = StringBuilder()
-        for (topic in topics) {
-            try {
-                val file = GitHubMcpTools.executeTool("github_search_source", mapOf(
-                    "keyword" to topic,
-                    "max_results" to "1",
-                ))
-                if (!file.contains("No source files found") && !file.contains("❌")) {
-                    context.appendLine("=== $topic ===")
-                    context.appendLine(file.take(2000))
-                    context.appendLine()
-                }
-            } catch (_: Exception) { }
-        }
-
-        if (topics.isEmpty()) {
-            // Общая документация
-            try {
-                context.appendLine(GitHubMcpTools.executeTool("github_list_docs", emptyMap()))
-            } catch (_: Exception) { }
-        }
+        // Загружаем общую архитектурную документацию один раз
+        try {
+            val docs = GitHubMcpTools.executeTool("github_list_docs", emptyMap())
+            if (!docs.contains("No source files found") && !docs.contains("❌")) {
+                context.appendLine(docs.take(3000))
+            }
+        } catch (_: Exception) { }
 
         context.toString()
     }
