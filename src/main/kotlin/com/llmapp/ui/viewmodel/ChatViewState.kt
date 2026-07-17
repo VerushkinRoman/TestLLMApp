@@ -100,6 +100,10 @@ data class ChatViewState(
     // Прогресс
     val progressMessage: String? = null,
 
+    // Файловый ассистент
+    val fileAssistantMode: Boolean = false,
+    val fileAssistantProjectPath: String = "/Users/posse/StudioProjects/CalendarKMP",
+
     // GitHub Token
     val showGitHubTokenDialog: Boolean = false,
     val githubTokenInput: String = "",

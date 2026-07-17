@@ -67,6 +67,7 @@ class CommandHandler(
             }
 
             text == "/help" -> onAddAssistantMessage(buildHelpText())
+            text == "/file" -> onHandleEvent(ViewEvent.ToggleFileAssistantMode)
             else -> onAddAssistantMessage("⚠️ Неизвестная команда: $text\nИспользуйте /help для списка команд")
         }
     }
@@ -102,6 +103,12 @@ class CommandHandler(
                   
                 📊 Токены:
                   /tokens - показать статистику токенов
+                  
+                📂 Файловый ассистент:
+                  /file - включить/выключить режим файлового ассистента
+                  Работает с локальными файлами проекта CalendarKMP:
+                  поиск, чтение, анализ, создание/изменение файлов.
+                  Описывайте задачу на естественном языке!
                   
                 🔄 Управление переходами:
                   /transitions или /available - показать диалог управления переходами

@@ -1,6 +1,7 @@
 package com.llmapp.ui
 
 import com.llmapp.chat.ChatSession
+import com.llmapp.demo.assistant.FileAssistantRunner
 import com.llmapp.demo.manager.BaseDemoRunner
 import com.llmapp.demo.manager.ProjectDemoRunner
 import com.llmapp.model.TokenStats
@@ -19,12 +20,14 @@ sealed class DemoType {
     object ProjectDemo : DemoType()
     object PRReviewDemo : DemoType()
     object PRReviewAgentDemo : DemoType()
+    object FileAssistantDemo : DemoType()
 
     val displayName: String
         get() = when (this) {
             ProjectDemo -> "Ассистент разработчика"
             PRReviewDemo -> "AI Code Review"
             PRReviewAgentDemo -> "Ассистент ревью PR"
+            FileAssistantDemo -> "AI Файл-ассистент"
         }
 }
 
@@ -150,6 +153,16 @@ class DemoManager(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
                 prNumber = prNumber,
+            )
+        }
+    }
+
+    fun startFileAssistantDemo(projectPath: String = "/Users/posse/StudioProjects/CalendarKMP") {
+        runDemo(DemoType.FileAssistantDemo) {
+            FileAssistantRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                projectPath = projectPath,
             )
         }
     }

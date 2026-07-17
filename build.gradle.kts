@@ -61,7 +61,7 @@ compose.desktop {
 val runnerLibs = configurations.create("runnerLibs") {
     isCanBeResolved = true
     isCanBeConsumed = false
-    extendsFrom(configurations.implementation.get()!!)
+    extendsFrom(configurations.implementation.get())
 }
 
 val excludeJars = listOf(
@@ -95,6 +95,14 @@ tasks.register<JavaExec>("runPrReview") {
     dependsOn("reviewRunnerJar")
     classpath = files(tasks.named<Jar>("reviewRunnerJar").get().archiveFile)
     mainClass = "com.llmapp.pr_review.PRReviewRunnerKt"
+}
+
+// === FileAssistant Test Runner (console, no GUI) ===
+tasks.register<JavaExec>("runFileTest") {
+    dependsOn("classes")
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "com.llmapp.assistant.FileAssistantTestRunnerKt"
+    args = project.findProperty("args")?.toString()?.split(" ") ?: emptyList()
 }
 
 tasks.withType<JavaExec> {

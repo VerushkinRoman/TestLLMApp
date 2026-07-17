@@ -21,11 +21,13 @@ import com.llmapp.memory.TaskMemoryTracker
 import com.llmapp.ui.components.ProfileManager
 import com.llmapp.ui.models.ChatMessageUI
 import com.llmapp.ui.models.TaskStateUI
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import java.util.prefs.Preferences
@@ -157,6 +159,10 @@ class ChatViewModel : ViewModel() {
                 if (_state.value.isGenerating || _state.value.isDemoRunning) return
                 if (event.text.startsWith("/")) {
                     commandHandler.handleCommand(event.text)
+                    return
+                }
+                if (_state.value.fileAssistantMode) {
+                    handleFileAssistantMessage(event.text)
                     return
                 }
                 messageUseCase.sendMessage(
@@ -551,6 +557,30 @@ class ChatViewModel : ViewModel() {
                 updateState { copy(pipelineMcpConnected = false, pipelineMcpServerName = null) }
             }
 
+            ViewEvent.ToggleFileAssistantMode -> {
+                val newMode = !_state.value.fileAssistantMode
+                updateState { copy(fileAssistantMode = newMode) }
+                if (newMode) {
+                    addAssistantMessage(
+                        "AI-ассистент для работы с файлами активирован.\n" +
+                        "Проект: **${_state.value.fileAssistantProjectPath}**\n\n" +
+                        "Опишите задачу на естественном языке, например:\n" +
+                        "- Найди все использования SettingsScreen\n" +
+                        "- Сгенерируй README для проекта\n" +
+                        "- Проверь архитектуру на соответствие MVI\n" +
+                        "- Создай changelog на основе последних изменений\n\n" +
+                        "Для деактивации: `/file` или нажмите кнопку снова."
+                    )
+                } else {
+                    addAssistantMessage("AI-ассистент для работы с файлами деактивирован.")
+                }
+            }
+
+            is ViewEvent.SetFileAssistantProject -> {
+                updateState { copy(fileAssistantProjectPath = event.path) }
+                addAssistantMessage("Путь проекта изменён: **${event.path}**")
+            }
+
             is ViewEvent.OnMcpLog -> {
                 addLogMessage("MCP: ${event.message}")
             }
@@ -789,6 +819,10 @@ class ChatViewModel : ViewModel() {
                     updateState { copy(showGitHubTokenDialog = true) }
                 }
             }
+
+            ViewEvent.StartFileAssistantDemo -> {
+                demoHandler.startFileAssistant()
+            }
         }
     }
 
@@ -815,6 +849,66 @@ class ChatViewModel : ViewModel() {
             isDemoMessage = false
         )
         _state.value = _state.value.copy(messages = _state.value.messages + message)
+    }
+
+    private fun handleFileAssistantMessage(userMessage: String) {
+        val userMsg = ChatMessageUI(
+            id = UUID.randomUUID().toString(),
+            role = "user",
+            content = userMessage,
+            isDemoMessage = false
+        )
+        updateState {
+            copy(
+                messages = messages + userMsg,
+                isGenerating = true,
+                isTyping = true
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                val projectPath = _state.value.fileAssistantProjectPath
+                val agent = com.llmapp.assistant.FileAssistantAgent(
+                    projectPath = projectPath,
+                    onProgress = { msg ->
+                        updateState { copy(progressMessage = "File Assistant: $msg") }
+                    }
+                )
+                val result = withContext(Dispatchers.IO) {
+                    agent.executeTask(userMessage)
+                }
+                val assistantMsg = ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = result,
+                    isDemoMessage = false
+                )
+                updateState {
+                    copy(
+                        messages = messages + assistantMsg,
+                        isGenerating = false,
+                        isTyping = false,
+                        progressMessage = null
+                    )
+                }
+            } catch (e: Exception) {
+                val errorMsg = ChatMessageUI(
+                    id = UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "❌ Ошибка файлового ассистента: ${e.message}",
+                    isDemoMessage = false
+                )
+                updateState {
+                    copy(
+                        messages = messages + errorMsg,
+                        isGenerating = false,
+                        isTyping = false,
+                        progressMessage = null
+                    )
+                }
+            }
+        }
     }
 
     private fun loadSelectedInvariantSet() {

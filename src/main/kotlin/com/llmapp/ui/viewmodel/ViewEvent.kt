@@ -76,12 +76,19 @@ sealed class ViewEvent {
     data class UpdateCompressionParams(val keepLast: Int, val compressAfterTokens: Int) : ViewEvent()
 
     // ============================================================
+    // ФАЙЛОВЫЙ АССИСТЕНТ
+    // ============================================================
+    object ToggleFileAssistantMode : ViewEvent()
+    data class SetFileAssistantProject(val path: String) : ViewEvent()
+
+    // ============================================================
     // ДЕМОНСТРАЦИИ
     // ============================================================
     data class InitDemoManager(val onMessageAdded: (ChatMessageUI) -> Unit) : ViewEvent()
     data class StartProjectDemo(val token: String? = null) : ViewEvent()
     data class StartPRReview(val prNumber: Int) : ViewEvent()
     data class StartPRReviewAgent(val prNumber: Int) : ViewEvent()
+    object StartFileAssistantDemo : ViewEvent()
     object CancelDemo : ViewEvent()
     object ShowGitHubTokenDialog : ViewEvent()
     object DismissGitHubTokenDialog : ViewEvent()

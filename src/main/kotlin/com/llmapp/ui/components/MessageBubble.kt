@@ -1,8 +1,9 @@
 package com.llmapp.ui.components
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,8 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -154,41 +153,55 @@ fun MessageBubble(
                         4.dp
                     )
                 ) {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                val transferable = StringSelection(message.content)
-                                val clipEntry = ClipEntry(transferable)
-                                clipboard.setClipEntry(clipEntry)
-                                showCopiedTooltip = true
-                                delay(1.5.seconds)
-                                showCopiedTooltip = false
-                            }
-                        },
-                        modifier = Modifier.weight(1f).heightIn(min = 28.dp),
-                        enabled = true,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 32.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            val transferable = StringSelection(message.content)
+                                            val clipEntry = ClipEntry(transferable)
+                                            clipboard.setClipEntry(clipEntry)
+                                            showCopiedTooltip = true
+                                            delay(1.5.seconds)
+                                            showCopiedTooltip = false
+                                        } catch (_: Exception) {
+                                            showCopiedTooltip = true
+                                            delay(1.5.seconds)
+                                            showCopiedTooltip = false
+                                        }
+                                    }
+                                }
+                            ),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 Icons.Default.ContentCopy,
                                 contentDescription = "Копировать",
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text("Копировать", fontSize = 11.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "Копировать",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                             if (showCopiedTooltip) {
-                                Spacer(modifier = Modifier.width(2.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "✓",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -197,42 +210,61 @@ fun MessageBubble(
 
                     if (!isSystem) {
                         if (!isUser && onRegenerate != null) {
-                            Button(
-                                onClick = onRegenerate,
-                                modifier = Modifier.weight(1f).heightIn(min = 28.dp),
-                                enabled = !isRegenerating && !isDemoRunning,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isDemoRunning)
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                    else
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = if (isDemoRunning)
-                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
-                                    else
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 32.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        enabled = !isRegenerating && !isDemoRunning,
+                                        onClick = onRegenerate
+                                    ),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isDemoRunning)
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.primaryContainer,
                             ) {
                                 Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     if (isRegenerating) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(12.dp),
+                                            modifier = Modifier.size(14.dp),
                                             strokeWidth = 2.dp,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("Генерация...", fontSize = 11.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Генерация...",
+                                            fontSize = 12.sp,
+                                            color = if (isDemoRunning)
+                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                                            else
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
                                     } else {
                                         Icon(
                                             Icons.Default.Refresh,
                                             contentDescription = "Перегенерировать",
-                                            modifier = Modifier.size(12.dp)
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (isDemoRunning)
+                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                                            else
+                                                MaterialTheme.colorScheme.onPrimaryContainer
                                         )
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("Перегенерировать", fontSize = 11.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Перегенерировать",
+                                            fontSize = 12.sp,
+                                            color = if (isDemoRunning)
+                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                                            else
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
                                     }
                                 }
                             }
