@@ -89,6 +89,7 @@ sealed class ViewEvent {
     data class StartPRReview(val prNumber: Int) : ViewEvent()
     data class StartPRReviewAgent(val prNumber: Int) : ViewEvent()
     object StartFileAssistantDemo : ViewEvent()
+    data class StartCodeGuardian(val projectPath: String) : ViewEvent()
     object CancelDemo : ViewEvent()
     object ShowGitHubTokenDialog : ViewEvent()
     object DismissGitHubTokenDialog : ViewEvent()

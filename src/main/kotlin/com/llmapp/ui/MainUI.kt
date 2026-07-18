@@ -482,6 +482,14 @@ fun MainScreen(
                     sendEvent(ViewEvent.StartFileAssistantDemo)
                     currentScreen = Screen.Chat
                 },
+                onStartCodeGuardian = { projectPath ->
+                    sendEvent(ViewEvent.ClearHistory)
+                    sendEvent(ViewEvent.InitDemoManager { message ->
+                        sendEvent(ViewEvent.AddDemoMessage(message))
+                    })
+                    sendEvent(ViewEvent.StartCodeGuardian(projectPath))
+                    currentScreen = Screen.Chat
+                },
                 isDemoRunning = state.isDemoRunning,
                 currentDemoName = viewModel.demoManagerCurrentDemo.value?.displayName,
                 demoProgress = viewModel.demoManagerProgress.value,

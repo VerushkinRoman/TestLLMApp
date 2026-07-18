@@ -823,6 +823,10 @@ class ChatViewModel : ViewModel() {
             ViewEvent.StartFileAssistantDemo -> {
                 demoHandler.startFileAssistant()
             }
+
+            is ViewEvent.StartCodeGuardian -> {
+                demoHandler.startCodeGuardian(event.projectPath)
+            }
         }
     }
 

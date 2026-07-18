@@ -105,6 +105,14 @@ tasks.register<JavaExec>("runFileTest") {
     args = project.findProperty("args")?.toString()?.split(" ") ?: emptyList()
 }
 
+// === Code Guardian Test Runner (console, no GUI) ===
+tasks.register<JavaExec>("runGuardianTest") {
+    dependsOn("classes")
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "com.llmapp.codeguardian.CodeGuardianTestRunnerKt"
+    args = project.findProperty("args")?.toString()?.split(" ") ?: emptyList()
+}
+
 tasks.withType<JavaExec> {
     systemProperty("file.encoding", "UTF-8")
 }

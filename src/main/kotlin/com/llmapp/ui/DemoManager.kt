@@ -1,6 +1,7 @@
 package com.llmapp.ui
 
 import com.llmapp.chat.ChatSession
+import com.llmapp.codeguardian.CodeGuardianRunner
 import com.llmapp.demo.assistant.FileAssistantRunner
 import com.llmapp.demo.manager.BaseDemoRunner
 import com.llmapp.demo.manager.ProjectDemoRunner
@@ -21,6 +22,7 @@ sealed class DemoType {
     object PRReviewDemo : DemoType()
     object PRReviewAgentDemo : DemoType()
     object FileAssistantDemo : DemoType()
+    object CodeGuardianDemo : DemoType()
 
     val displayName: String
         get() = when (this) {
@@ -28,6 +30,7 @@ sealed class DemoType {
             PRReviewDemo -> "AI Code Review"
             PRReviewAgentDemo -> "Ассистент ревью PR"
             FileAssistantDemo -> "AI Файл-ассистент"
+            CodeGuardianDemo -> "Code Guardian"
         }
 }
 
@@ -163,6 +166,29 @@ class DemoManager(
                 onMessageAdded = onMessageAdded,
                 onTypingStateChanged = onTypingStateChanged,
                 projectPath = projectPath,
+            )
+        }
+    }
+
+    fun startCodeGuardianDemo(projectPath: String = "/Users/posse/StudioProjects/CalendarKMP") {
+        val resolvedPath = java.io.File(projectPath).absolutePath
+        if (!java.io.File(resolvedPath).exists()) {
+            onMessageAdded(
+                ChatMessageUI(
+                    id = java.util.UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "❌ Путь не существует: `$resolvedPath`\n\nПроверьте путь к проекту.",
+                    metadata = "Ошибка",
+                    isDemoMessage = true
+                )
+            )
+            return
+        }
+        runDemo(DemoType.CodeGuardianDemo) {
+            CodeGuardianRunner(
+                onMessageAdded = onMessageAdded,
+                onTypingStateChanged = onTypingStateChanged,
+                projectPath = resolvedPath,
             )
         }
     }

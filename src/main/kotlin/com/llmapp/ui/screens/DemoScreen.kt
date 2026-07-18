@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.RateReview
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +50,7 @@ private data class DemoCardData(
     val icon: @Composable () -> Unit,
     val hasInput: Boolean = false,
     val inputLabel: String = "",
+    val hasPathInput: Boolean = false,
 )
 
 @Composable
@@ -62,9 +64,11 @@ fun DemoScreen(
     onStartPRReview: ((prNumber: Int) -> Unit)? = null,
     onStartPRReviewAgent: ((prNumber: Int) -> Unit)? = null,
     onStartFileAssistant: (() -> Unit)? = null,
+    onStartCodeGuardian: ((projectPath: String) -> Unit)? = null,
 ) {
     var prNumber by remember { mutableStateOf("2") }
     var agentPrNumber by remember { mutableStateOf("") }
+    var guardianProjectPath by remember { mutableStateOf("/Users/posse/StudioProjects/CalendarKMP") }
 
     val cards = listOf(
         DemoCardData(
@@ -98,6 +102,14 @@ fun DemoScreen(
             description = "Работа с файлами: поиск, генерация README, проверка MVI.",
             features = listOf("Agent", "Search", "RAG"),
             icon = { Icon(Icons.Filled.FolderOpen, null, modifier = Modifier.size(20.dp), tint = Color(0xFF6A1B9A)) },
+        ),
+        DemoCardData(
+            title = "Code Guardian",
+            shortTitle = "Guardian",
+            description = "AI-ревью перед коммитом: архитектура, именование, безопасность.",
+            features = listOf("Git", "Review", "LLM"),
+            icon = { Icon(Icons.Filled.Shield, null, modifier = Modifier.size(20.dp), tint = Color(0xFFE65100)) },
+            hasPathInput = true,
         ),
     )
 
@@ -151,9 +163,9 @@ fun DemoScreen(
             }
         }
 
-        // Grid: 4 cards per row
+        // Grid: 3 cards per row
         LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
+            columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.weight(1f),
@@ -162,10 +174,19 @@ fun DemoScreen(
                 CompactDemoCard(
                     card = card,
                     isDemoRunning = isDemoRunning,
-                    prNumber = if (card.inputLabel == "PR #") prNumber else agentPrNumber,
-                    onPrNumberChange = {
-                        if (card.inputLabel == "PR #") prNumber = it else agentPrNumber = it
+                    prNumber = when (card.inputLabel) {
+                        "PR #" -> prNumber
+                        "PR # (0=последний)" -> agentPrNumber
+                        else -> ""
                     },
+                    onPrNumberChange = {
+                        when (card.inputLabel) {
+                            "PR #" -> prNumber = it
+                            "PR # (0=последний)" -> agentPrNumber = it
+                        }
+                    },
+                    pathValue = guardianProjectPath,
+                    onPathChange = { guardianProjectPath = it },
                     onClick = {
                         onClearHistory()
                         when (card.shortTitle) {
@@ -173,6 +194,7 @@ fun DemoScreen(
                             "Review" -> onStartPRReview?.invoke(prNumber.toIntOrNull() ?: 2)
                             "Agent" -> onStartPRReviewAgent?.invoke(agentPrNumber.toIntOrNull() ?: 0)
                             "Files" -> onStartFileAssistant?.invoke()
+                            "Guardian" -> onStartCodeGuardian?.invoke(guardianProjectPath)
                         }
                     }
                 )
@@ -187,6 +209,8 @@ private fun CompactDemoCard(
     isDemoRunning: Boolean,
     prNumber: String,
     onPrNumberChange: (String) -> Unit,
+    pathValue: String = "",
+    onPathChange: (String) -> Unit = {},
     onClick: () -> Unit,
 ) {
     Card(
@@ -259,6 +283,20 @@ private fun CompactDemoCard(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().height(36.dp),
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    ),
+                )
+            }
+
+            if (card.hasPathInput) {
+                OutlinedTextField(
+                    value = pathValue,
+                    onValueChange = { onPathChange(it) },
+                    singleLine = true,
+                    placeholder = { Text("/path/to/project", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                     ),
